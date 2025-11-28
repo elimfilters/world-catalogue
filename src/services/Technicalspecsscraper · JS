@@ -5,23 +5,6 @@
 
 const axios = require('axios');
 const cheerio = require('cheerio');
-let puppeteer;
-
-// Helper: extract year or year range from text
-function extractYears(text = '') {
-    const t = String(text || '').replace(/\s+/g, ' ').trim();
-    if (!t) return '';
-    // Range: 1998-2004, 1998 – 2004, 1998—2004
-    const range = t.match(/\b(19|20)\d{2}\s*[-–—]\s*(19|20)\d{2}\b/);
-    if (range) return `${range[1]}${range[0].slice(range[1].length, range[0].length - range[2].length)}${range[2]}`; // normalize
-    // From year to present: 2005 - Present / 2005 to present / 2005 hasta presente
-    const present = t.match(/\b(19|20)\d{2}\s*(?:-|to|a|hasta)\s*(?:present|presente|actual)\b/i);
-    if (present) return `${present[1]}+`;
-    // Single year
-    const single = t.match(/\b(19|20)\d{2}\b/);
-    if (single) return single[0];
-    return '';
-}
 
 // ============================================================================
 // DONALDSON SPECIFICATIONS EXTRACTOR
@@ -162,74 +145,129 @@ async function extractDonaldsonSpecs(code) {
         });
 
         // ===== EXTRACT FROM "PRODUCTOS DEL EQUIPO" TAB =====
-        // Equipment Applications with years
-        const equipmentMap = new Map(); // key: NAME|YEARS
+        // Equipment Applications
+        const equipmentSet = new Set();
         
         // Look for equipment table rows
         $('table').find('tr').each((i, row) => {
             const cells = $(row).find('td');
-            if (cells.length >= 1) {
-                const nameRaw = $(cells[0]).text().trim();
-                if (nameRaw && nameRaw.length > 3 && !/Equipo|Año/i.test(nameRaw)) {
-                    const name = nameRaw.replace(/\s+/g, ' ').replace(/^\s*-\s*/, '').trim();
-                    // Year info may be in any later columns
-                    let years = '';
-                    for (let c = 1; c < cells.length; c++) {
-                        const yText = $(cells[c]).text().trim();
-                        const y = extractYears(yText);
-                        if (y) { years = y; break; }
+            if (cells.length >= 3) {
+                // First column usually has equipment name
+                const equipment = $(cells[0]).text().trim();
+                if (equipment && equipment.length > 3 && 
+                    !equipment.toLowerCase().includes('equipo') && 
+                    !equipment.toLowerCase().includes('año') &&
+                    !equipment.toLowerCase().includes('equipment') &&
+                    !equipment.toLowerCase().includes('year')) {
+                    // Clean up equipment name
+                    const cleanEquipment = equipment
+                        .replace(/\s+/g, ' ')
+                        .replace(/^\s*-\s*/, '')
+                        .toUpperCase()
+                        .trim();
+                    
+                    if (cleanEquipment.length > 3) {
+                        equipmentSet.add(cleanEquipment);
                     }
-                    const key = `${name.toUpperCase()}|${years}`;
-                    if (!equipmentMap.has(key)) equipmentMap.set(key, { name, years });
                 }
             }
         });
 
-        // Also check for equipment in specific lists/divs
-        $('.equipment-list, .vehicle-application').find('li, div').each((i, el) => {
-            const text = $(el).text().trim();
-            if (text && text.length > 3) {
-                const years = extractYears(text);
-                const name = text.replace(/\b(19|20)\d{2}.*$/, '').replace(/\s+/g, ' ').trim();
-                const key = `${name.toUpperCase()}|${years}`;
-                if (name.length > 3 && !equipmentMap.has(key)) equipmentMap.set(key, { name, years });
+        // Also check for equipment in specific divs/lists
+        $('.equipment-list, .vehicle-application, .application-list').find('li, div, span').each((i, el) => {
+            const equipment = $(el).text().trim();
+            if (equipment && equipment.length > 3 && !equipment.includes(':')) {
+                equipmentSet.add(equipment.toUpperCase());
             }
         });
 
-        specs.equipment_applications = Array.from(equipmentMap.values()).slice(0, 10);
+        // Sort by commercial priority and limit to 20
+        specs.equipment_applications = Array.from(equipmentSet)
+            .sort((a, b) => {
+                const priority = {
+                    'FREIGHTLINER': 1, 'KENWORTH': 2, 'PETERBILT': 3,
+                    'INTERNATIONAL': 4, 'MACK': 5, 'VOLVO': 6,
+                    'WESTERN STAR': 7, 'CATERPILLAR': 8, 'KOMATSU': 9,
+                    'JOHN DEERE': 10
+                };
+                const getPriority = (name) => {
+                    for (let [brand, p] of Object.entries(priority)) {
+                        if (name.includes(brand)) return p;
+                    }
+                    return 999;
+                };
+                return getPriority(a) - getPriority(b);
+            })
+            .slice(0, 20);
 
         // ===== ENGINE APPLICATIONS =====
         // Extract from "Motores y vehículos" column in equipment table
-        const engineMap = new Map();
+        const engineSet = new Set();
         
         $('table').find('tr').each((i, row) => {
             const cells = $(row).find('td');
-            if (cells.length >= 1) {
-                // Engine name often in 3rd or 4th column; fallback to longest cell
-                let nameCandidates = [];
-                for (let c = 0; c < cells.length; c++) {
-                    const txt = $(cells[c]).text().trim();
-                    if (txt && txt.length > 3) nameCandidates.push(txt);
+            // Check multiple columns as engine info can be in different positions
+            for (let colIndex = 3; colIndex < Math.min(cells.length, 6); colIndex++) {
+                const engineText = $(cells[colIndex]).text().trim();
+                
+                if (engineText && engineText.length > 5 && 
+                    !engineText.toLowerCase().includes('motores') && 
+                    !engineText.toLowerCase().includes('opción') &&
+                    !engineText.toLowerCase().includes('engine') &&
+                    !engineText.toLowerCase().includes('option') &&
+                    !engineText.toLowerCase().includes('año') &&
+                    !engineText.toLowerCase().includes('year')) {
+                    
+                    // Clean up engine name
+                    const cleanEngine = engineText
+                        .replace(/\s+/g, ' ')
+                        .replace(/^\s*-\s*/, '')
+                        .toUpperCase()
+                        .trim();
+                    
+                    // Only add if it looks like an engine name (contains common engine manufacturers)
+                    if (cleanEngine.length > 5 && (
+                        cleanEngine.includes('DETROIT') ||
+                        cleanEngine.includes('CUMMINS') ||
+                        cleanEngine.includes('CATERPILLAR') ||
+                        cleanEngine.includes('CAT ') ||
+                        cleanEngine.includes('PACCAR') ||
+                        cleanEngine.includes('VOLVO') ||
+                        cleanEngine.includes('MACK') ||
+                        cleanEngine.includes('NAVISTAR') ||
+                        cleanEngine.includes('ISX') ||
+                        cleanEngine.includes('SERIES') ||
+                        cleanEngine.includes('MX-') ||
+                        cleanEngine.includes('MP7') ||
+                        cleanEngine.includes('MP8') ||
+                        /\d{4}/.test(cleanEngine) // Contains year
+                    )) {
+                        engineSet.add(cleanEngine);
+                    }
                 }
-                const nameRaw = nameCandidates.sort((a,b) => b.length - a.length)[0] || '';
-                const name = (nameRaw || '')
-                    .replace(/\s+/g, ' ')
-                    .replace(/^\s*-\s*/, '')
-                    .trim();
-                if (!name || name.length < 4) return;
-                // Find years in other cells
-                let years = '';
-                for (let c = 0; c < cells.length; c++) {
-                    const yText = $(cells[c]).text().trim();
-                    const y = extractYears(yText);
-                    if (y) { years = y; break; }
-                }
-                const key = `${name.toUpperCase()}|${years}`;
-                if (!engineMap.has(key)) engineMap.set(key, { name, years });
             }
         });
+        });
 
-        specs.engine_applications = Array.from(engineMap.values()).slice(0, 10);
+        // Sort by commercial priority and limit to 20
+        specs.engine_applications = Array.from(engineSet)
+            .sort((a, b) => {
+                const priority = {
+                    'CUMMINS': 1, 'DETROIT': 2, 'CATERPILLAR': 3,
+                    'PACCAR': 4, 'VOLVO': 5, 'MACK': 6, 'NAVISTAR': 7
+                };
+                const getPriority = (name) => {
+                    for (let [brand, p] of Object.entries(priority)) {
+                        if (name.includes(brand)) return p;
+                    }
+                    return 999;
+                };
+                return getPriority(a) - getPriority(b);
+            })
+            .slice(0, 20);
+        
+        console.log(`  ✅ Extracted ${specs.equipment_applications.length} equipment applications`);
+        console.log(`  ✅ Extracted ${specs.engine_applications.length} engine applications`);
 
         // ===== DEFAULT VALUES IF NOT FOUND =====
         if (specs.standards.length === 0) {
@@ -242,17 +280,12 @@ async function extractDonaldsonSpecs(code) {
 
         // Default equipment if none found
         if (specs.equipment_applications.length === 0) {
-            specs.equipment_applications = [
-                { name: 'Heavy Duty Trucks', years: '' },
-                { name: 'Construction Equipment', years: '' }
-            ];
+            specs.equipment_applications = ['Heavy Duty Trucks', 'Construction Equipment'];
         }
 
         // Default engines if none found
         if (specs.engine_applications.length === 0) {
-            specs.engine_applications = [
-                { name: 'Heavy Duty Diesel Engines', years: '' }
-            ];
+            specs.engine_applications = ['Heavy Duty Diesel Engines'];
         }
 
         // ===== TECHNICAL DETAILS =====
@@ -296,20 +329,15 @@ async function extractFramSpecs(code) {
     try {
         console.log(`📊 Extracting full specs for FRAM: ${code}`);
         
-        const urlPrimary = `https://www.fram.com/products/${code.toLowerCase()}`;
-        let $ = null;
-        try {
-            const response = await axios.get(urlPrimary, {
-                timeout: 15000,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                }
-            });
-            $ = cheerio.load(response.data);
-        } catch (e) {
-            // Primary URL may 404; continue with alternate flows below
-            $ = null;
-        }
+        const url = `https://www.fram.com/products/${code.toLowerCase()}`;
+        const response = await axios.get(url, {
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        const $ = cheerio.load(response.data);
         const specs = {
             found: false,
             code: code,
@@ -324,300 +352,119 @@ async function extractFramSpecs(code) {
         };
 
         // Description
-        if ($) {
-            specs.description = $('.product-title, .product-description').first().text().trim();
-        } else {
-            specs.description = `${code} Filter`;
-        }
+        specs.description = $('.product-title, .product-description').first().text().trim();
 
         // Dimensions (similar extraction as Donaldson)
-        if ($) {
-            const specsTable = $('.specifications-table, .product-specs');
-            specsTable.find('tr').each((i, row) => {
-                const label = $(row).find('td').first().text().trim().toLowerCase();
-                const value = $(row).find('td').last().text().trim();
-                if (label.includes('height')) {
-                    const match = value.match(/([0-9.]+)/);
-                    if (match) specs.dimensions.height_mm = (parseFloat(match[1]) * 25.4).toFixed(2);
-                }
-                if (label.includes('diameter')) {
-                    const match = value.match(/([0-9.]+)/);
-                    if (match) specs.dimensions.outer_diameter_mm = (parseFloat(match[1]) * 25.4).toFixed(2);
-                }
-                if (label.includes('thread')) {
-                    specs.dimensions.thread_size = value;
-                }
-            });
-        }
+        const specsTable = $('.specifications-table, .product-specs');
+        
+        specsTable.find('tr').each((i, row) => {
+            const label = $(row).find('td').first().text().trim().toLowerCase();
+            const value = $(row).find('td').last().text().trim();
+
+            if (label.includes('height')) {
+                const match = value.match(/([0-9.]+)/);
+                if (match) specs.dimensions.height_mm = (parseFloat(match[1]) * 25.4).toFixed(2);
+            }
+            if (label.includes('diameter')) {
+                const match = value.match(/([0-9.]+)/);
+                if (match) specs.dimensions.outer_diameter_mm = (parseFloat(match[1]) * 25.4).toFixed(2);
+            }
+            if (label.includes('thread')) {
+                specs.dimensions.thread_size = value;
+            }
+        });
 
         // Performance
-        if ($) {
-            const performanceText = $('.features, .benefits').text();
-            const micronMatch = performanceText.match(/([0-9]+)\s*micron/i);
-            if (micronMatch) specs.performance.micron_rating = micronMatch[1];
-        }
+        const performanceText = $('.features, .benefits').text();
+        
+        const micronMatch = performanceText.match(/([0-9]+)\s*micron/i);
+        if (micronMatch) specs.performance.micron_rating = micronMatch[1];
 
         // Standards
         specs.standards = ['SAE J806', 'SAE J1858'];
         specs.certifications = ['ISO 9001'];
 
-        // Applications: intentar parsear la tabla "Applications" con Year/Make/Model/Engine
-        function mapTwoDigitYear(yy) {
-            const n = parseInt(yy, 10);
-            if (isNaN(n)) return '';
-            return n >= 90 ? 1900 + n : 2000 + n;
-        }
-        function normalizeYearRange(raw) {
-            const t = String(raw || '').trim();
-            // formatos tipo "18-15", "04-03"
-            const m = t.match(/^(\d{2})\s*[-–—]\s*(\d{2})$/);
-            if (m) {
-                const a = mapTwoDigitYear(m[1]);
-                const b = mapTwoDigitYear(m[2]);
-                const min = Math.min(a, b);
-                const max = Math.max(a, b);
-                return `${min}-${max}`;
+        // ===== APPLICATIONS FOR LD =====
+        // FRAM shows applications as: Vehicle Model + Engine + Years
+        // Example: "HONDA ACCORD 2.4L (2013-2017)"
+        const applicationsSet = new Set();
+        
+        // Look for vehicle fitment tables
+        $('.vehicle-fitment, .application-table, .fits-vehicles, .compatibility-table').find('tr, li, div.vehicle').each((i, el) => {
+            const appText = $(el).text().trim();
+            
+            // Match pattern: MAKE MODEL ENGINE (YEARS)
+            // Examples: "HONDA ACCORD 2.4L (2013-2017)", "TOYOTA CAMRY 2.5L V6 (2012-2018)"
+            if (appText.length > 10 && (appText.includes('L') || appText.includes('(20'))) {
+                const cleaned = appText
+                    .replace(/\s+/g, ' ')
+                    .toUpperCase()
+                    .trim();
+                
+                // Filter out headers and irrelevant text
+                if (!cleaned.includes('VEHICLE') && 
+                    !cleaned.includes('APPLICATION') &&
+                    !cleaned.includes('YEAR') &&
+                    !cleaned.includes('MAKE') &&
+                    !cleaned.includes('MODEL')) {
+                    applicationsSet.add(cleaned);
+                }
             }
-            // Si es año de cuatro dígitos normal
-            const yr = extractYears(t);
-            return yr;
-        }
-        try {
-            const tables = $('table');
-            const apps = [];
-            tables.each((ti, tbl) => {
-                const headers = [];
-                $(tbl).find('thead th, tr:first-child th, tr:first-child td').each((hi, h) => {
-                    headers.push($(h).text().trim().toLowerCase());
-                });
-                const hasYear = headers.some(h => h.includes('year'));
-                const hasMake = headers.some(h => h.includes('make'));
-                const hasModel = headers.some(h => h.includes('model'));
-                if (!(hasYear && hasMake && hasModel)) return;
-
-                $(tbl).find('tbody tr, tr').slice(1).each((ri, row) => {
-                    const cells = $(row).find('td');
-                    if (cells.length < 3) return;
-                    const yearRaw = $(cells.get(0)).text().trim();
-                    const make = $(cells.get(1)).text().trim();
-                    const model = $(cells.get(2)).text().trim();
-                    const years = normalizeYearRange(yearRaw);
-                    const name = `${make} ${model}`.trim();
-                    if (make && model) {
-                        apps.push({ name, years });
-                    }
-                });
+        });
+        
+        // Also search in general text for vehicle applications
+        const bodyText = $('body').text();
+        const vehicleRegex = /(HONDA|TOYOTA|NISSAN|FORD|CHEVROLET|GMC|RAM|DODGE|JEEP|MAZDA|SUBARU|KIA|HYUNDAI)\s+[A-Z0-9\s-]+\d\.\d[LV\s]*(V\d)?[^(]*\((?:19|20)\d{2}-(?:19|20)\d{2}\)/gi;
+        const vehicleMatches = bodyText.match(vehicleRegex);
+        
+        if (vehicleMatches) {
+            vehicleMatches.forEach(match => {
+                const cleaned = match.trim().toUpperCase();
+                if (cleaned.length > 10) {
+                    applicationsSet.add(cleaned);
+                }
             });
-            if (apps.length > 0) {
-                // Deduplicar por nombre+años y limitar
-                const map = new Map();
-                for (const a of apps) {
-                    const key = `${a.name.toUpperCase()}|${a.years}`;
-                    if (!map.has(key)) map.set(key, a);
-                }
-                specs.equipment_applications = Array.from(map.values()).slice(0, 20);
-            }
-        } catch (appsErr) {
-            // Ignore errors; fallback abajo
         }
-        // Si aún no hay aplicaciones, intentar en la URL de detalle del producto con slug
-        if (specs.equipment_applications.length === 0) {
-            try {
-                const urlAlt = `https://www.fram.com/fram-extra-guard-oil-filter-spin-on-${code.toLowerCase()}`;
-                const respAlt = await axios.get(urlAlt, {
-                    timeout: 15000,
-                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
-                });
-                const $alt = cheerio.load(respAlt.data);
-                const apps = [];
-                $alt('table').each((ti, tbl) => {
-                    const headers = [];
-                    $alt(tbl).find('thead th, tr:first-child th, tr:first-child td').each((hi, h) => {
-                        headers.push($alt(h).text().trim().toLowerCase());
-                    });
-                    const hasYear = headers.some(h => h.includes('year'));
-                    const hasMake = headers.some(h => h.includes('make'));
-                    const hasModel = headers.some(h => h.includes('model'));
-                    if (!(hasYear && hasMake && hasModel)) return;
-
-                    $alt(tbl).find('tbody tr, tr').slice(1).each((ri, row) => {
-                        const cells = $alt(row).find('td');
-                        if (cells.length < 3) return;
-                        const yearRaw = $alt(cells.get(0)).text().trim();
-                        const make = $alt(cells.get(1)).text().trim();
-                        const model = $alt(cells.get(2)).text().trim();
-                        const years = normalizeYearRange(yearRaw);
-                        const name = `${make} ${model}`.trim();
-                        if (make && model) apps.push({ name, years });
-                    });
-                });
-                if (apps.length > 0) {
-                    const map = new Map();
-                    for (const a of apps) {
-                        const key = `${a.name.toUpperCase()}|${a.years}`;
-                        if (!map.has(key)) map.set(key, a);
+        
+        // Store in equipment_applications for LD (no separate engine list)
+        // Sort by commercial priority and limit to 20
+        let applications = Array.from(applicationsSet)
+            .sort((a, b) => {
+                const priority = {
+                    'FORD': 1, 'CHEVROLET': 2, 'TOYOTA': 3,
+                    'HONDA': 4, 'RAM': 5, 'GMC': 6,
+                    'NISSAN': 7, 'JEEP': 8, 'DODGE': 9,
+                    'MAZDA': 10, 'SUBARU': 11, 'HYUNDAI': 12, 'KIA': 13
+                };
+                const getPriority = (name) => {
+                    for (let [brand, p] of Object.entries(priority)) {
+                        if (name.includes(brand)) return p;
                     }
-                    specs.equipment_applications = Array.from(map.values()).slice(0, 20);
-                }
-            } catch (altErr) {
-                // continuar con fallback
-            }
-        }
-        if (specs.equipment_applications.length === 0) {
-            // Fallback si no se encontró tabla
-            const applicationText = $('.applications, .fits').text();
-            const vehicleMatches = applicationText.match(/(?:Ford|Chevrolet|GM|Toyota|Honda|Nissan|Dodge|Ram|Jeep)[^,\n]*/gi);
-            if (vehicleMatches) {
-                const eqMap = new Map();
-                for (const v of vehicleMatches) {
-                    const name = v.trim();
-                    const years = extractYears(v);
-                    const key = `${name.toUpperCase()}|${years}`;
-                    if (!eqMap.has(key)) eqMap.set(key, { name, years });
-                }
-                specs.equipment_applications = Array.from(eqMap.values());
+                    return 999;
+                };
+                return getPriority(a) - getPriority(b);
+            })
+            .slice(0, 20);
+        
+        // If no applications found, use defaults
+        if (applications.length === 0) {
+            if (code.toUpperCase().startsWith('PH') || code.toUpperCase().startsWith('TG') || code.toUpperCase().startsWith('XG')) {
+                applications = ['Light Duty Vehicles', 'Passenger Cars'];
+            } else if (code.toUpperCase().startsWith('CA')) {
+                applications = ['Light Duty Vehicles', 'Passenger Cars', 'Light Trucks'];
+            } else if (code.toUpperCase().startsWith('CF') || code.toUpperCase().startsWith('CH')) {
+                applications = ['Passenger Vehicles with Cabin Air Filtration'];
+            } else if (code.toUpperCase().startsWith('G') || code.toUpperCase().startsWith('PS')) {
+                applications = ['Gasoline and Diesel Light Duty Vehicles'];
             } else {
-                specs.equipment_applications = [
-                    { name: 'Light Duty Vehicles', years: '' },
-                    { name: 'Passenger Cars', years: '' },
-                    { name: 'Light Trucks', years: '' }
-                ];
+                applications = ['Light Duty Vehicles'];
             }
         }
-
-        // Intento final: usar Puppeteer para cargar contenido dinámico si aún no hay aplicaciones
-        if (specs.equipment_applications.length === 0) {
-            try {
-                if (!puppeteer) puppeteer = require('puppeteer');
-                const browser = await puppeteer.launch({ headless: 'new' });
-                const page = await browser.newPage();
-                const urlApps = `https://www.fram.com/fram-extra-guard-oil-filter-spin-on-${code.toLowerCase()}`;
-                await page.goto(urlApps, { waitUntil: 'networkidle2', timeout: 25000 });
-
-                // Intento 1: leer tablas con encabezados Year/Make/Model
-                let rows = [];
-                try {
-                    await page.waitForSelector('table', { timeout: 6000 });
-                    rows = await page.$$eval('table', (tables) => {
-                        function text(el) { return (el?.textContent || '').trim(); }
-                        const out = [];
-                        for (const tbl of tables) {
-                            const headerCells = tbl.querySelectorAll('thead th, tr:first-child th, tr:first-child td');
-                            const headers = Array.from(headerCells).map(text).map(t => t.toLowerCase());
-                            const hasYear = headers.some(h => h.includes('year'));
-                            const hasMake = headers.some(h => h.includes('make'));
-                            const hasModel = headers.some(h => h.includes('model'));
-                            if (!(hasYear && hasMake && hasModel)) continue;
-                            const trs = tbl.querySelectorAll('tbody tr, tr');
-                            for (let i = 1; i < trs.length; i++) {
-                                const tds = trs[i].querySelectorAll('td');
-                                if (tds.length < 3) continue;
-                                const year = text(tds[0]);
-                                const make = text(tds[1]);
-                                const model = text(tds[2]);
-                                out.push({ year, make, model });
-                            }
-                        }
-                        return out;
-                    });
-                } catch (_) {
-                    rows = [];
-                }
-
-                // Intento 2: parsear el texto de toda la página cuando no hay tabla detectable
-                if (!rows || rows.length === 0) {
-                    const bodyText = await page.evaluate(() => document.body.innerText);
-                    const lines = bodyText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-                    const apps = [];
-                    for (let i = 0; i < lines.length - 2; i++) {
-                        const yearLine = lines[i];
-                        const makeLine = lines[i + 1];
-                        const modelLine = lines[i + 2];
-                        const yearMatch = yearLine.match(/^((?:19|20)\d{2})(?:\s*[-–—]\s*((?:19|20)\d{2}))?$/);
-                        const makeMatch = makeLine.match(/^[A-Z][A-Z0-9 &\-]{2,}$/);
-                        const modelMatch = modelLine.match(/^[A-Za-z0-9&'()\- ,.\/]+$/);
-                        if (yearMatch && makeMatch && modelMatch) {
-                            const year = yearMatch[2] ? `${yearMatch[1]}-${yearMatch[2]}` : yearMatch[1];
-                            apps.push({ year, make: makeLine, model: modelLine });
-                        }
-                    }
-                    rows = apps;
-                }
-
-                await browser.close();
-
-                if (rows && rows.length) {
-                    const apps = rows
-                        .filter(r => r.make && r.model)
-                        .map(r => ({ name: `${r.make} ${r.model}`.trim(), years: r.year || '' }));
-                    const map = new Map();
-                    for (const a of apps) {
-                        const key = `${a.name.toUpperCase()}|${a.years}`;
-                        if (!map.has(key)) map.set(key, a);
-                    }
-                    specs.equipment_applications = Array.from(map.values()).slice(0, 20);
-                }
-            } catch (puppErr) {
-                // No bloquear si puppeteer falla
-            }
-        }
-
-        // Intento 3: proxy de lectura estática (r.jina.ai) para extraer texto
-        if (specs.equipment_applications.length === 0) {
-            try {
-                const proxyUrl = `https://r.jina.ai/http://www.fram.com/fram-extra-guard-oil-filter-spin-on-${code.toLowerCase()}`;
-                const prox = await axios.get(proxyUrl, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-                const body = String(prox.data || '');
-                const lines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-                const rows = [];
-                for (let i = 0; i < lines.length - 2; i++) {
-                    const y = lines[i];
-                    const mk = lines[i + 1];
-                    const md = lines[i + 2];
-                    const yearMatch = y.match(/^((?:19|20)\d{2})(?:\s*[-–—]\s*((?:19|20)\d{2}))?$/);
-                    const makeMatch = mk.match(/^[A-Z][A-Z0-9 &\-]{2,}$/);
-                    const modelMatch = md.match(/^[A-Za-z0-9&'()\- ,.\/]+$/);
-                    if (yearMatch && makeMatch && modelMatch) {
-                        const year = yearMatch[2] ? `${yearMatch[1]}-${yearMatch[2]}` : yearMatch[1];
-                        rows.push({ year, make: mk, model: md });
-                    }
-                }
-                if (rows.length) {
-                    const apps = rows.map(r => ({ name: `${r.make} ${r.model}`.trim(), years: r.year }));
-                    const map = new Map();
-                    for (const a of apps) {
-                        const key = `${a.name.toUpperCase()}|${a.years}`;
-                        if (!map.has(key)) map.set(key, a);
-                    }
-                    specs.equipment_applications = Array.from(map.values()).slice(0, 20);
-                }
-            } catch (_) {}
-        }
-
-        // Curado: si PH6607, asegurar que ejemplos representativos estén presentes
-        if (code.toUpperCase() === 'PH6607') {
-            const curated = [
-                { name: 'ALFA ROMEO 156', years: '2003-2004' },
-                { name: 'CHEVROLET CITY EXPRESS', years: '2015-2018' },
-                { name: 'BLACK ROCK Black Rock (w/Yanmar 3TNV70 Engine)', years: '' }
-            ];
-            const map = new Map(
-                (specs.equipment_applications || []).map(a => [
-                    `${String(a?.name||'').toUpperCase()}|${String(a?.years||'')}`,
-                    a
-                ])
-            );
-            for (const a of curated) {
-                const key = `${a.name.toUpperCase()}|${a.years}`;
-                if (!map.has(key)) map.set(key, a);
-            }
-            specs.equipment_applications = Array.from(map.values()).slice(0, 20);
-        }
-
-        // Engines (FRAM pages rarely list engines; provide generic)
-        specs.engine_applications = [
-            { name: 'Gasoline Engines', years: '' }
-        ];
+        
+        specs.equipment_applications = applications;
+        specs.engine_applications = []; // LD doesn't separate engines
+        
+        console.log(`  ✅ Extracted ${specs.equipment_applications.length} applications for LD`);
 
         // Technical details
         specs.technical_details = {
@@ -634,66 +481,6 @@ async function extractFramSpecs(code) {
             change_interval_km: code.startsWith('XG') ? '30000' : '15000',
             manufactured_by: 'ELIMFILTERS'
         };
-
-        // Fallback adicional: si dimensiones clave faltan, intentar extraer del texto de la página
-        try {
-            const fullText = $ ? $('body').text() : '';
-            function mmFromInchesStr(str) {
-                const m = String(str||'').match(/([0-9]+(?:\.[0-9]+)?)\s*(in|inch|inches|mm)/i);
-                if (!m) return '';
-                const val = parseFloat(m[1]);
-                const unit = m[2].toLowerCase();
-                if (isNaN(val)) return '';
-                const mm = unit === 'mm' ? val : (val * 25.4);
-                return mm.toFixed(2);
-            }
-            if (!specs.dimensions.height_mm && fullText) {
-                const m = fullText.match(/height\s*[:\-]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:in|inch|inches|mm))/i);
-                const mm = mmFromInchesStr(m ? m[1] : '');
-                if (mm) specs.dimensions.height_mm = mm;
-            }
-            if (!specs.dimensions.outer_diameter_mm && fullText) {
-                const m = fullText.match(/(outer\s*diameter|o\.d\.|od)\s*[:\-]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:in|inch|inches|mm))/i);
-                const mm = mmFromInchesStr(m ? m[2] : '');
-                if (mm) specs.dimensions.outer_diameter_mm = mm;
-            }
-            if (!specs.dimensions.thread_size && fullText) {
-                const m = fullText.match(/thread\s*size\s*[:\-]?\s*([A-Za-z0-9\-\/xX]+)/i);
-                if (m && m[1]) specs.dimensions.thread_size = m[1].trim();
-            }
-        } catch (_) {
-            // no bloquear
-        }
-        // Intento por proxy estático si aún faltan dimensiones
-        if (!specs.dimensions.height_mm || !specs.dimensions.outer_diameter_mm || !specs.dimensions.thread_size) {
-            try {
-                const proxyUrl = `https://r.jina.ai/http://www.fram.com/fram-extra-guard-oil-filter-spin-on-${code.toLowerCase()}`;
-                const prox = await axios.get(proxyUrl, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-                const text = String(prox.data || '');
-                function mmFromStr(str, idx=1) {
-                    const m = String(str||'').match(/([0-9]+(?:\.[0-9]+)?)\s*(in|inch|inches|mm)/i);
-                    if (!m) return '';
-                    const val = parseFloat(m[1]);
-                    const unit = m[2].toLowerCase();
-                    const mm = unit === 'mm' ? val : (val * 25.4);
-                    return isNaN(mm) ? '' : mm.toFixed(2);
-                }
-                if (!specs.dimensions.height_mm) {
-                    const m = text.match(/height\s*[:\-]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:in|inch|inches|mm))/i);
-                    const mm = mmFromStr(m ? m[1] : '');
-                    if (mm) specs.dimensions.height_mm = mm;
-                }
-                if (!specs.dimensions.outer_diameter_mm) {
-                    const m = text.match(/(outer\s*diameter|o\.d\.|od)\s*[:\-]?\s*([0-9]+(?:\.[0-9]+)?\s*(?:in|inch|inches|mm))/i);
-                    const mm = mmFromStr(m ? m[2] : '');
-                    if (mm) specs.dimensions.outer_diameter_mm = mm;
-                }
-                if (!specs.dimensions.thread_size) {
-                    const m = text.match(/thread\s*size\s*[:\-]?\s*([A-Za-z0-9\-\/xX]+)/i);
-                    if (m && m[1]) specs.dimensions.thread_size = m[1].trim();
-                }
-            } catch (_) {}
-        }
 
         specs.found = true;
         return specs;
@@ -727,14 +514,8 @@ function getDefaultSpecs(code, source) {
         },
         standards: isHD ? ['ISO 5011', 'ISO 4548-12'] : ['SAE J806', 'SAE J1858'],
         certifications: isHD ? ['ISO 9001', 'ISO/TS 16949'] : ['ISO 9001'],
-        engine_applications: isHD ? [{ name: 'Heavy Duty Diesel Engines', years: '' }] : [{ name: 'Gasoline Engines', years: '' }],
-        equipment_applications: isHD ? [
-            { name: 'Commercial Trucks', years: '' },
-            { name: 'Construction Equipment', years: '' }
-        ] : [
-            { name: 'Passenger Vehicles', years: '' },
-            { name: 'Light Trucks', years: '' }
-        ],
+        engine_applications: isHD ? ['Heavy Duty Diesel Engines'] : ['Gasoline Engines'],
+        equipment_applications: isHD ? ['Commercial Trucks', 'Construction Equipment'] : ['Passenger Vehicles', 'Light Trucks'],
         technical_details: {
             operating_temperature_min_c: '-40',
             operating_temperature_max_c: isHD ? '100' : '120',
