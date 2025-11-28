@@ -5,8 +5,13 @@
 
 const axios = require('axios');
 
-// API base URL (internal)
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8080';
+// Import detection service directly
+let detectFilter;
+try {
+    detectFilter = require('./detectionServiceFinal').detectFilter;
+} catch (error) {
+    console.error('⚠️  Could not import detectFilter:', error.message);
+}
 
 // ============================================================================
 // VIN VALIDATION
@@ -331,12 +336,12 @@ async function processVIN(vin) {
                 try {
                     console.log(`  Converting ${filterType}: ${oemCode}`);
                     
-                    // Make internal HTTP call to /api/detect
-                    const detectResponse = await axios.get(`${API_BASE_URL}/api/detect/${oemCode}`, {
-                        timeout: 10000
-                    });
+                    // Call detectFilter directly
+                    if (!detectFilter) {
+                        throw new Error('detectFilter not available');
+                    }
                     
-                    const result = detectResponse.data;
+                    const result = await detectFilter(oemCode);
                     
                     if (result.success && result.status === 'OK') {
                         filters[filterType] = {
@@ -364,7 +369,7 @@ async function processVIN(vin) {
                     filters[filterType] = {
                         sku: null,
                         oem_code: oemCode,
-                        error: 'Conversion failed'
+                        error: error.message || 'Conversion failed'
                     };
                 }
             }
