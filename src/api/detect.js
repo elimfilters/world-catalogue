@@ -13,6 +13,8 @@ const { detectFilter } = require('../services/detectionServiceFinal');
 router.get('/:code', async (req, res) => {
     try {
         const code = req.params.code?.trim();
+        const force = (String(req.query.force || '').toLowerCase() === 'true') || (req.query.force === '1');
+        const generateAll = (String(req.query.generate_all || '').toLowerCase() === 'true') || (req.query.generate_all === '1');
 
         // Validation
         if (!code || code.length < 3) {
@@ -23,9 +25,9 @@ router.get('/:code', async (req, res) => {
             });
         }
 
-        console.log(`🔎 Detecting filter: ${code}`);
+        console.log(`🔎 Detecting filter: ${code} (force=${force}, generate_all=${generateAll})`);
 
-        const result = await detectFilter(code);
+        const result = await detectFilter(code, 'en', { force, generateAll });
 
         return res.json({
             success: true,
@@ -49,6 +51,8 @@ router.get('/:code', async (req, res) => {
 router.get('/search', async (req, res) => {
     try {
         const query = req.query.q?.trim();
+        const force = (String(req.query.force || '').toLowerCase() === 'true') || (req.query.force === '1');
+        const generateAll = (String(req.query.generate_all || '').toLowerCase() === 'true') || (req.query.generate_all === '1');
 
         if (!query) {
             return res.status(400).json({
@@ -58,9 +62,9 @@ router.get('/search', async (req, res) => {
             });
         }
 
-        console.log(`🔍 Searching: ${query}`);
+        console.log(`🔍 Searching: ${query} (force=${force}, generate_all=${generateAll})`);
 
-        const result = await detectFilter(query);
+        const result = await detectFilter(query, 'en', { force, generateAll });
 
         return res.json({
             success: true,
