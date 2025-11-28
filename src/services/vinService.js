@@ -4,7 +4,9 @@
 // ============================================================================
 
 const axios = require('axios');
-const { detectFilter } = require('./detectionServiceFinal');
+
+// API base URL (internal)
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:8080';
 
 // ============================================================================
 // VIN VALIDATION
@@ -328,7 +330,13 @@ async function processVIN(vin) {
             if (oemCode) {
                 try {
                     console.log(`  Converting ${filterType}: ${oemCode}`);
-                    const result = await detectFilter(oemCode);
+                    
+                    // Make internal HTTP call to /api/detect
+                    const detectResponse = await axios.get(`${API_BASE_URL}/api/detect/${oemCode}`, {
+                        timeout: 10000
+                    });
+                    
+                    const result = detectResponse.data;
                     
                     if (result.success && result.status === 'OK') {
                         filters[filterType] = {
