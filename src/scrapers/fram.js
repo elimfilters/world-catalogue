@@ -30,8 +30,8 @@ async function validateFramCode(code) {
                 applications: ['Light Duty'],
                 attributes: {
                     series: 'PH',
-                    type: 'Spin-On Oil Filter',
-                    media_type: 'Cellulose'
+                    type: 'Spin-On Oil Filter'
+                    // media_type removed - will be set by mediaMapper
                 }
             };
         }
@@ -49,8 +49,7 @@ async function validateFramCode(code) {
                 applications: ['Light Duty'],
                 attributes: {
                     series: 'TG',
-                    type: 'Tough Guard Oil Filter',
-                    media_type: 'Synthetic Blend'
+                    type: 'Tough Guard Oil Filter'
                 }
             };
         }
@@ -69,7 +68,6 @@ async function validateFramCode(code) {
                 attributes: {
                     series: 'XG',
                     type: 'Extra Guard Oil Filter',
-                    media_type: 'Synthetic Blend',
                     service_life: 'Extended'
                 }
             };
@@ -88,8 +86,7 @@ async function validateFramCode(code) {
                 applications: ['Light Duty', 'High Mileage'],
                 attributes: {
                     series: 'HM',
-                    type: 'High Mileage Oil Filter',
-                    media_type: 'Synthetic Blend'
+                    type: 'High Mileage Oil Filter'
                 }
             };
         }
@@ -100,15 +97,14 @@ async function validateFramCode(code) {
                 valid: true,
                 code: normalizedCode,
                 source: 'FRAM',
-                family: 'AIRE',
+                family: 'AIR',
                 duty: 'LD',
                 last4: normalizedCode.slice(-4),
                 cross: [],
                 applications: ['Light Duty', 'Passenger Vehicles'],
                 attributes: {
                     series: 'CA',
-                    type: 'Air Filter',
-                    media_type: 'Paper/Synthetic Blend'
+                    type: 'Air Filter'
                 }
             };
         }
@@ -126,8 +122,7 @@ async function validateFramCode(code) {
                 applications: ['Light Duty', 'Passenger Vehicles'],
                 attributes: {
                     series: 'CF',
-                    type: 'Cabin Air Filter',
-                    media_type: 'Activated Carbon'
+                    type: 'Cabin Air Filter'
                 }
             };
         }
@@ -145,8 +140,7 @@ async function validateFramCode(code) {
                 applications: ['Light Duty', 'Passenger Vehicles'],
                 attributes: {
                     series: 'CH',
-                    type: 'Cabin Air Filter',
-                    media_type: 'Particulate'
+                    type: 'Cabin Air Filter'
                 }
             };
         }
@@ -164,8 +158,7 @@ async function validateFramCode(code) {
                 applications: ['Light Duty', 'Gasoline Engines'],
                 attributes: {
                     series: 'G',
-                    type: 'In-Line Fuel Filter',
-                    media_type: 'Paper'
+                    type: 'In-Line Fuel Filter'
                 }
             };
         }
@@ -183,8 +176,7 @@ async function validateFramCode(code) {
                 applications: ['Light Duty', 'Diesel Engines'],
                 attributes: {
                     series: 'PS',
-                    type: 'Fuel/Water Separator',
-                    media_type: 'Paper'
+                    type: 'Fuel/Water Separator'
                 }
             };
         }
@@ -225,30 +217,7 @@ async function validateFramCode(code) {
 // EXPORT
 // ============================================================================
 
-// Wrapper to provide a bridge-compatible shape
-async function scrapeFram(inputCode) {
-    const result = await validateFramCode(inputCode);
-
-    if (result && result.valid) {
-        return {
-            found: true,
-            code: result.code,
-            original_code: inputCode,
-            series: result.attributes?.series || null,
-            family: result.family || null,
-            family_hint: result.family || null,
-            last4: result.last4,
-            cross: result.cross || [],
-            applications: result.applications || [],
-            attributes: result.attributes || {}
-        };
-    }
-
-    return { found: false };
-}
-
 module.exports = {
     validateFramCode,
-    scrapeFram,
     scrapeFramFilter: validateFramCode // Alias for compatibility
 };
