@@ -1,0 +1,16 @@
+{
+  "version": "3.0.0",
+  "updated": "2025-11-27",
+  "rules": [
+    { "family": "OIL", "prefix": "EL8", "duty": ["HD", "LD"] },
+    { "family": "FUEL", "prefix": "EF9", "duty": ["HD", "LD"] },
+    { "family": "AIRE", "prefix": "EA1", "duty": ["HD", "LD"] },
+    { "family": "CABIN", "prefix": "EC1", "duty": ["HD", "LD"] },
+    { "family": "HYDRAULIC", "prefix": "EH6", "duty": ["HD"] },
+    { "family": "FUEL SEPARATOR", "prefix": "ES9", "duty": ["HD"] },
+    { "family": "AIR DRYER", "prefix": "ED4", "duty": ["HD"] },
+    { "family": "COOLANT", "prefix": "EW7", "duty": ["HD"] },
+    { "family": "TURBINE", "prefix": "ET9", "duty": ["HD"] },
+    { "family": "MARINE", "prefix": "EM9", "duty": ["HD", "LD"] }
+  ]
+}
