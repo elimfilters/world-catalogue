@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0",
+  "crossManufacturers": [
+    "FRAM",
+    "WIX",
+    "BALDWIN",
+    "MANN",
+    "HENGST",
+    "FLEETGUARD",
+    "DONALDSON",
+    "K&N",
+    "TECFIL",
+    "SUREFILTER",
+    "MILLARD FILTER",
+    "ACDELCO",
+    "MOTORCRAFT",
+    "DENSO",
+    "RYCO",
+    "CHAMPION",
+    "PUROLATOR",
+    "MAHLE",
+    "UFI",
+    "SOFIMA",
+    "HIFI FILTER",
+    "FILTRON",
+    "JS ASAKASHI"
+  ]
+}
