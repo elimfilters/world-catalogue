@@ -10,7 +10,7 @@ const { JWT } = require('google-auth-library');
 // CONFIGURATION
 // ============================================================================
 
-const SHEET_ID = '1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U';
+const SHEET_ID = process.env.GOOGLE_SHEETS_ID || '1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U';
 
 // Column mapping (exact headers from Sheet Master)
 const COLUMNS = {
@@ -77,15 +77,35 @@ const COLUMNS = {
 
 async function initSheet() {
     try {
-        const serviceAccountAuth = new JWT({
-            email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-            key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-        });
+        const doc = new GoogleSpreadsheet(SHEET_ID);
 
-        const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
+        // Prefer JSON credentials if provided
+        const credsRaw = process.env.GOOGLE_CREDENTIALS;
+        if (credsRaw) {
+            let creds;
+            try {
+                creds = JSON.parse(credsRaw);
+            } catch (e) {
+                throw new Error('Invalid GOOGLE_CREDENTIALS JSON');
+            }
+            if (creds.private_key) {
+                creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+            }
+            await doc.useServiceAccountAuth({
+                client_email: creds.client_email,
+                private_key: creds.private_key
+            });
+        } else if (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+            // Fallback to explicit env vars
+            await doc.useServiceAccountAuth({
+                client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+                private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+            });
+        } else {
+            throw new Error('Missing Google Sheets credentials: set GOOGLE_CREDENTIALS or GOOGLE_SERVICE_ACCOUNT_EMAIL/GOOGLE_PRIVATE_KEY');
+        }
+
         await doc.loadInfo();
-        
         console.log(`📊 Google Sheet Master loaded: ${doc.title}`);
         return doc;
 
@@ -130,7 +150,7 @@ async function searchInSheet(code) {
                     description: row.get('description'),
                     family: row.get('family'),
                     duty: row.get('duty'),
-                    oem_codes: row.get('oem_codes'),
+                    oem_codes: tryParseJSON(row.get('oem_codes')),
                     cross_reference: tryParseJSON(row.get('cross_reference')),
                     media_type: row.get('media_type'),
                     filter_type: row.get('filter_type'),
@@ -167,6 +187,73 @@ async function searchInSheet(code) {
 // ============================================================================
 
 /**
+ * Build row data according to exact column structure
+ */
+function buildRowData(data) {
+    const attrs = data.attributes || {};
+    return {
+        query_norm: data.query_normalized || data.code_input || '',
+        sku: data.sku || '',
+        description: attrs.description || attrs.type || '',
+        family: data.family || '',
+        duty: data.duty || '',
+        oem_codes: JSON.stringify(
+            Array.isArray(data.oem_codes) ? data.oem_codes :
+            (data.oem_codes ? [data.oem_codes] : (data.code_oem ? [data.code_oem] : []))
+        ),
+        cross_reference: JSON.stringify(data.cross_reference || []),
+        media_type: data.media || '',
+        filter_type: data.filter_type || data.family || '',
+        subtype: attrs.subtype || attrs.style || '',
+        engine_applications: JSON.stringify(data.engine_applications || data.applications || []),
+        equipment_applications: JSON.stringify(data.equipment_applications || []),
+        height_mm: attrs.height_mm || attrs.height || attrs.length || '',
+        outer_diameter_mm: attrs.outer_diameter_mm || attrs.outer_diameter || '',
+        thread_size: attrs.thread_size || '',
+        gasket_od_mm: attrs.gasket_od_mm || '',
+        gasket_id_mm: attrs.gasket_id_mm || '',
+        bypass_valve_psi: attrs.bypass_valve_psi || '',
+        micron_rating: attrs.micron_rating || attrs.efficiency || '',
+        iso_main_efficiency_percent: attrs.iso_main_efficiency_percent || '',
+        iso_test_method: attrs.iso_test_method || '',
+        beta_200: attrs.beta_200 || '',
+        hydrostatic_burst_psi: attrs.hydrostatic_burst_psi || '',
+        dirt_capacity_grams: attrs.dirt_capacity_grams || '',
+        rated_flow_cfm: attrs.rated_flow_cfm || '',
+        rated_flow_gpm: attrs.rated_flow_gpm || '',
+        panel_width_mm: attrs.panel_width_mm || '',
+        panel_depth_mm: attrs.panel_depth_mm || '',
+        manufacturing_standards: attrs.manufacturing_standards || '',
+        certification_standards: attrs.certification_standards || '',
+        operating_pressure_min_psi: attrs.operating_pressure_min_psi || '',
+        operating_pressure_max_psi: attrs.operating_pressure_max_psi || '',
+        operating_temperature_min_c: attrs.operating_temperature_min_c || '',
+        operating_temperature_max_c: attrs.operating_temperature_max_c || '',
+        fluid_compatibility: attrs.fluid_compatibility || '',
+        disposal_method: attrs.disposal_method || '',
+        weight_grams: attrs.weight_grams || '',
+        service_life_hours: attrs.service_life_hours || '',
+        change_interval_km: attrs.change_interval_km || '',
+        water_separation_efficiency_percent: attrs.water_separation_efficiency_percent || '',
+        drain_type: attrs.drain_type || '',
+        oem_number: data.code_oem || '',
+        cross_brand: data.source || '',
+        cross_part_number: data.code_oem || '',
+        manufactured_by: 'ELIMFILTERS',
+        last4_source: data.source || '',
+        last4_digits: data.last4 || '',
+        source: data.source || '',
+        homologated_sku: data.code_oem || '',
+        review: '',
+        all_cross_references: JSON.stringify(data.cross_reference || []),
+        specs: JSON.stringify(attrs),
+        priority_reference: data.code_oem || '',
+        priority_brand_reference: data.source || '',
+        ok: 'TRUE'
+    };
+}
+
+/**
  * Append single filter to Google Sheets Master
  * @param {object} data - Filter data to append
  */
@@ -174,74 +261,54 @@ async function appendToSheet(data) {
     try {
         const doc = await initSheet();
         const sheet = doc.sheetsByIndex[0];
-
-        // Extract attributes
-        const attrs = data.attributes || {};
-        
-        // Prepare row data according to exact column structure
-        const rowData = {
-            query_norm: data.query_normalized || data.code_input || '',
-            sku: data.sku || '',
-            description: attrs.description || attrs.type || '',
-            family: data.family || '',
-            duty: data.duty || '',
-            oem_codes: data.code_oem || data.oem_equivalent || '',
-            cross_reference: JSON.stringify(data.cross_reference || []),
-            media_type: data.media || '',
-            filter_type: data.filter_type || data.family || '',
-            subtype: attrs.subtype || attrs.style || '',
-            engine_applications: JSON.stringify(data.applications || []),
-            equipment_applications: JSON.stringify(data.equipment_applications || []),
-            height_mm: attrs.height_mm || attrs.height || attrs.length || '',
-            outer_diameter_mm: attrs.outer_diameter_mm || attrs.outer_diameter || '',
-            thread_size: attrs.thread_size || '',
-            gasket_od_mm: attrs.gasket_od_mm || '',
-            gasket_id_mm: attrs.gasket_id_mm || '',
-            bypass_valve_psi: attrs.bypass_valve_psi || '',
-            micron_rating: attrs.micron_rating || attrs.efficiency || '',
-            iso_main_efficiency_percent: attrs.iso_main_efficiency_percent || '',
-            iso_test_method: attrs.iso_test_method || '',
-            beta_200: attrs.beta_200 || '',
-            hydrostatic_burst_psi: attrs.hydrostatic_burst_psi || '',
-            dirt_capacity_grams: attrs.dirt_capacity_grams || '',
-            rated_flow_cfm: attrs.rated_flow_cfm || '',
-            rated_flow_gpm: attrs.rated_flow_gpm || '',
-            panel_width_mm: attrs.panel_width_mm || '',
-            panel_depth_mm: attrs.panel_depth_mm || '',
-            manufacturing_standards: attrs.manufacturing_standards || '',
-            certification_standards: attrs.certification_standards || '',
-            operating_pressure_min_psi: attrs.operating_pressure_min_psi || '',
-            operating_pressure_max_psi: attrs.operating_pressure_max_psi || '',
-            operating_temperature_min_c: attrs.operating_temperature_min_c || '',
-            operating_temperature_max_c: attrs.operating_temperature_max_c || '',
-            fluid_compatibility: attrs.fluid_compatibility || '',
-            disposal_method: attrs.disposal_method || '',
-            weight_grams: attrs.weight_grams || '',
-            service_life_hours: attrs.service_life_hours || '',
-            change_interval_km: attrs.change_interval_km || '',
-            water_separation_efficiency_percent: attrs.water_separation_efficiency_percent || '',
-            drain_type: attrs.drain_type || '',
-            oem_number: data.code_oem || '',
-            cross_brand: data.source || '',
-            cross_part_number: data.code_oem || '',
-            manufactured_by: 'ELIMFILTERS',
-            last4_source: data.source || '',
-            last4_digits: data.last4 || '',
-            source: data.source || '',
-            homologated_sku: data.code_oem || '',
-            review: '',
-            all_cross_references: JSON.stringify(data.cross_reference || []),
-            specs: JSON.stringify(attrs),
-            priority_reference: data.code_oem || '',
-            priority_brand_reference: data.source || '',
-            ok: 'TRUE'
-        };
-
+        const rowData = buildRowData(data);
         await sheet.addRow(rowData);
         console.log(`💾 Saved to Google Sheet Master: ${data.sku}`);
-
     } catch (error) {
         console.error('❌ Error appending to Google Sheet:', error.message);
+        throw error;
+    }
+}
+
+/**
+ * Upsert by SKU: replace existing row(s) for the SKU or insert new
+ * @param {object} data - Filter data to upsert
+ * @param {object} options - { deleteDuplicates?: boolean }
+ */
+async function upsertBySku(data, options = { deleteDuplicates: true }) {
+    try {
+        const doc = await initSheet();
+        const sheet = doc.sheetsByIndex[0];
+        const rows = await sheet.getRows();
+        const skuNorm = (data.sku || '').toUpperCase().trim();
+        // Some environments expose row values directly by header name, avoiding row.get()
+        const matches = rows.filter(r => (r.sku || '').toUpperCase().trim() === skuNorm);
+
+        const rowData = buildRowData(data);
+
+        if (matches.length > 0) {
+            const row = matches[0];
+            // Assign all fields
+            Object.entries(rowData).forEach(([k, v]) => { row[k] = v; });
+            await row.save();
+            console.log(`♻️ Upserted existing row for ${data.sku}`);
+
+            if (options.deleteDuplicates && matches.length > 1) {
+                for (let i = 1; i < matches.length; i++) {
+                    try {
+                        await matches[i].delete();
+                        console.log(`🧹 Deleted duplicate row for ${data.sku}`);
+                    } catch (e) {
+                        console.warn(`⚠️ Failed to delete duplicate for ${data.sku}: ${e.message}`);
+                    }
+                }
+            }
+        } else {
+            await sheet.addRow(rowData);
+            console.log(`➕ Inserted new row for ${data.sku}`);
+        }
+    } catch (error) {
+        console.error('❌ Error upserting to Google Sheet:', error.message);
         throw error;
     }
 }
@@ -264,7 +331,7 @@ async function syncToSheets(filters) {
         console.log(`📊 Syncing ${filters.length} filters...`);
 
         for (const filter of filters) {
-            await appendToSheet(filter);
+            await upsertBySku(filter);
         }
 
         console.log(`✅ Sync complete: ${filters.length} filters synced`);
@@ -303,5 +370,6 @@ function tryParseJSON(str) {
 module.exports = {
     searchInSheet,
     appendToSheet,
+    upsertBySku,
     syncToSheets
 };
