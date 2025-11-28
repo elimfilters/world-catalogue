@@ -343,7 +343,7 @@ async function processVIN(vin) {
                     
                     const result = await detectFilter(oemCode);
                     
-                    if (result.success && result.status === 'OK') {
+                    if (result && result.status === 'OK' && result.sku) {  // ← Fixed condition
                         filters[filterType] = {
                             sku: result.sku,
                             oem_code: oemCode,
