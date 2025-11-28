@@ -1,0 +1,21 @@
+{
+  "version": "3.0.0",
+  "description": "Reglas oficiales ELIMFILTERS para prefijos HD/LD",
+  "prefixes": {
+    "OIL": "EL8",
+    "FUEL": "EF9",
+    "AIRE": "EA1",
+    "CABIN": "EC1",
+    "HIDRAULIC": "EH6",
+    "FUEL SEPARATOR": "ES9",
+    "AIR DRYER": "ED4",
+    "COOLANT": "EW7",
+    "TURBINE": "ET9",
+    "MARINE": "EM9"
+  },
+  "notes": [
+    "Todos los SKU deben terminar en 4 dígitos exactos.",
+    "Prefijos HD y LD son iguales excepto HIDRAULIC/ES9/ED4/EW7/ET9/EM9 para HD.",
+    "MARINE EM9 es universal (HD & LD)."
+  ]
+}
