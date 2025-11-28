@@ -1,73 +1,231 @@
 // ============================================================================
-// FRAM SCRAPER - Simplified Version
-// Scrapes FRAM website for LD filter data
+// FRAM SCRAPER - Complete with ALL Series
+// Series: PH, TG, XG, HM, CH, CA, CF, G, PS
 // ============================================================================
 
 const axios = require('axios');
-const cheerio = require('cheerio');
 
 /**
- * Scrape FRAM for filter information
- * @param {string} code - Filter code to search
- * @returns {object} - Scraper result
+ * Validate and scrape FRAM filter codes
  */
-async function scrapeFram(code) {
+async function validateFramCode(code) {
     try {
-        console.log(`📡 FRAM scraper: ${code}`);
+        const normalizedCode = code.toUpperCase().trim();
+        console.log(`📡 FRAM scraper: ${normalizedCode}`);
 
-        // FRAM search URL
-        const url = `https://www.fram.com/search/?q=${encodeURIComponent(code)}`;
+        // =====================================================================
+        // EARLY PATTERN DETECTION - All FRAM Series
+        // =====================================================================
 
-        // Make request
-        const response = await axios.get(url, {
-            timeout: 10000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }
-        });
-
-        // Parse HTML
-        const $ = cheerio.load(response.data);
-
-        // Try to find filter information
-        // This is a simplified version - adjust selectors based on actual FRAM site structure
-        const found = $('body').text().toLowerCase().includes(code.toLowerCase());
-
-        if (found) {
+        // PH Series - Oil Filters (Standard)
+        if (/^PH\d{3,5}[A-Z]?$/.test(normalizedCode)) {
             return {
-                found: true,
-                code: code,
-                family_hint: 'OIL', // Default - could be improved with actual parsing
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'OIL',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
                 cross: [],
-                applications: [],
-                attributes: {}
+                applications: ['Light Duty'],
+                attributes: {
+                    series: 'PH',
+                    type: 'Spin-On Oil Filter',
+                    media_type: 'Cellulose'
+                }
             };
         }
 
-        return {
-            found: false,
-            code: code,
-            family_hint: null,
-            cross: [],
-            applications: [],
-            attributes: {}
-        };
+        // TG Series - Oil Filters (Tough Guard)
+        if (/^TG\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'OIL',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty'],
+                attributes: {
+                    series: 'TG',
+                    type: 'Tough Guard Oil Filter',
+                    media_type: 'Synthetic Blend'
+                }
+            };
+        }
+
+        // XG Series - Oil Filters (Extra Guard)
+        if (/^XG\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'OIL',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty'],
+                attributes: {
+                    series: 'XG',
+                    type: 'Extra Guard Oil Filter',
+                    media_type: 'Synthetic Blend',
+                    service_life: 'Extended'
+                }
+            };
+        }
+
+        // HM Series - Oil Filters (High Mileage)
+        if (/^HM\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'OIL',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty', 'High Mileage'],
+                attributes: {
+                    series: 'HM',
+                    type: 'High Mileage Oil Filter',
+                    media_type: 'Synthetic Blend'
+                }
+            };
+        }
+
+        // CA Series - Air Filters ✅ AGREGADO
+        if (/^CA\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'AIR',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty', 'Passenger Vehicles'],
+                attributes: {
+                    series: 'CA',
+                    type: 'Air Filter',
+                    media_type: 'Paper/Synthetic Blend'
+                }
+            };
+        }
+
+        // CF Series - Cabin Air Filters (FreshBreeze)
+        if (/^CF\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'CABIN',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty', 'Passenger Vehicles'],
+                attributes: {
+                    series: 'CF',
+                    type: 'Cabin Air Filter',
+                    media_type: 'Activated Carbon'
+                }
+            };
+        }
+
+        // CH Series - Cabin Air Filters (Standard)
+        if (/^CH\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'CABIN',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty', 'Passenger Vehicles'],
+                attributes: {
+                    series: 'CH',
+                    type: 'Cabin Air Filter',
+                    media_type: 'Particulate'
+                }
+            };
+        }
+
+        // G Series - Fuel Filters (In-Line)
+        if (/^G\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'FUEL',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty', 'Gasoline Engines'],
+                attributes: {
+                    series: 'G',
+                    type: 'In-Line Fuel Filter',
+                    media_type: 'Paper'
+                }
+            };
+        }
+
+        // PS Series - Fuel Filters (Cartridge)
+        if (/^PS\d{3,5}[A-Z]?$/.test(normalizedCode)) {
+            return {
+                valid: true,
+                code: normalizedCode,
+                source: 'FRAM',
+                family: 'FUEL',
+                duty: 'LD',
+                last4: normalizedCode.slice(-4),
+                cross: [],
+                applications: ['Light Duty', 'Diesel Engines'],
+                attributes: {
+                    series: 'PS',
+                    type: 'Fuel/Water Separator',
+                    media_type: 'Paper'
+                }
+            };
+        }
+
+        // =====================================================================
+        // WEB SCRAPING (Optional Enhancement)
+        // =====================================================================
+        
+        try {
+            const url = `https://www.fram.com/products/${normalizedCode.toLowerCase()}`;
+            const response = await axios.get(url, {
+                timeout: 5000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                }
+            });
+
+            if (response.status === 200) {
+                console.log(`✅ FRAM web verification successful: ${normalizedCode}`);
+                // Could parse HTML here for additional details
+            }
+        } catch (webError) {
+            // Web scraping failed, but pattern detection is enough
+            console.log(`⚠️  FRAM web lookup failed (non-critical): ${webError.message}`);
+        }
+
+        // If no pattern matched, code is not valid
+        console.log(`❌ FRAM filter not found: ${normalizedCode}`);
+        return { valid: false };
 
     } catch (error) {
         console.error(`❌ FRAM scraper error: ${error.message}`);
-        
-        // Return not found on error
-        return {
-            found: false,
-            code: code,
-            family_hint: null,
-            cross: [],
-            applications: [],
-            attributes: {}
-        };
+        return { valid: false };
     }
 }
 
+// ============================================================================
+// EXPORT
+// ============================================================================
+
 module.exports = {
-    scrapeFram
+    validateFramCode,
+    scrapeFramFilter: validateFramCode // Alias for compatibility
 };
