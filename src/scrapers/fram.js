@@ -222,10 +222,3 @@ module.exports = {
     scrapeFramFilter: validateFramCode,
     scrapeFram: validateFramCode
 };
-```
-
----
-
-## 📝 **Commit:**
-```
-fix: Add scrapeFram alias to FRAM scraper exports
