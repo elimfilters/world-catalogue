@@ -1,0 +1,50 @@
+{
+  "version": "1.0.0",
+  "engines": [
+    {
+      "id": "1KD_FTV_30",
+      "brand": "Toyota",
+      "model": "Hilux",
+      "engine": "1KD-FTV 3.0",
+      "fuel": "Diesel",
+      "years": { "start": 2010, "end": 2020 },
+      "regions": ["LATAM", "ASIA", "EU"],
+      "oem_codes": ["P181126", "23390-0L041"],
+      "cross": ["CA10234", "WIX 57045"]
+    },
+    {
+      "id": "PACCAR_MX13",
+      "brand": "Kenworth",
+      "model": "T680",
+      "engine": "MX-13",
+      "fuel": "Diesel",
+      "years": { "start": 2012, "end": 2024 },
+      "regions": ["USA", "CAN"],
+      "oem_codes": ["P554004", "P550100"],
+      "cross": ["LF16015", "Baldwin B7177"]
+    },
+    {
+      "id": "DD15_OM472",
+      "brand": "Detroit Diesel",
+      "model": "Cascadia",
+      "engine": "DD15",
+      "fuel": "Diesel",
+      "years": { "start": 2010, "end": 2024 },
+      "regions": ["USA"],
+      "oem_codes": ["P551005", "A4721800109"],
+      "cross": ["WIX 57145", "CH9999"]
+    },
+    {
+      "id": "EV_ELECTRIC_GENERIC",
+      "brand": "Generic",
+      "model": "EV",
+      "engine": "Electric Drive",
+      "fuel": "Electric",
+      "years": { "start": 2015, "end": 2035 },
+      "regions": ["GLOBAL"],
+      "oem_codes": ["CHARGER-FILTER-001"],
+      "cross": ["CF10285"],
+      "notes": "EV uses cabin and cooling filters"
+    }
+  ]
+}
