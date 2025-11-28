@@ -92,15 +92,29 @@ async function detectFilter(rawInput, lang = 'en') {
         console.log(`🔧 Step 3: Generating new SKU...`);
         
         let family;
-
-        if (duty === 'HD') {
-            family = detectFamilyHD(scraperResult.family);
+        
+        // Try code-based detection first (for FRAM codes)
+        const codeUpper = scraperResult.code.toUpperCase();
+        
+        if (codeUpper.startsWith('CA')) {
+            family = 'AIR';
+        } else if (codeUpper.startsWith('CF') || codeUpper.startsWith('CH')) {
+            family = 'CABIN';
+        } else if (codeUpper.startsWith('PH') || codeUpper.startsWith('TG') || codeUpper.startsWith('XG') || codeUpper.startsWith('HM')) {
+            family = 'OIL';
+        } else if (codeUpper.startsWith('G') || codeUpper.startsWith('PS')) {
+            family = 'FUEL';
         } else {
-            family = detectFamilyLD(scraperResult.family);
+            // Fallback to duty-based detection
+            if (duty === 'HD') {
+                family = detectFamilyHD(scraperResult.family);
+            } else {
+                family = detectFamilyLD(scraperResult.family);
+            }
         }
 
         if (!family) {
-            console.log(`❌ Family detection failed`);
+            console.log(`❌ Family detection failed for ${scraperResult.code}`);
             return noEquivalentFound(query, lang);
         }
 
