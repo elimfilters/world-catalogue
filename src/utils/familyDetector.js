@@ -77,6 +77,26 @@ function detectFamily(scraperFamily, scraperSubtype) {
     return null; // No se pudo detectar familia
 }
 
+/**
+ * Detect family for Heavy Duty filters
+ * @param {string} familyHint - Family hint from scraper
+ * @returns {string|null} - Detected family
+ */
+function detectFamilyHD(familyHint) {
+    return detectFamily(familyHint, null);
+}
+
+/**
+ * Detect family for Light Duty filters
+ * @param {string} familyHint - Family hint from scraper
+ * @returns {string|null} - Detected family
+ */
+function detectFamilyLD(familyHint) {
+    return detectFamily(familyHint, null);
+}
+
 module.exports = {
-    detectFamily
+    detectFamily,
+    detectFamilyHD,
+    detectFamilyLD
 };
