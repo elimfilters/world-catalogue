@@ -1,0 +1,25 @@
+{
+  "version": "1.0.0",
+  "equipment": [
+    {
+      "id": "CAT_320D",
+      "brand": "Caterpillar",
+      "type": "Excavator",
+      "engine": "C6.4",
+      "years": { "start": 2007, "end": 2016 },
+      "regions": ["GLOBAL"],
+      "oem_codes": ["P181052", "1R1807"],
+      "cross": ["Baldwin PA30000"]
+    },
+    {
+      "id": "VOLVO_PENTA_D6",
+      "brand": "Volvo Penta",
+      "type": "Marine Engine",
+      "engine": "D6 Marine",
+      "years": { "start": 2010, "end": 2024 },
+      "regions": ["GLOBAL"],
+      "oem_codes": ["21549500"],
+      "cross": ["WIX 33955"]
+    }
+  ]
+}
