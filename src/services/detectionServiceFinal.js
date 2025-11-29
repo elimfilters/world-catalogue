@@ -8,7 +8,7 @@ const { scraperBridge } = require('../scrapers/scraperBridge');
 const { detectDuty } = require('../utils/dutyDetector');
 const { detectFamilyHD, detectFamilyLD } = require('../utils/familyDetector');
 const { generateSKU } = require('../sku/generator');
-const { getMedia } = require('../utils/mediaMapper');
+const { getMedia, getMediaSpecs, getServiceIntervals, getTechnology, getBrandTagline } = require('../utils/mediaMapper');
 const { noEquivalentFound } = require('../utils/messages');
 const { searchInSheet, appendToSheet } = require('./syncSheetsService');
 // TODO: Upload technicalSpecsScraper.js to GitHub first
@@ -197,8 +197,8 @@ async function detectFilter(rawInput, lang = 'en') {
             oem_codes: [], // TODO: Extract from cross-reference page
             cross_reference: technicalSpecs?.cross_reference || scraperResult.cross || [],
             
-            // 9: Media
-            media_type: getMedia(family, duty),
+            // 9: Media (ELIMFILTERS proprietary technologies)
+            media_type: getMedia(family, duty, scraperResult.code),
             
             // 10-11: Applications (FROM WEB SCRAPING)
             equipment_applications: technicalSpecs?.equipment_applications || scraperResult.applications || [],
@@ -344,7 +344,10 @@ async function detectFilter(rawInput, lang = 'en') {
             subtype: masterData.subtype,
             source: scraperResult.source,
             
-            message: 'SKU ELIMFILTERS generado y guardado en catálogo Master'
+            // Brand
+            brand: getBrandTagline(),
+            
+            message: 'Filtro GENUINO ELIMFILTERS - Precisión Alemana CERTIFICADA'
         };
 
         console.log(`🎉 Detection complete: ${sku}`);
