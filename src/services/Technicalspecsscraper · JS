@@ -20,7 +20,7 @@ async function extractDonaldsonSpecs(code) {
         // Donaldson product page URL
         const url = `https://shop.donaldson.com/store/es-us/product/${code}`;
         const response = await axios.get(url, {
-            timeout: 15000,
+            timeout: 3000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Accept-Language': 'es-US,es;q=0.9,en;q=0.8'
