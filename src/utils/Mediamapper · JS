@@ -188,8 +188,8 @@ function getMediaSpecs(media) {
     };
     
     return specs[media] || {
-        type: 'GENUINO ELIMFILTERS',
-        efficiency: 'Precisión Alemana CERTIFICADA',
+        type: 'German Quality ELIMFILTERS',
+        efficiency: 'Tecnología elaborada con IA',
         capacity_grams: 'N/A',
         life_km: 'N/A',
         life_hours: 'N/A',
@@ -234,7 +234,7 @@ function getTechnology(media) {
         'MICROKAPPA™ PREMIUM': 'FiltroMax™ - Sistema 4-etapas: Pre-filtro + Electrostático + Carbón + Antimicrobiano'
     };
     
-    return technologies[media] || 'GENUINO ELIMFILTERS - Precisión Alemana CERTIFICADA';
+    return technologies[media] || 'German Quality ELIMFILTERS - Tecnología elaborada con IA';
 }
 
 /**
@@ -242,7 +242,7 @@ function getTechnology(media) {
  * @returns {string} - ELIMFILTERS tagline
  */
 function getBrandTagline() {
-    return 'GENUINO ELIMFILTERS - Precisión Alemana CERTIFICADA';
+    return 'German Quality ELIMFILTERS - Tecnología elaborada con IA';
 }
 
 // ============================================================================
