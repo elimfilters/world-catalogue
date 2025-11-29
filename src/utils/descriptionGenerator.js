@@ -1,5 +1,5 @@
 // ============================================================================
-// DESCRIPTION GENERATOR - GENUINO ELIMFILTERS
+// DESCRIPTION GENERATOR - German Quality ELIMFILTERS
 // Generates professional product descriptions
 // ============================================================================
 
@@ -17,7 +17,7 @@ function generateDescription(family, duty, subtype, media) {
     const equipment = getEquipmentList(family, duty);
     const industries = getIndustries(family, duty);
     
-    return `${filterType} GENUINO ELIMFILTERS ${technology}. ${equipment}. Aplicación principal en ${industries}.`;
+    return `${filterType} German Quality ELIMFILTERS ${technology}. ${equipment}. Aplicación principal en ${industries}.`;
 }
 
 /**
