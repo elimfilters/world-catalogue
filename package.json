@@ -9,7 +9,8 @@
     "test": "node scripts/test_internal_validation.js",
     "test:internal": "node scripts/test_internal_validation.js",
     "validate:oem": "node scripts/validate_oem_block.js --file src/data/oem_xref.json",
-    "validate:oem:candidate": "node scripts/validate_oem_block.js --file src/data/oem_xref.candidate.json"
+    "validate:oem:candidate": "node scripts/validate_oem_block.js --file src/data/oem_xref.candidate.json",
+    "backup:mongo": "node scripts/backup_mongo_to_s3.js"
   },
   "keywords": [
     "elimfilters",
@@ -37,7 +38,8 @@
     "mongoose": "^8.3.1",
     "morgan": "^1.10.0",
     "node-cache": "^5.1.2",
-    "puppeteer": "^24.31.0"
+    "puppeteer": "^24.31.0",
+    "@aws-sdk/client-s3": "^3.645.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.0"

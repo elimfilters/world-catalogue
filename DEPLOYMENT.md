@@ -210,6 +210,38 @@ Solution: Verify Dockerfile is in root directory
          Review Railway build logs
 
 ═══════════════════════════════════════════════════════════════
+🛡️ BACKUPS EN RAILWAY
+═══════════════════════════════════════════════════════════════
+
+1) PostgreSQL (Servicio con Volumen Persistente)
+- Railway ofrece pestaña de "Backups" en el servicio de base de datos.
+- Configura Frecuencia y Retención:
+  - Diaria: guarda 6 días
+  - Semanal: guarda 1 mes
+  - Mensual: guarda 3 meses
+- Restauración: desde la misma pestaña, selecciona por timestamp y pulsa "Restore".
+  - Crea un nuevo volumen con el estado anterior (el volumen original queda sin montar).
+
+2) MongoDB (Servicio externo o sin volumen)
+- Añade un servicio Cron en Railway que ejecute el script de backup del repo:
+  - Comando: `node scripts/backup_mongo_to_s3.js`
+  - Variables de entorno necesarias:
+    - `MONGODB_URI`
+    - `S3_BUCKET`, `S3_REGION`
+    - `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
+    - Opcional: `S3_PREFIX`, `BACKUP_DB_NAME`
+  - Programa el Cron con `RAILWAY_CRON_SCHEDULE`, por ejemplo: `0 3 * * *` (03:00 UTC diario).
+
+Salida del backup
+- El script crea `tmp_backup/<db>_<timestamp>/` con JSONL por colección y un archivo `tar.gz` subido a S3.
+- Los directorios `tmp_backup/` y `backups/` están ignorados en `.gitignore`.
+
+Verificación
+- Revisa S3 para el objeto: `s3://<bucket>/<prefix>/<db>/<db>_<timestamp>.tar.gz`.
+- Activa alertas en S3/lifecycle si deseas retención automática.
+
+
+═══════════════════════════════════════════════════════════════
 📞 SUPPORT
 ═══════════════════════════════════════════════════════════════
 

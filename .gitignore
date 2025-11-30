@@ -42,3 +42,7 @@ temp/
 
 # Ignore large local backup files
 src/config/prefixMap.backup.*.js
+
+# Local backup artifacts (not to be committed)
+tmp_backup/
+backups/
