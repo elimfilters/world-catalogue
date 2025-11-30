@@ -1,0 +1,161 @@
+{
+  "timestamp": "2025-11-30T06:19:06.464Z",
+  "batch": [
+    "23518480",
+    "R90T",
+    "BF7634",
+    "LF3620",
+    "PH3614",
+    "CA8612",
+    "WK 950/20",
+    "P552100",
+    "AF25740",
+    "LFP9000"
+  ],
+  "results": [
+    {
+      "input": "23518480",
+      "brand": null,
+      "family": "LUBE",
+      "duty": null,
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "P552100",
+        "series": "P",
+        "applications": [
+          "Lube filter, spin-on, full flow"
+        ],
+        "cross": [
+          "DETROIT DIESEL 23518480",
+          "23518480"
+        ]
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "R90T",
+      "brand": "RYCO",
+      "family": "FUEL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "BF7634",
+      "brand": null,
+      "family": null,
+      "duty": null,
+      "status": "P4/NoClasificado",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "LF3620",
+      "brand": "FLEETGUARD",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "PH3614",
+      "brand": "FRAM",
+      "family": "OIL",
+      "duty": "LD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "CA8612",
+      "brand": "FRAM",
+      "family": "AIRE",
+      "duty": "LD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "WK 950/20",
+      "brand": "MANN",
+      "family": "FUEL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "P552100",
+      "brand": "DONALDSON",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EL82100",
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "P552100",
+        "series": "P",
+        "applications": [
+          "Lube filter, spin-on, full flow"
+        ],
+        "cross": [
+          "DETROIT DIESEL 23518480",
+          "23518480"
+        ]
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "AF25740",
+      "brand": null,
+      "family": null,
+      "duty": null,
+      "status": "P4/NoClasificado",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "LFP9000",
+      "brand": null,
+      "family": null,
+      "duty": null,
+      "status": "P4/NoClasificado",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "by_status": {
+      "FINAL/Homologada": 7,
+      "P4/NoClasificado": 3
+    },
+    "by_family": {
+      "LUBE": 1,
+      "FUEL": 2,
+      "N/A": 3,
+      "OIL": 3,
+      "AIRE": 1
+    },
+    "brands": {
+      "N/A": 4,
+      "RYCO": 1,
+      "FLEETGUARD": 1,
+      "FRAM": 2,
+      "MANN": 1,
+      "DONALDSON": 1
+    }
+  }
+}

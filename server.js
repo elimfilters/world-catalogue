@@ -1,4 +1,4 @@
-// =============================================
+﻿// =============================================
 //  ELIMFILTERS API SERVER - v5.0.0
 //  Production-Ready Architecture
 // =============================================
@@ -16,8 +16,22 @@ const rateLimit = require('express-rate-limit');
 // Route imports
 const detectRoute = require('./src/api/detect');
 const vinRoute = require('./src/api/vin');
+
+const internalValidateRoute = require('./src/api/internalValidate');
+
+// Service imports
+// Sheets health and sync utilities
 const { pingSheets } = require('./src/services/syncSheetsService');
-const mongoService = require('./src/services/mongoService');
+// Mongo service (optional; routes guard when MONGODB_URI is unset)
+let mongoService;
+try {
+    mongoService = require('./src/services/mongoService');
+} catch (_) {
+    mongoService = {
+        connect: async () => null,
+        disconnect: async () => null
+    };
+}
 
 // =============================================
 //  APP CONFIGURATION
@@ -58,7 +72,7 @@ app.use((req, res, next) => {
     const rid = req.headers['x-request-id'] || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     res.setHeader('x-request-id', rid);
     res.locals.requestId = rid;
-    console.log(`➡️  ${new Date().toISOString()} [${rid}] - ${req.method} ${req.originalUrl}`);
+    console.log(`âž¡ï¸  ${new Date().toISOString()} [${rid}] - ${req.method} ${req.originalUrl}`);
     next();
 });
 
@@ -86,7 +100,8 @@ const detectLimiter = rateLimit({
 app.use('/api/detect', detectLimiter);
 
 app.use('/api/detect', detectRoute);
-app.use('/api/vin', vinRoute);
+
+app.use('/api/internal/validate', internalValidateRoute);
 
 // Sheets health endpoint
 app.get('/health/sheets', async (req, res) => {
@@ -187,7 +202,7 @@ app.get('/health/overall', async (req, res) => {
 //  ERROR HANDLING
 // =============================================
 app.use((err, req, res, next) => {
-    console.error('❌ Error:', err);
+    console.error('âŒ Error:', err);
     res.status(err.status || 500).json({
         error: err.message || 'Internal server error',
         timestamp: new Date().toISOString()
@@ -210,11 +225,11 @@ const PORT = process.env.PORT || 8080;
 
 const server = app.listen(PORT, () => {
     console.log(`
-╔════════════════════════════════════════════╗
-║   🚀 ELIMFILTERS API v5.0.0               ║
-║   📡 Running on port ${PORT}                  ║
-║   🌍 Environment: ${process.env.NODE_ENV || 'development'}         ║
-╚════════════════════════════════════════════╝
+â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
+â•‘   ðŸš€ ELIMFILTERS API v5.0.0               â•‘
+â•‘   ðŸ“¡ Running on port ${PORT}                  â•‘
+â•‘   ðŸŒ Environment: ${process.env.NODE_ENV || 'development'}         â•‘
+â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     `);
 });
 
@@ -250,3 +265,4 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
 });
+

@@ -58,6 +58,61 @@ const FRAM_DATABASE = {
         },
         applications: ['Ford', 'GM', 'Marine engines']
     },
+
+    // Bosch 3311 cross-reference coverage (Toyota applications)
+    'PH4967': {
+        family: 'OIL',
+        type: 'Extra Guard Oil Filter',
+        series: 'PH',
+        specifications: {
+            efficiency: '95% @ 20 micron',
+            capacity: '5,000-10,000 miles',
+            media_type: 'Cellulose/Synthetic blend'
+        },
+        cross_references: {
+            'BOSCH-3311': 'PH4967',
+            'BOSCH3311': 'PH4967',
+            'TOYOTA-90915-YZZN1': 'PH4967',
+            '90915-YZZN1': 'PH4967',
+            '90915YZZN1': 'PH4967'
+        },
+        applications: ['Toyota', 'Lexus', 'Light Duty']
+    },
+    // WIX compact Nissan/Honda size (includes XP variant)
+    'PH6607': {
+        family: 'OIL',
+        type: 'Extra Guard Oil Filter',
+        series: 'PH',
+        specifications: {
+            efficiency: '95% @ 20 micron',
+            capacity: '5,000-10,000 miles',
+            media_type: 'Cellulose/Synthetic blend'
+        },
+        cross_references: {
+            'WIX-51356': 'PH6607',
+            'WIX-57356': 'PH6607',
+            'WIX-57356XP': 'PH6607',
+            '51356': 'PH6607',
+            '57356': 'PH6607',
+            '57356XP': 'PH6607'
+        },
+        applications: ['Nissan', 'Honda/Acura', 'Light Duty']
+    },
+    'PH2951': {
+        family: 'OIL',
+        type: 'Extra Guard Oil Filter',
+        series: 'PH',
+        specifications: {
+            efficiency: '95% @ 20 micron',
+            capacity: '5,000-10,000 miles',
+            media_type: 'Cellulose/Synthetic blend'
+        },
+        cross_references: {
+            'BOSCH-3311': 'PH2951',
+            'BOSCH3311': 'PH2951'
+        },
+        applications: ['Toyota', 'Lexus', 'Light Duty']
+    },
     
     // ========== TG-SERIES (Tough Guard - Oil) ==========
     'TG7317': {
@@ -127,6 +182,36 @@ const FRAM_DATABASE = {
         },
         applications: ['Ford', 'GM', 'Extended service']
     },
+    // FCA/GM family – fits Alfa Romeo Giulia/Stelvio and many FCA/GM apps
+    'XG10060': {
+        family: 'OIL',
+        type: 'Ultra Synthetic Oil Filter',
+        series: 'XG',
+        specifications: {
+            efficiency: '99% @ 20 micron',
+            capacity: 'Up to 20,000 miles',
+            media_type: 'Full Synthetic dual layer',
+            style: 'Spin-On'
+        },
+        cross_references: {
+            // Removed PG-derived cross references per manufacturer verification request
+            // OE Mopar/Alfa Romeo/Chrysler
+            'CHRYSLER-68324623AA': 'XG10060',
+            'CHRYSLER-68335191AA': 'XG10060',
+            '68324623AA': 'XG10060',
+            '68335191AA': 'XG10060',
+            // ECOGARD / STP / Carquest / Cartek
+            'ECOGARD-X11578': 'XG10060',
+            'X11578': 'XG10060',
+            'STP-S45035XL': 'XG10060',
+            'CARQUEST-95470': 'XG10060',
+            'CARTEK-CTK99369XL': 'XG10060',
+            // WIX mapping observed in field usage
+            'WIX-57060': 'XG10060',
+            'WIX-57060XP': 'XG10060'
+        },
+        applications: ['Alfa Romeo Giulia', 'Alfa Romeo Stelvio', 'Chrysler/Dodge/Jeep', 'GM']
+    },
     
     // ========== HM-SERIES (High Mileage - Oil) ==========
     'HM7317': {
@@ -182,7 +267,10 @@ const FRAM_DATABASE = {
             media_type: 'Activated Carbon',
             filtration: 'Odor & particulate'
         },
-        cross_references: {},
+        cross_references: {
+            'XC25851': 'CF10285',
+            'ECOGARD-XC25851': 'CF10285'
+        },
         applications: ['Passenger vehicles']
     },
     

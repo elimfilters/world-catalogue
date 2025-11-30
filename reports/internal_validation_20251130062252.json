@@ -1,0 +1,152 @@
+{
+  "timestamp": "2025-11-30T06:22:52.157Z",
+  "batch": [
+    "23518480",
+    "R90T",
+    "BF7634",
+    "LF3620",
+    "PH3614",
+    "CA8612",
+    "WK 950/20",
+    "P552100",
+    "AF25740",
+    "LFP9000"
+  ],
+  "results": [
+    {
+      "input": "23518480",
+      "brand": "DETROIT DIESEL",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EL88480",
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "R90T",
+      "brand": "PARKER",
+      "family": "FUEL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": "collision_r_parker_priority"
+    },
+    {
+      "input": "BF7634",
+      "brand": "BALDWIN",
+      "family": "FUEL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "LF3620",
+      "brand": "FLEETGUARD",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EL83620",
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "PH3614",
+      "brand": "FRAM",
+      "family": "OIL",
+      "duty": "LD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "CA8612",
+      "brand": "FRAM",
+      "family": "AIRE",
+      "duty": "LD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "WK 950/20",
+      "brand": "MANN",
+      "family": "FUEL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "P552100",
+      "brand": "DONALDSON",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EL82100",
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "P552100",
+        "series": "P",
+        "applications": [
+          "Lube filter, spin-on, full flow"
+        ],
+        "cross": [
+          "DETROIT DIESEL 23518480",
+          "23518480"
+        ]
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "AF25740",
+      "brand": null,
+      "family": null,
+      "duty": null,
+      "status": "P4/NoClasificado",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "LFP9000",
+      "brand": "LUBERFINER",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "by_status": {
+      "FINAL/Homologada": 9,
+      "P4/NoClasificado": 1
+    },
+    "by_family": {
+      "OIL": 5,
+      "FUEL": 3,
+      "AIRE": 1,
+      "N/A": 1
+    },
+    "brands": {
+      "DETROIT DIESEL": 1,
+      "PARKER": 1,
+      "BALDWIN": 1,
+      "FLEETGUARD": 1,
+      "FRAM": 2,
+      "MANN": 1,
+      "DONALDSON": 1,
+      "N/A": 1,
+      "LUBERFINER": 1
+    }
+  }
+}

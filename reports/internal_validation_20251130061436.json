@@ -1,0 +1,165 @@
+{
+  "timestamp": "2025-11-30T06:14:36.718Z",
+  "batch": [
+    "P550008",
+    "P601506",
+    "DBL5605",
+    "DBA5107",
+    "ELF7417",
+    "X902345",
+    "16546-4EA0A",
+    "90915-YZZD2",
+    "26550-5M000",
+    "PH6607"
+  ],
+  "results": [
+    {
+      "input": "P550008",
+      "brand": "DONALDSON",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EL80008",
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "P550008",
+        "series": "P",
+        "applications": [],
+        "cross": []
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "P601506",
+      "brand": "DONALDSON",
+      "family": "COOLANT",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EW71506",
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "P601506",
+        "series": "P",
+        "applications": [],
+        "cross": []
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "DBL5605",
+      "brand": "DONALDSON",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EL85605",
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "DBL5605",
+        "series": "DBL",
+        "applications": [],
+        "cross": []
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "DBA5107",
+      "brand": "DONALDSON",
+      "family": "AIRE",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EA15107",
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "DBA5107",
+        "series": "DBA",
+        "applications": [],
+        "cross": []
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "ELF7417",
+      "brand": "DONALDSON",
+      "family": "OIL",
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": "EL87417",
+      "donaldson": {
+        "source": "DONALDSON",
+        "code": "ELF7417",
+        "series": "ELF",
+        "applications": [],
+        "cross": []
+      },
+      "prefix_collision": null
+    },
+    {
+      "input": "X902345",
+      "brand": "DONALDSON",
+      "family": null,
+      "duty": "HD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "16546-4EA0A",
+      "brand": null,
+      "family": null,
+      "duty": null,
+      "status": "P4/NoClasificado",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "90915-YZZD2",
+      "brand": null,
+      "family": null,
+      "duty": null,
+      "status": "P4/NoClasificado",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "26550-5M000",
+      "brand": null,
+      "family": null,
+      "duty": null,
+      "status": "P4/NoClasificado",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    },
+    {
+      "input": "PH6607",
+      "brand": "FRAM",
+      "family": "OIL",
+      "duty": "LD",
+      "status": "FINAL/Homologada",
+      "sku": null,
+      "donaldson": null,
+      "prefix_collision": null
+    }
+  ],
+  "summary": {
+    "total": 10,
+    "by_status": {
+      "FINAL/Homologada": 7,
+      "P4/NoClasificado": 3
+    },
+    "by_family": {
+      "OIL": 4,
+      "COOLANT": 1,
+      "AIRE": 1,
+      "N/A": 4
+    },
+    "brands": {
+      "DONALDSON": 6,
+      "N/A": 3,
+      "FRAM": 1
+    }
+  }
+}

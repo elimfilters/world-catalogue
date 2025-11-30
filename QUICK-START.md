@@ -48,6 +48,7 @@
    
    PORT=8080
    NODE_ENV=production
+   MARKET_REGION=EU  # Opcional: priorización regional (EU, LATAM, NA/US)
    
    Opcionales (si usas Google Sheets):
    GOOGLE_SHEETS_ID=tu_id
@@ -195,6 +196,14 @@ elimfilters-api/
    → Deployment en 5 minutos
 
 ═══════════════════════════════════════════════════════════════
+🛡️ GOBERNANZA DE DATOS (OBLIGATORIO)
+═══════════════════════════════════════════════════════════════
+
+- Antes de cualquier PR que modifique datos (p. ej., expansión de `oem_xref`), ejecutar:
+  - `npm run validate:oem:candidate` y asegurar cero errores.
+- Referencia: ver `MIGRATION.md` para pautas de formato, normalización y reglas de colisión.
+
+═══════════════════════════════════════════════════════════════
 🔐 VARIABLES DE ENTORNO
 ═══════════════════════════════════════════════════════════════
 
@@ -262,3 +271,4 @@ Estado: ✅ Production Ready
 
 Built with German Quality Standards 🇩🇪
 ELIMTEK™ Technology
+📍 CONSEJO: Para producción LATAM, usa `MARKET_REGION=LATAM`. Para QA europeo, usa `MARKET_REGION=EU`.

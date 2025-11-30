@@ -39,3 +39,6 @@ build/
 tmp/
 temp/
 *.tmp
+
+# Ignore large local backup files
+src/config/prefixMap.backup.*.js

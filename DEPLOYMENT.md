@@ -10,6 +10,7 @@
 [ ] Railway account created
 [ ] GitHub repository created
 [ ] Environment variables prepared
+[ ] Si el PR modifica datos (`src/data/oem_xref.json`), ejecutar `npm run validate:oem:candidate` y asegurar cero errores (OBLIGATORIO)
 [ ] Google Sheets credentials (optional)
 
 ═══════════════════════════════════════════════════════════════

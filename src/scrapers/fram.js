@@ -14,11 +14,54 @@ const BRAND_PRIORITY = ['TOYOTA','LEXUS','FORD','NISSAN','KIA','HYUNDAI','AUDI',
 
 // Aftermarket cross brands and priority (for cross_reference lists)
 const AFTERMARKET_BRANDS = [
-    'MOTORCRAFT','PUROLATOR','WIX','NAPA','ACDELCO','BOSCH','K&N','BALDWIN','HASTINGS','CARQUEST','MANN','STP','CHAMP','MICROGARD','MOPAR','DENSO'
+    'MOTORCRAFT','PUROLATOR','WIX','NAPA','ACDELCO','BOSCH','K&N','BALDWIN','HASTINGS','CARQUEST','MANN','STP','CHAMP','MICROGARD','MOPAR','DENSO',
+    // Latin America brands
+    'TECFIL','WEGA','VOX','GFC','VEGA','PARTMO','GOHNER','FILTROS WEB','PREMIUM FILTER','MILLAR FILTERS',
+    // Europe
+    'HIFI FILTER', 'PURFLUX', 'VALEO',
+    // Aliases for mejor detección por texto (más específicos primero)
+    'VIC FILTER', 'VIC', 'UFI FILTERS', 'UFI', 'ECOGARD', 'PREMIUM GUARD'
 ];
 const AFTERMARKET_PRIORITY = [
-    'MOTORCRAFT','PUROLATOR','WIX','NAPA','ACDELCO','BOSCH','K&N','BALDWIN','HASTINGS','CARQUEST','MANN','STP','CHAMP','MICROGARD','MOPAR','DENSO'
+    'MOTORCRAFT','PUROLATOR','WIX','NAPA','ACDELCO','BOSCH','K&N','BALDWIN','HASTINGS','CARQUEST','MANN','STP','CHAMP','MICROGARD','MOPAR','DENSO',
+    // Regionals at lower priority
+    'TECFIL','WEGA','VOX','GFC','VEGA','PARTMO','GOHNER','FILTROS WEB','PREMIUM FILTER','MILLAR FILTERS','HIFI FILTER','PURFLUX','VALEO','VIC','VIC FILTER','UFI','UFI FILTERS','ECOGARD','PREMIUM GUARD'
 ];
+
+// Dynamic priority: boost brands by region (e.g., HIFI FILTER in EU)
+function getAftermarketPriority() {
+  const base = [...AFTERMARKET_PRIORITY];
+  const region = String(process.env.MARKET_REGION || '').toUpperCase();
+  const boost = (brand, toIndex) => {
+    const i = base.indexOf(brand);
+    if (i > -1) {
+      base.splice(i, 1);
+      base.splice(Math.min(toIndex, base.length), 0, brand);
+    }
+  };
+  if (region.includes('EU')) {
+    // Europe: acercar MANN, HIFI FILTER, PURFLUX y VALEO
+    boost('MANN', 6);           // cerca de BOSCH/K&N
+    boost('HIFI FILTER', 8);    // tras K&N
+    boost('PURFLUX', 10);       // cerca de MANN
+    boost('VALEO', 12);
+  }
+  if (region.includes('LATAM')) {
+    // LatAm: subir marcas regionales más visibles
+    boost('TECFIL', 10);
+    boost('WEGA', 12);
+    boost('VOX', 14);
+    boost('GFC', 16);
+  }
+  if (region.includes('NA') || region.includes('US') || region.includes('USA')) {
+    // Norteamérica: asegurar visibilidad de NAPA, STP, CHAMP, MICROGARD
+    boost('NAPA', 3);       // ya está alto, refuerza posición
+    boost('STP', 9);
+    boost('CHAMP', 10);
+    boost('MICROGARD', 11);
+  }
+  return base;
+}
 
 function detectBrandFromText(lowerText) {
     for (const b of OEM_BRANDS) {
@@ -29,7 +72,7 @@ function detectBrandFromText(lowerText) {
 
 function tokenMatchesBrand(tokenRaw, brand) {
     const token = tokenRaw.replace(/\s+/g, '').toUpperCase();
-    switch (brand) {
+  switch (brand) {
         case 'TOYOTA':
         case 'LEXUS':
             return /^(90915|04152)-[A-Z0-9]{3,}$/.test(token);
@@ -111,21 +154,68 @@ function tokenMatchesAftermarket(tokenRaw, brand) {
             return /^MGL\d{3,6}$/.test(token);
         case 'MOPAR':
             return /^MO-\d{3,5}$/.test(token);
-        case 'DENSO':
-            return /^\d{5}-[A-Z0-9]{3,}$/.test(token);
-        default:
-            return false;
-    }
+    case 'DENSO':
+      return /^\d{5}-[A-Z0-9]{3,}$/.test(token);
+    case 'PURFLUX':
+      // Purflux common oil series: LS#### with optional trailing letter
+      return /^LS-?\d{2,5}[A-Z]?$/.test(token);
+    case 'VIC':
+    case 'VIC FILTER':
+      // Prefer brand text detection; formats vary (e.g., C-306)
+      return false;
+    case 'UFI':
+    case 'UFI FILTERS':
+      return false;
+    case 'VALEO':
+      return false;
+    case 'ECOGARD':
+      return false;
+    case 'PREMIUM GUARD':
+      return false;
+    // --- Latin America brands ---
+    case 'TECFIL':
+      // Common Tecfil prefixes: PSL, PEL, ARL, PTL, TXL, WP, WD (hyphen optional)
+      return /^(PSL|PEL|ARL|PTL|TXL|WP|WD)-?\d{2,5}[A-Z]?$/.test(token);
+    case 'WEGA':
+      // Wega series: WO-, WL-, WA-, WFC- (hyphen optional)
+      return /^(WO|WL|WA|WFC)-?\d{2,5}[A-Z]?$/.test(token);
+    case 'VOX':
+      // VOX uses VO-####
+      return /^VO-?\d{2,5}[A-Z]?$/.test(token);
+    case 'GFC':
+      // GFC-##### pattern
+      return /^GFC-?\d{3,6}[A-Z]?$/.test(token);
+    case 'VEGA':
+      // Filtros Vega: prefer brand-text detection; token forms vary → no strict token pattern
+      return false;
+    case 'PARTMO':
+      return false;
+    case 'GOHNER':
+      return false;
+    case 'FILTROS WEB':
+      // WEB-#### under brand mention
+      return /^WEB-?\d{2,5}[A-Z]?$/.test(token);
+    case 'HIFI FILTER':
+      // Common HIFI FILTER series: SO, SH, SA, SC, SF, SL, SN, SK, SP, TT, HF (hyphen optional)
+      return /^(SO|SH|SA|SC|SF|SL|SN|SK|SP|TT|HF)-?\d{2,6}[A-Z]?$/.test(token);
+    case 'PREMIUM FILTER':
+      return false;
+    case 'MILLAR FILTERS':
+      return false;
+    default:
+      return false;
+  }
 }
 
 function orderByCrossBrandPriority(tokens) {
     const score = (t) => {
         const lt = t.toLowerCase();
-        for (let i = 0; i < AFTERMARKET_PRIORITY.length; i++) {
-            const b = AFTERMARKET_PRIORITY[i];
+        const PR = getAftermarketPriority();
+        for (let i = 0; i < PR.length; i++) {
+            const b = PR[i];
             if (lt.includes(b.toLowerCase())) return i;
         }
-        return AFTERMARKET_PRIORITY.length + 1;
+        return PR.length + 1;
     };
     return tokens.sort((a, b) => score(a) - score(b));
 }
@@ -465,26 +555,61 @@ function orderByBrandPriority(tokens, BRAND_PRIORITY) {
     });
 }
 
-// Curated OEMs for highly requested FRAM codes (ensure brand patterns match)
-function getCuratedPopularOEM(normalizedCode, BRAND_PRIORITY) {
-    const POPULAR_OEM_BY_FRAM = {
-        'PH3614': [
-            // Ford
-            'FL-400S','AA5Z-6731-A','1S7Z-6731-DA',
-            // Toyota/Lexus (popular catalog references)
-            '90915-YZZD1','90915-YZZD3','90915-YZZD4','90915-03002','90915-20002',
-            // Audi/VW
-            '047115561B','047115561F','047115561G','030115561F',
-            // Nissan (service common)
-            '15208-65F0A','15208-9E000',
-            // Kia/Hyundai (common catalog entries)
-            '26300-35503','26300-35500',
-            // BMW (less common, include a typical oil filter code)
-            '11427512300'
-        ]
-    };
+// Curated OEMs map loader (external JSON with fallback)
+const fs = require('fs');
+const path = require('path');
+let POPULAR_OEM_BY_FRAM = null;
 
-    const list = POPULAR_OEM_BY_FRAM[normalizedCode] || [];
+function loadPopularOemByFram() {
+    if (POPULAR_OEM_BY_FRAM) return POPULAR_OEM_BY_FRAM;
+    try {
+        const jsonPath = path.resolve(__dirname, '../../data/fram_oem_map.json');
+        const raw = fs.readFileSync(jsonPath, 'utf8');
+        const parsed = JSON.parse(raw);
+        // Expect shape: { FRAM_CODE: [ 'OEM1', 'OEM2', ... ] }
+        POPULAR_OEM_BY_FRAM = parsed;
+        return POPULAR_OEM_BY_FRAM;
+    } catch (_) {
+        // Fallback to embedded curated lists
+        POPULAR_OEM_BY_FRAM = {
+            'PH3614': [
+                // Ford
+                'FL-400S','AA5Z-6731-A','1S7Z-6731-DA',
+                // Toyota/Lexus (popular catalog references)
+                '90915-YZZD1','90915-YZZD3','90915-YZZD4','90915-03002','90915-20002',
+                // Audi/VW
+                '047115561B','047115561F','047115561G','030115561F',
+                // Nissan (service common)
+                '15208-65F0A','15208-9E000',
+                // Kia/Hyundai (common catalog entries)
+                '26300-35503','26300-35500',
+                // BMW (less common, include a typical oil filter code)
+                '11427512300'
+            ],
+            'PH4967': [
+                // Toyota spin-on compact
+                '90915-YZZN1','9091510009','90915-10009',
+                // Suzuki common oil
+                '16510-83011','16510-82703','16510-81403'
+            ],
+            'PH7317': [
+                // Honda/Acura
+                '15400-PLM-A01','15400-PLM-A02','15400-PLM-A03','15400-PR3-004',
+                // Nissan/Infiniti interchange with Honda size (service variants)
+                '15208-65F0E','15208-65F0B'
+            ],
+            'PH6607': [
+                // Nissan
+                '15208-65F0A','15208-9E01A','15208-9E000'
+            ]
+        };
+        return POPULAR_OEM_BY_FRAM;
+    }
+}
+
+function getCuratedPopularOEM(normalizedCode, BRAND_PRIORITY) {
+    const map = loadPopularOemByFram();
+    const list = map[normalizedCode] || [];
     // Filter by brand patterns and reorder by priority
     const filtered = list.filter(tok => {
         for (const b of BRAND_PRIORITY) {
@@ -495,13 +620,35 @@ function getCuratedPopularOEM(normalizedCode, BRAND_PRIORITY) {
     return orderByBrandPriority(filtered, BRAND_PRIORITY);
 }
 
+// Global OEM→FRAM resolution using curated lists
+function resolveFramByCuratedOEM(oemCode) {
+    const canon = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const q = canon(oemCode);
+    if (!q) return null;
+    const map = loadPopularOemByFram();
+    for (const [framCode, oemList] of Object.entries(map)) {
+        for (const tok of oemList) {
+            if (canon(tok) === q) return framCode;
+        }
+    }
+    return null;
+}
+
 /**
  * Validate and scrape FRAM filter codes
  */
 async function validateFramCode(code) {
     try {
-        const normalizedCode = code.toUpperCase().trim();
+        const normalizedCodeRaw = code.toUpperCase().trim();
+        const normalizedCode = normalizedCodeRaw.replace(/[^A-Z0-9]/g, '');
         console.log(`📡 FRAM scraper: ${normalizedCode}`);
+
+        // Helper: always extract exactly 4 numeric digits from the code
+        const getLast4 = (s) => {
+            const digits = String(s || '').replace(/\D/g, '');
+            if (!digits) return null;
+            return digits.length >= 4 ? digits.slice(-4) : digits.padStart(4, '0');
+        };
 
         // =====================================================================
         // EARLY PATTERN DETECTION - All FRAM Series
@@ -517,7 +664,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'OIL',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty'],
                 attributes: {
@@ -539,7 +686,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'OIL',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty'],
                 attributes: {
@@ -561,7 +708,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'OIL',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty'],
                 attributes: {
@@ -584,7 +731,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'OIL',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty', 'High Mileage'],
                 attributes: {
@@ -606,7 +753,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'AIRE',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty', 'Passenger Vehicles'],
                 attributes: {
@@ -628,7 +775,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'CABIN',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty', 'Passenger Vehicles'],
                 attributes: {
@@ -650,7 +797,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'CABIN',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty', 'Passenger Vehicles'],
                 attributes: {
@@ -672,7 +819,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'FUEL',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty', 'Gasoline Engines'],
                 attributes: {
@@ -694,7 +841,7 @@ async function validateFramCode(code) {
                 source: 'FRAM',
                 family: 'FUEL',
                 duty: 'LD',
-                last4: normalizedCode.slice(-4),
+                last4: getLast4(normalizedCode),
                 cross: crossRefs,
                 applications: ['Light Duty', 'Diesel Engines'],
                 attributes: {
@@ -771,5 +918,10 @@ async function scrapeFram(inputCode) {
 module.exports = {
     validateFramCode,
     scrapeFram,
-    scrapeFramFilter: validateFramCode // Alias for compatibility
+    scrapeFramFilter: validateFramCode, // Alias for compatibility
+    resolveFramByCuratedOEM,
+    // Export helpers for testing regional aftermarket brand patterns
+    detectAftermarketBrandFromText,
+    tokenMatchesAftermarket,
+    orderByCrossBrandPriority
 };

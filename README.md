@@ -123,7 +123,18 @@ NODE_ENV=production           # Environment
 GOOGLE_SHEETS_ID=...          # Google Sheets integration (optional)
 SCRAPER_TIMEOUT=10000         # Scraper timeout in ms
 CACHE_TTL=3600                # Cache time-to-live in seconds
+MARKET_REGION=EU              # Optional regional priority (EU, LATAM, NA/US)
 ```
+
+#### Regional Ordering Details
+
+- FRAM (LD): orders aftermarket crosses and text detection.
+  - EU: prioritizes `MANN`, `HIFI FILTER`, `PURFLUX`, `VALEO`.
+  - LATAM: prioritizes `TECFIL`, `WEGA`, `VOX`, `GFC`.
+  - NA/US: raises visibility for `NAPA`, `STP`, `CHAMP`, `MICROGARD`.
+- Donaldson (HD): orders cross-reference brands by region.
+  - NA/US and LATAM: `DONALDSON`, `FLEETGUARD`, `BALDWIN`, `WIX`, `MANN`, `TECFIL`.
+  - EU: `DONALDSON`, `FLEETGUARD`, `MANN`, `MAHLE`, `HENGST`.
 
 ### SKU Rules
 
@@ -185,6 +196,8 @@ curl https://your-api.railway.app/health
 2. Set environment variables in Railway dashboard
 3. Railway auto-deploys on git push
 
+Tip: add `MARKET_REGION` per environment (e.g., `EU` for QA, `LATAM` for production) to control aftermarket brand ordering.
+
 ### Docker
 
 ```bash
@@ -227,3 +240,10 @@ For issues or questions, contact ELIMFILTERS technical support.
 ---
 
 **Built with German quality standards 🇩🇪 | ELIMTEK™ Technology**
+
+## 🛠️ Desarrollo
+
+- Paso previo obligatorio para PRs de expansión de `oem_xref`:
+  - Ejecutar `npm run validate:oem:candidate` y asegurar cero errores.
+- Referencia:
+  - Consultar `MIGRATION.md` para pautas de formato, normalización y reglas de colisión.

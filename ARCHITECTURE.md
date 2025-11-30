@@ -218,6 +218,46 @@ DEPLOYMENT TARGETS:
 
 ✅ Railway (Recommended)
    • Auto-deploy on git push
+
+
+CHANGELOG (v5.2.x) — Estrategia de Confianza Descendente
+═══════════════════════════════════════════════════════════════
+
+Resumen
+- Se incorpora una arquitectura de homologación basada en “Confianza Descendente”, que prioriza fuentes deterministas antes de heurísticas o scraping.
+- Dos pilares nuevos y permanentes definen la calidad de datos: `prefixMap` (lógica determinista por prefijos y colisiones) y `oem_xref.json` (diccionario OEM consolidado).
+
+Pilares Arquitectónicos
+- `src/config/prefixMap.js` (Determinista):
+  - Mapeo por prefijo de marca y familia (ej.: `BF → BALDWIN/FUEL`, `LFP → LUBERFINER/OIL`, `AF → FLEETGUARD/AIRE`).
+  - Reglas de colisión estrictas para casos ambiguos (ej.: Parker/Racor `R90T` y patrones `R(12|15|20|25|45|60|120)(T|S)` → `PARKER/FUEL`).
+  - Duty por marca donde aplique (ej.: `PARKER → HD`).
+- `src/data/oem_xref.json` (Determinista OEM):
+  - Diccionario JSON válido (50+ entradas) con resolución directa de OEM/competidor a marca/familia (ej.: `23518480 → DETROIT DIESEL/OIL`).
+  - Enfoque incremental: añadir 50–100 entradas por lote, priorizando familias con mayor incertidumbre.
+
+Flujo de Confianza Descendente
+1) OEM determinista: Si el código normalizado existe en `oem_xref.json`, se usa esa marca/familia y se genera SKU.
+2) Prefijos deterministas: Si no hay OEM directo, se usa `prefixMap` (marca/familia/duty y colisiones).
+3) Scraper/Heurística: Para casos residuales o de validación cruzada (ej.: Donaldson P-series), se usa scraping y señales heurísticas.
+4) Generación de SKU: Con familia y duty determinados, se calcula `last4` y se arma la SKU según `skuRules.json`.
+
+Componentes actualizados
+- `src/services/internalValidationService.js`: Carga `oem_xref.json`, aplica normalización, prioriza resolución determinista y genera SKU.
+- `src/config/prefixMap.js`: Amplía prefijos y agrega colisiones Parker/Racor para R-series; incluye `AF → FLEETGUARD/AIRE`.
+- `src/data/oem_xref.json`: Nuevo diccionario consolidado (sin comentarios), listo para expansión.
+- `scripts/test_internal_validation.js`: Suite mínima de prueba para evitar regresiones en homologación.
+
+Pruebas y No-Regresión
+- Suite mínima ejecutable con `npm run test:internal`:
+  - Verifica 10 códigos del último lote como `FINAL/Homologada`.
+  - Confirma colisión corregida: `R90T → PARKER/FUEL`.
+  - Confirma OEM puro: `23518480 → DETROIT DIESEL/OIL`.
+
+Estrategia Post-PR (Expansión)
+- Priorizar familias con incertidumbre (ej.: `HYDRAULIC` si presenta P3 alto).
+- Usar reportes de producción para afinar prefijos y colisiones de Luberfiner/Baldwin.
+- Añadir 50–100 entradas más en `oem_xref.json` por lote, iniciando con Toyota/Lexus, Cummins, Caterpillar, Detroit Diesel, Parker/Racor, Baldwin, Luberfiner, MANN.
    • Built-in health checks
    • Environment management
    • Logs & metrics
@@ -251,3 +291,9 @@ Future Improvements:
 5. CDN for static content
 6. Rate limiting per client
 ```
+### Regla de SKU (HD)
+
+- Familia: `FUEL SEPARATOR` (Heavy Duty)
+- Prefijo de SKU: `ES9`
+- Sufijo: últimos 4 dígitos del código Donaldson homologado.
+- Condición: solo se genera SKU si existe homologación válida hacia Donaldson; de lo contrario el resultado es `NOT_FOUND`.

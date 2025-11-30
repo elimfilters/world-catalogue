@@ -76,6 +76,8 @@ async function extractDonaldsonSpecs(code) {
             certifications: [],
             engine_applications: [],
             equipment_applications: [],
+            oem_codes: [],
+            cross_reference: [],
             technical_details: {}
         };
 
@@ -181,6 +183,92 @@ async function extractDonaldsonSpecs(code) {
             const value = $(el).next('td').text().trim();
             specs.technical_details.media_type_detail = value;
         });
+
+        // ===== OEM y Referencias Cruzadas =====
+        // Estrategia:
+        // 1) Buscar tablas con encabezados que incluyan "OEM", "Referencia cruzada", "Cross Reference", "Fabricante" y "Número".
+        // 2) Extraer pares Marca + Código de dichas tablas.
+        // 3) Fallback: analizar bloques de texto para detectar patrones de códigos junto a marcas comunes.
+        const crossSet = new Set();
+        const oemSet = new Set();
+
+        function isLikelyCode(text) {
+            const t = String(text || '').trim();
+            // códigos alfanuméricos con posibles guiones o puntos, mínimo 3 caracteres
+            return /[A-Za-z0-9][A-Za-z0-9\-\/.]{2,}/.test(t);
+        }
+
+        function addCross(brand, code) {
+            const b = String(brand || '').trim();
+            const c = String(code || '').trim();
+            if (!c) return;
+            const entry = b ? `${b.toUpperCase()} ${c}`.trim() : c;
+            crossSet.add(entry);
+        }
+
+        function addOEM(code) {
+            const c = String(code || '').trim();
+            if (!c) return;
+            oemSet.add(c);
+        }
+
+        // 1) Parsear tablas de referencias
+        $('table').each((ti, tbl) => {
+            const headers = [];
+            $(tbl).find('thead th, tr:first-child th, tr:first-child td').each((hi, h) => {
+                headers.push($(h).text().trim().toLowerCase());
+            });
+            const hasOEM = headers.some(h => /oem|original/i.test(h));
+            const hasCross = headers.some(h => /referencia|cross/i.test(h));
+            const hasBrand = headers.some(h => /fabricante|marca|manufacturer/i.test(h));
+            const hasPart = headers.some(h => /número|numero|part|pieza|code|código/i.test(h));
+            if (!(hasOEM || hasCross || (hasBrand && hasPart))) return;
+
+            $(tbl).find('tbody tr, tr').slice(headers.length ? 1 : 0).each((ri, row) => {
+                const cells = $(row).find('td');
+                if (!cells || cells.length === 0) return;
+                const brand = cells.length > 1 ? $(cells.get(0)).text().trim() : '';
+                let code = '';
+                for (let c = 1; c < cells.length; c++) {
+                    const val = $(cells.get(c)).text().trim();
+                    if (isLikelyCode(val)) { code = val; break; }
+                }
+                if (code) {
+                    addCross(brand, code);
+                    if (hasOEM) addOEM(code);
+                }
+            });
+        });
+
+        // 2) Fallback: bloques de texto con marcas comunes y códigos
+        if (crossSet.size === 0 || oemSet.size === 0) {
+            const bodyText = $('body').text();
+            const lines = String(bodyText || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+            const BRANDS = [
+                'FRAM','BALDWIN','WIX','NAPA','ACDELCO','BOSCH','K&N','STP','PUROLATOR','MANN-FILTER','MAHLE','HENGST',
+                'FLEETGUARD','DONALDSON','CAT','CATERPILLAR','VOLVO','SCANIA','IVECO','MERCEDES','MERCEDES-BENZ','FORD',
+                'GM','CHEVROLET','CUMMINS','JOHN DEERE','KOMATSU','DEUTZ','PERKINS','CASE'
+            ];
+            for (const ln of lines) {
+                const up = ln.toUpperCase();
+                const brand = BRANDS.find(b => up.includes(b));
+                if (!brand) continue;
+                const match = ln.match(/\b([A-Za-z0-9][A-Za-z0-9\-\/.]{2,})\b/g);
+                if (match && match.length) {
+                    for (const m of match.slice(0, 3)) { // limitar por línea
+                        addCross(brand, m);
+                        // Si la línea menciona OEM, considerar como OEM
+                        if (/OEM|original/i.test(ln)) addOEM(m);
+                    }
+                }
+            }
+        }
+
+        // Consolidar y limitar
+        specs.oem_codes = Array.from(oemSet).slice(0, 20);
+        specs.cross_reference = Array.from(crossSet).slice(0, 30);
+        specs.technical_details.oem_codes = specs.oem_codes;
+        specs.technical_details.cross_reference = specs.cross_reference;
 
         // ===== EXTRACT FROM "PRODUCTOS DEL EQUIPO" TAB =====
         // Equipment Applications with years
@@ -302,6 +390,264 @@ async function extractDonaldsonSpecs(code) {
 
     } catch (error) {
         console.error(`❌ Donaldson specs extraction failed: ${error.message}`);
+        // Fallback: intentar proxy estático para extraer texto
+        try {
+            const tryUrls = [
+                `https://r.jina.ai/http://shop.donaldson.com/store/es-us/product/${code}`,
+                `https://r.jina.ai/https://shop.donaldson.com/store/es-us/product/${code}`,
+                `https://r.jina.ai/http://shop.donaldson.com/store/es-us/product/${code}/11735`,
+                `https://r.jina.ai/https://shop.donaldson.com/store/es-us/product/${code}/11735`
+            ];
+            let body = '';
+            for (const u of tryUrls) {
+                try {
+                    const prox = await axios.get(u, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                    body = String(prox.data || '');
+                    if (body && body.length > 200) break;
+                } catch (_) {}
+            }
+            // Último intento: Puppeteer para contenido dinámico
+            if (!body) {
+                try {
+                    if (!puppeteer) puppeteer = require('puppeteer');
+                    const browser = await puppeteer.launch({ headless: 'new' });
+                    const page = await browser.newPage();
+                    await page.goto(`https://shop.donaldson.com/store/es-us/product/${code}/11735`, { waitUntil: 'networkidle2', timeout: 25000 });
+                    // Extraer filas potenciales de tablas de referencias
+                    const rows = await page.$$eval('table', (tables) => {
+                        function text(el) { return (el?.textContent || '').trim(); }
+                        const out = [];
+                        for (const tbl of tables) {
+                            const headerCells = tbl.querySelectorAll('thead th, tr:first-child th, tr:first-child td');
+                            const headers = Array.from(headerCells).map(text).map(t => t.toLowerCase());
+                            const hasOEM = headers.some(h => /oem|original/.test(h));
+                            const hasCross = headers.some(h => /referencia|cross/.test(h));
+                            const hasBrand = headers.some(h => /fabricante|marca|manufacturer/.test(h));
+                            const hasPart = headers.some(h => /número|numero|part|pieza|code|código/.test(h));
+                            if (!(hasOEM || hasCross || (hasBrand && hasPart))) continue;
+                            const trs = tbl.querySelectorAll('tbody tr, tr');
+                            for (let i = headers.length ? 1 : 0; i < trs.length; i++) {
+                                const tds = trs[i].querySelectorAll('td');
+                                if (tds.length < 1) continue;
+                                const brand = tds.length > 1 ? text(tds[0]) : '';
+                                let code = '';
+                                for (let c = 1; c < tds.length; c++) {
+                                    const val = text(tds[c]);
+                                    if (/[A-Za-z0-9][A-Za-z0-9\-\/.]{2,}/.test(val)) { code = val; break; }
+                                }
+                                if (code) out.push({ brand, code });
+                            }
+                        }
+                        return out;
+                    });
+                    await browser.close();
+                    if (rows && rows.length) {
+                        const oemSet = new Set();
+                        const crossSet = new Set();
+                        for (const r of rows) {
+                            const brand = String(r.brand || '').trim();
+                            const codeVal = String(r.code || '').trim();
+                            if (!codeVal) continue;
+                            if (brand) crossSet.add(`${brand.toUpperCase()} ${codeVal}`);
+                            if (/OEM|original/i.test(brand)) oemSet.add(codeVal);
+                        }
+                        const fallbackSpecs = getDefaultSpecs(code, 'DONALDSON');
+                        fallbackSpecs.oem_codes = Array.from(oemSet).slice(0, 20);
+                        fallbackSpecs.cross_reference = Array.from(crossSet).slice(0, 30);
+                        fallbackSpecs.technical_details = {
+                            ...fallbackSpecs.technical_details,
+                            oem_codes: fallbackSpecs.oem_codes,
+                            cross_reference: fallbackSpecs.cross_reference
+                        };
+                        fallbackSpecs.found = true;
+                        return fallbackSpecs;
+                    }
+                } catch (_) {}
+            }
+            if (body) {
+                const lines = body.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                const oemSet = new Set();
+                const crossSet = new Set();
+                const BRANDS = [
+                    'FRAM','BALDWIN','WIX','NAPA','ACDELCO','BOSCH','K&N','STP','PUROLATOR','MANN-FILTER','MAHLE','HENGST',
+                    'FLEETGUARD','CATERPILLAR','VOLVO','SCANIA','IVECO','MERCEDES','MERCEDES-BENZ','FORD',
+                    'GM','CHEVROLET','CUMMINS','JOHN DEERE','KOMATSU','DEUTZ','PERKINS','CASE'
+                ];
+                for (const ln of lines) {
+                    const up = ln.toUpperCase();
+                    const brand = BRANDS.find(b => up.includes(b));
+                    // Capturar tokens que contengan al menos un dígito y tengan longitud >=3
+                    const match = ln.match(/\b(?=[A-Za-z0-9\-\/.]*\d)[A-Za-z0-9\-\/.]{3,}\b/g);
+                    if (match && match.length) {
+                        for (const m of match.slice(0, 3)) {
+                            const token = String(m).trim();
+                            if (!token || /^https?:/i.test(token)) continue;
+                            if (/\.(png|jpg|jpeg|gif|svg)$/i.test(token)) continue;
+                            if (/^cat\d{3,}$/i.test(token)) continue; // evitar códigos de categorías del sitio
+                            if (brand) crossSet.add(`${brand} ${token}`.trim());
+                            if (/OEM|original/i.test(ln)) oemSet.add(token);
+                        }
+                    }
+                }
+                const fallbackSpecs = getDefaultSpecs(code, 'DONALDSON');
+                fallbackSpecs.oem_codes = Array.from(oemSet).slice(0, 20);
+                fallbackSpecs.cross_reference = Array.from(crossSet).slice(0, 30);
+                fallbackSpecs.technical_details = {
+                    ...fallbackSpecs.technical_details,
+                    oem_codes: fallbackSpecs.oem_codes,
+                    cross_reference: fallbackSpecs.cross_reference
+                };
+                fallbackSpecs.found = true;
+                // Si los resultados son pobres, intentar Puppeteer como refuerzo
+                const poor = fallbackSpecs.oem_codes.length < 1 && fallbackSpecs.cross_reference.length < 5;
+                if (poor) {
+                    try {
+                        if (!puppeteer) puppeteer = require('puppeteer');
+                        const browser = await puppeteer.launch({ headless: 'new' });
+                        const page = await browser.newPage();
+                        await page.goto(`https://shop.donaldson.com/store/es-us/product/${code}/11735`, { waitUntil: 'networkidle2', timeout: 25000 });
+                        const rows = await page.$$eval('table', (tables) => {
+                            function text(el) { return (el?.textContent || '').trim(); }
+                            const out = [];
+                            for (const tbl of tables) {
+                                const headerCells = tbl.querySelectorAll('thead th, tr:first-child th, tr:first-child td');
+                                const headers = Array.from(headerCells).map(text).map(t => t.toLowerCase());
+                                const hasOEM = headers.some(h => /oem|original/.test(h));
+                                const hasCross = headers.some(h => /referencia|cross/.test(h));
+                                const hasBrand = headers.some(h => /fabricante|marca|manufacturer/.test(h));
+                                const hasPart = headers.some(h => /número|numero|part|pieza|code|código/.test(h));
+                                if (!(hasOEM || hasCross || (hasBrand && hasPart))) continue;
+                                const trs = tbl.querySelectorAll('tbody tr, tr');
+                                for (let i = headers.length ? 1 : 0; i < trs.length; i++) {
+                                    const tds = trs[i].querySelectorAll('td');
+                                    if (tds.length < 1) continue;
+                                    const brand = tds.length > 1 ? text(tds[0]) : '';
+                                    let code = '';
+                                    for (let c = 1; c < tds.length; c++) {
+                                        const val = text(tds[c]);
+                                        if (/[A-Za-z0-9][A-Za-z0-9\-\/.]{2,}/.test(val)) { code = val; break; }
+                                    }
+                                    if (code) out.push({ brand, code });
+                                }
+                            }
+                            return out;
+                        });
+                        await browser.close();
+                        if (rows && rows.length) {
+                            const oemSet2 = new Set(fallbackSpecs.oem_codes);
+                            const crossSet2 = new Set(fallbackSpecs.cross_reference);
+                            for (const r of rows) {
+                                const brand = String(r.brand || '').trim();
+                                const codeVal = String(r.code || '').trim();
+                                if (!codeVal) continue;
+                                if (brand) crossSet2.add(`${brand.toUpperCase()} ${codeVal}`);
+                                if (/OEM|original/i.test(brand)) oemSet2.add(codeVal);
+                            }
+                            fallbackSpecs.oem_codes = Array.from(oemSet2).slice(0, 20);
+                            fallbackSpecs.cross_reference = Array.from(crossSet2).slice(0, 30);
+                            fallbackSpecs.technical_details = {
+                                ...fallbackSpecs.technical_details,
+                                oem_codes: fallbackSpecs.oem_codes,
+                                cross_reference: fallbackSpecs.cross_reference
+                            };
+                        }
+                    } catch (_) {}
+                    // Si aún sigue pobre, probar fuentes alternativas públicas que listan referencias de C105004
+                    try {
+                        // Kartek
+                        const kartekUrl = `https://www.kartek.com/parts/donaldson-${code.toLowerCase()}-duralite-air-filter-10-12-diameter-10-12-long-4-opening-wix-cross-ref-46423.html`;
+                        const kRes = await axios.get(kartekUrl, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                        const $k = cheerio.load(String(kRes.data || ''));
+                        const kText = $k('body').text();
+                        const oemSet3 = new Set(fallbackSpecs.oem_codes);
+                        const crossSet3 = new Set(fallbackSpecs.cross_reference);
+                        // Buscar sección específica de OEM en Kartek
+                        const oemIdx = kText.toLowerCase().indexOf('oem cross reference numbers');
+                        if (oemIdx !== -1) {
+                            const slice = kText.slice(oemIdx, oemIdx + 4000);
+                            const pairsOEM = (slice.match(/[A-Z][A-Z0-9 &()/-]{2,}:\s*[A-Z0-9][A-Z0-9\-/, ]{2,}/g) || []);
+                            for (const p of pairsOEM) {
+                                const m = p.split(':');
+                                if (m.length >= 2) {
+                                    const brand = m[0].trim();
+                                    const codes = m.slice(1).join(':').split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+                                    for (const c of codes) {
+                                        if (!/[0-9]/.test(c)) continue;
+                                        oemSet3.add(c);
+                                        crossSet3.add(`${brand.toUpperCase()} ${c}`);
+                                    }
+                                }
+                            }
+                        }
+                        // Pares generales marca:código para referencias cruzadas
+                        const pairsAll = (kText.match(/[A-Z][A-Z0-9 &()/-]{2,}:\s*[A-Z0-9][A-Z0-9\-/, ]{2,}/g) || []);
+                        for (const p of pairsAll) {
+                            const m = p.split(':');
+                            if (m.length >= 2) {
+                                const brand = m[0].trim();
+                                const codes = m.slice(1).join(':').split(/[,;]+/).map(s => s.trim()).filter(Boolean);
+                                for (const c of codes) {
+                                    if (!/[0-9]/.test(c)) continue;
+                                    crossSet3.add(`${brand.toUpperCase()} ${c}`);
+                                }
+                            }
+                        }
+                        fallbackSpecs.oem_codes = Array.from(oemSet3).slice(0, 20);
+                        fallbackSpecs.cross_reference = Array.from(crossSet3)
+                            .filter(v => v.includes(' ') && !/goo\.gl|maps/i.test(v))
+                            .slice(0, 30);
+                        fallbackSpecs.technical_details = {
+                            ...fallbackSpecs.technical_details,
+                            oem_codes: fallbackSpecs.oem_codes,
+                            cross_reference: fallbackSpecs.cross_reference
+                        };
+                    } catch (_) {}
+                    try {
+                        // Diesel Equipment Inc
+                        const deUrl = `https://www.dieselequipmentinc.com/products/${code.toLowerCase()}`;
+                        const dRes = await axios.get(deUrl, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                        const $d = cheerio.load(String(dRes.data || ''));
+                        const dText = $d('body').text();
+                        // Buscar sección "Filter Cross Reference:" y parsear pares BRAND-CODE separados por ; y ,
+                        const sectIdx = dText.indexOf('Filter Cross Reference');
+                        if (sectIdx !== -1) {
+                            const slice = dText.slice(sectIdx, sectIdx + 5000);
+                            const entries = slice.split(/;|\n/).map(s => s.trim()).filter(Boolean);
+                            const oemSet4 = new Set(fallbackSpecs.oem_codes);
+                            const crossSet4 = new Set(fallbackSpecs.cross_reference);
+                            const OEM_BRANDS = new Set([
+                                'CATERPILLAR','CAT','JOHN DEERE','DEERE','CASE','CASE IH','CUMMINS','DETROIT DIESEL','IVECO','FIAT',
+                                'MERCEDES','MERCEDES-BENZ','VOLVO','SCANIA','PERKINS','DEUTZ','TEREX','SANDVIK','SDMO','TAMROCK','JENBACHER'
+                            ]);
+                            for (const e of entries) {
+                                const mm = e.match(/^([A-Z][A-Z0-9 &()\-]+)[\s:-]+([A-Z0-9][A-Z0-9\-]+)$/i);
+                                if (mm) {
+                                    const brand = mm[1].trim();
+                                    const codeVal = mm[2].trim();
+                                    if (!/[0-9]/.test(codeVal)) continue;
+                                    crossSet4.add(`${brand.toUpperCase()} ${codeVal}`);
+                                    if (OEM_BRANDS.has(brand.toUpperCase())) {
+                                        oemSet4.add(codeVal);
+                                    }
+                                }
+                            }
+                            fallbackSpecs.oem_codes = Array.from(oemSet4).slice(0, 20);
+                            fallbackSpecs.cross_reference = Array.from(crossSet4)
+                                .filter(v => v.includes(' ') && !/goo\.gl|maps/i.test(v))
+                                .slice(0, 30);
+                            fallbackSpecs.technical_details = {
+                                ...fallbackSpecs.technical_details,
+                                oem_codes: fallbackSpecs.oem_codes,
+                                cross_reference: fallbackSpecs.cross_reference
+                            };
+                        }
+                    } catch (_) {}
+                }
+                return fallbackSpecs;
+            }
+        } catch (proxyErr) {
+            console.warn(`⚠️ Proxy fallbacks failed: ${proxyErr.message}`);
+        }
         return getDefaultSpecs(code, 'DONALDSON');
     }
 }

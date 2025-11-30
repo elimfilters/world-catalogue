@@ -5,6 +5,7 @@
 
 const normalize = require('../utils/normalize');
 const { scraperBridge } = require('../scrapers/scraperBridge');
+const prefixMap = require('../config/prefixMap');
 const { detectDuty } = require('../utils/dutyDetector');
 const { detectFamilyHD, detectFamilyLD } = require('../utils/familyDetector');
 const { generateSKU } = require('../sku/generator');
@@ -13,6 +14,71 @@ const { getMedia } = require('../utils/mediaMapper');
 const { noEquivalentFound } = require('../utils/messages');
 const { searchInSheet, upsertBySku } = require('./syncSheetsService');
 const { extractFramSpecs, extractDonaldsonSpecs, getDefaultSpecs } = require('../services/technicalSpecsScraper');
+// OEM dataset para fallback SOLO cuando el código no es ni Donaldson ni FRAM (Regla 3)
+let OEM_XREF = {};
+try { OEM_XREF = require('../data/oem_xref.json'); } catch (_) { OEM_XREF = {}; }
+
+function canonKey(s) {
+  return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function classifyInputCode(code) {
+  const up = prefixMap.normalize(code);
+  const isDonaldson = prefixMap.DONALDSON_STRICT_REGEX?.test?.(up);
+  const isFram = /^(CA|CF|CH|PH|TG|XG|HM|G|PS)\d/i.test(up);
+  if (isDonaldson) return 'MANUFACTURER_DONALDSON';
+  if (isFram) return 'MANUFACTURER_FRAM';
+  const meta = OEM_XREF[canonKey(code)];
+  if (meta && meta.brand) return 'OEM';
+  return /^[A-Z]{1,4}\d{3,}/.test(up) ? 'CROSS_REF' : 'UNKNOWN';
+}
+
+async function tryOemFallback(oemCode, duty, familyHint) {
+  const key = canonKey(oemCode);
+  const meta = OEM_XREF[key] || null;
+  // Requisito estricto: solo proceder si el OEM está homologado en OEM_XREF
+  if (!meta) {
+    return null;
+  }
+
+  const family = meta.family || familyHint || null;
+  if (!family) return null;
+
+  const last4 = extract4Digits(oemCode);
+  const sku = generateSKU(family, duty, last4);
+  if (!sku || sku.error) return null;
+
+  // Lógica pura: sin persistencia ni datos por defecto
+  const oemClean = [oemCode];
+  const crossClean = [];
+  const equipFinal = [];
+  const engineFinal = [];
+
+  const familyUpper = String(family).toUpperCase();
+  const attributes = {
+    manufactured_by: 'ELIMFILTERS',
+    oem_brand: meta?.brand || undefined
+  };
+
+  return {
+    status: 'OK',
+    found_in_master: false,
+    query_normalized: normalize.code(oemCode),
+    code_input: normalize.code(oemCode),
+    code_oem: normalize.code(oemCode),
+    oem_codes: oemClean,
+    duty,
+    family: familyUpper,
+    sku,
+    media: getMedia(familyUpper, duty),
+    source: 'OEM',
+    cross_reference: crossClean,
+    applications: engineFinal,
+    equipment_applications: equipFinal,
+    attributes,
+    message: 'Fallback OEM homologado: prefijo activo + últimos 4 del OEM'
+  };
+}
 
 // Helper local: extraer años de un texto
 function extractYears(text = '') {
@@ -37,7 +103,11 @@ const AFTERMARKET_PRIORITY = [
     'PREMIUM', 'PREMIUM GUARD', 'HASTINGS', 'BALDWIN',
     // Global brands (EU/ASIA) to consider when presentes
     'MANN-FILTER', 'MAHLE', 'HENGST', 'RYCO', 'CHAMPION', 'UFI', 'SCT', 'FILTRON',
-    'VIC', 'TOKYO ROKI'
+    'VIC', 'TOKYO ROKI',
+    // Latin America regionals (lower priority)
+    'TECFIL','WEGA','VOX','GFC','VEGA','PARTMO','GOHNER','FILTROS WEB','PREMIUM FILTER','MILLAR FILTERS',
+    // Europe regional
+    'HIFI FILTER'
 ];
 
 function cleanOEMList(list, duty) {
@@ -86,7 +156,7 @@ function cleanCrossList(list, duty, inputCode, source) {
 
     // Map to code-only y deduplicar por código
     const codeSeen = new Set();
-    const codeOnlyList = [];
+    let codeOnlyList = [];
     for (const s of filtered) {
         const c = codeOnly(s);
         if (!c) continue;
@@ -95,6 +165,27 @@ function cleanCrossList(list, duty, inputCode, source) {
             codeSeen.add(k);
             codeOnlyList.push(c);
         }
+    }
+
+    // Filtro adicional para HD Donaldson: eliminar tokens no parecidos a part numbers
+    if (String(duty).toUpperCase() === 'HD' && String(source).toUpperCase() === 'DONALDSON') {
+        const partNumberLike = (c) => {
+            const s = String(c || '').toUpperCase();
+            if (!s) return false;
+            // Aceptar patrones comunes: "BRANDCODE" o "BRAND-CODE" con dígitos
+            if (/^[A-Z]{1,4}[A-Z0-9\-]*\d[A-Z0-9\-]*$/.test(s)) return true;
+            // Aceptar códigos numéricos con separadores típicos
+            if (/^\d{3,}(?:[A-Z\-\.]+\d+)?$/.test(s)) return true;
+            return false;
+        };
+        codeOnlyList = codeOnlyList.filter(c => {
+            const s = String(c || '');
+            if (!partNumberLike(s)) return false;
+            if (/^(?:MAPS|GOOGL|GOOGLE|HTTP|HTTPS)$/i.test(s)) return false;
+            // Eliminar números puros cortos (<5 dígitos) que suelen ser ruido
+            if (/^\d{1,4}$/.test(s)) return false;
+            return true;
+        });
     }
 
     // Orden alfanumérico por código
@@ -387,25 +478,349 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         // ---------------------------------------------------------------------
         console.log(`🔍 Step 1: Validating code via scrapers...`);
         
-        const codeUpper = query.toUpperCase();
+        const codeUpper = prefixMap.normalize(query);
 
-        // Initial duty detection by code pattern: FRAM series → LD, else HD
-        let duty = /^(CA|CF|CH|PH|TG|XG|HM|G|PS)\d/i.test(codeUpper) ? 'LD' : 'HD';
-        console.log(`✅ Duty detected: ${duty} (initial via code pattern)`);
+        // Initial duty via prefix map hint; fallback to FRAM-pattern LD vs HD
+        const hint = prefixMap.resolveBrandFamilyDutyByPrefix(codeUpper) || {};
+        let duty = hint.duty || (/^(CA|CF|CH|PH|TG|XG|HM|G|PS)\d/i.test(codeUpper) ? 'LD' : 'HD');
+        // Override: ECOGARD cabin 'XC' prefix should be treated as LD
+        try {
+            const prefixMatch = codeUpper.match(/^([A-Z]{1,4})/);
+            const prefix = prefixMatch ? prefixMatch[1] : '';
+            if (duty === 'HD' && prefix === 'XC') {
+                duty = 'LD';
+                console.log('🔄 Duty override → LD for ECOGARD XC prefix');
+            }
+            // Override: WIX numeric XP series (e.g., 57356XP) are automotive LD
+            if (duty === 'HD' && /^\d{5}XP$/.test(codeUpper)) {
+                duty = 'LD';
+                console.log('🔄 Duty override → LD for WIX XP numeric series');
+            }
+        } catch (_) {}
+        console.log(`✅ Duty detected: ${duty} (init via prefix hint: ${hint.brand || 'N/A'})`);
 
         // Validar código con scrapers
-        const scraperResult = await scraperBridge(query, duty);
+        let scraperResult = await scraperBridge(query, duty);
+
+        // Fallback HD: cruce curado aftermarket/OEM → Donaldson (ej. BF7633 → P551313)
+        if ((!scraperResult || !scraperResult.last4) && duty === 'HD') {
+            try {
+                const upHD = prefixMap.normalize(query);
+                const HD_CURATED_MAP = {
+                    'BF7633': 'P551313',
+                    // Regla de oro: Caterpillar OEM → Donaldson
+                    '1R0750': 'P551311',
+                    '8041642': 'P828889'
+                };
+                const mapped = HD_CURATED_MAP[upHD];
+                if (mapped) {
+                    const { validateDonaldsonCode } = require('../scrapers/donaldson');
+                    const don = await validateDonaldsonCode(mapped);
+                    if (don && don.last4) {
+                        scraperResult = don;
+                        duty = 'HD';
+                        console.log(`✅ Canonizado vía cruce curado HD (Baldwin→Donaldson): ${query} → ${mapped}`);
+                    }
+                }
+            } catch (hdCuratedErr) {
+                console.log(`⚠️  Error en cruce curado HD: ${hdCuratedErr.message}`);
+            }
+        }
+
+        // Fallback: intentar resolver OEM→FRAM con mapa curado solo si el duty es LD
+        if ((!scraperResult || !scraperResult.last4) && duty === 'LD') {
+            try {
+                const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
+                const framResolved = resolveFramByCuratedOEM(query);
+                if (framResolved) {
+                    const fr2 = await validateFramCode(framResolved);
+                    if (fr2 && fr2.last4) {
+                        scraperResult = fr2;
+                        duty = 'LD';
+                        console.log(`✅ Resuelto vía mapa curado OEM→FRAM (LD): ${query} → ${framResolved}`);
+                    }
+                }
+            } catch (fallbackErr) {
+                console.log(`⚠️  Error en fallback OEM→FRAM (LD): ${fallbackErr.message}`);
+            }
+            // FRAM-first canonicalization for LD cross references (e.g., ECOGARD XC → FRAM CF)
+            if (!scraperResult || !scraperResult.last4) {
+                try {
+                    const { findFramCode } = require('../scrapers/Fram complete');
+                    const { validateFramCode } = require('../scrapers/fram');
+                    const framX = findFramCode(query);
+                    if (framX) {
+                        const fr3 = await validateFramCode(framX);
+                        if (fr3 && fr3.last4) {
+                            scraperResult = fr3;
+                            duty = 'LD';
+                            console.log(`✅ Canonizado vía cross FRAM (LD): ${query} → ${framX}`);
+                        }
+                    }
+                } catch (crossErr) {
+                    console.log(`⚠️  Error en canonicalización LD via FRAM cross: ${crossErr.message}`);
+                }
+            }
+            // ECOGARD → FRAM direct series mapping heuristics (LD): XA#### → CA####
+            if (!scraperResult || !scraperResult.last4) {
+                try {
+                    const up = prefixMap.normalize(query);
+                    const m = up.match(/^XA(\d{3,5}[A-Z]?)$/);
+                    if (m) {
+                        const candidate = `CA${m[1]}`;
+                        const { validateFramCode } = require('../scrapers/fram');
+                        const fr4 = await validateFramCode(candidate);
+                        if (fr4 && fr4.last4) {
+                            scraperResult = fr4;
+                            duty = 'LD';
+                            console.log(`✅ Canonizado vía heurística ECOGARD→FRAM (LD): ${query} → ${candidate}`);
+                        }
+                    }
+                } catch (heurErr) {
+                    console.log(`⚠️  Error en heurística XA→CA: ${heurErr.message}`);
+                }
+            }
+            // Excepción LD: ECOGARD S-series (ej. S11880) → usar OEM curado si FRAM no fabrica
+            if (!scraperResult || !scraperResult.last4) {
+                try {
+                    const brandUp = String(hint.brand || '').toUpperCase();
+                    const up = prefixMap.normalize(query);
+                    const isEcoS = brandUp === 'ECOGARD' && /^S\d{5}$/.test(up);
+                    if (isEcoS) {
+                        const ECO_S_TO_OEM = {
+                            'S11880': ['68507598AA','68498720AA','68490111AA','162127665']
+                        };
+                        const oems = ECO_S_TO_OEM[up];
+                        if (oems && oems.length) {
+                            const primaryOEM = oems[0];
+                            console.log(`🔁 ECOGARD S-series sin FRAM: usando OEM curado ${primaryOEM} para últimos 4`);
+                            const oemFallback = await tryOemFallback(primaryOEM, 'LD', 'OIL');
+                            if (oemFallback) {
+                                // Simular resultado mínimo para continuar con generación de SKU
+                                scraperResult = {
+                                    valid: true,
+                                    code: primaryOEM,
+                                    source: 'OEM',
+                                    family: 'OIL',
+                                    duty: 'LD',
+                                    last4: extract4Digits(primaryOEM)
+                                };
+                                duty = 'LD';
+                                console.log(`✅ Fallback OEM aplicado para ECOGARD ${query}: last4=${scraperResult.last4}`);
+                            }
+                        }
+                    }
+                } catch (ecoErr) {
+                    console.log(`⚠️  Error en excepción ECOGARD S-series OEM fallback: ${ecoErr.message}`);
+                }
+            }
+        }
 
         if (!scraperResult || !scraperResult.last4) {
-            console.log(`❌ Invalid code - not found in OEM/Cross-reference: ${query}`);
+            const codeUpper = prefixMap.normalize(query);
+            const looksDonaldson = prefixMap.DONALDSON_STRICT_REGEX.test(codeUpper);
+            const looksFram = /^(CA|CF|CH|PH|TG|XG|HM|G|PS)\d/i.test(codeUpper);
+            console.log(`❌ Invalid code via scrapers: ${query}. looksDonaldson=${looksDonaldson} looksFram=${looksFram}`);
 
-            // Si force=true, intentamos generar SKU placeholder evitando duplicados
-            if (force) {
-                console.log(`⚙️  FORCE mode enabled. Checking Master before forcing...`);
-                try {
-                    const existingSKU = await searchInSheet(query);
-                    if (existingSKU && existingSKU.found) {
-                        console.log(`✅ Existing SKU found in Master (force bypassed): ${existingSKU.sku}`);
+            // Nueva regla: Si FRAM/Donaldson no lo fabrican, intentar fallback OEM con prefijo + últimos 4
+            if (looksDonaldson || looksFram) {
+                const famHintA = (prefixMap.resolveBrandFamilyDutyByPrefix(query) || {}).family || hint.family;
+                const oemFallbackA = await tryOemFallback(query, duty, famHintA);
+                if (oemFallbackA) {
+                    console.log(`✅ OEM fallback aplicado (fabricante no fabrica): ${query} → ${oemFallbackA.sku}`);
+                    return oemFallbackA;
+                }
+                return {
+                    status: 'NOT_FOUND',
+                    query_normalized: query,
+                    message: 'Fabricante no fabrica y no hay metadata OEM suficiente para aplicar prefijo + últimos 4.',
+                    valid: false
+                };
+            }
+
+            // Regla: si el duty es HD/LD, exigir homologación del fabricante y NO aplicar fallback OEM
+            // Excepción: LD ECOGARD S-series permite fallback OEM curado
+            const up2 = prefixMap.normalize(query);
+            const hint2 = prefixMap.resolveBrandFamilyDutyByPrefix(up2) || {};
+            const brandUp2 = String(hint2.brand || hint.brand || '').toUpperCase();
+            const allowEcoSFallback = (duty === 'LD' && brandUp2 === 'ECOGARD' && /^S\d{5}$/.test(up2));
+            if (!allowEcoSFallback && (duty === 'HD' || duty === 'LD')) {
+                // Intentar regla OEM general antes de abandonar
+                const famHintB = (prefixMap.resolveBrandFamilyDutyByPrefix(query) || {}).family || hint.family;
+                const oemFallbackB = await tryOemFallback(query, duty, famHintB);
+                if (oemFallbackB) {
+                    console.log(`✅ OEM fallback aplicado (HD/LD sin homologación): ${query} → ${oemFallbackB.sku}`);
+                    return oemFallbackB;
+                }
+                return {
+                    status: 'NOT_FOUND',
+                    query_normalized: query,
+                    message: 'HD/LD sin homologación y sin OEM detectable para aplicar prefijo + últimos 4.',
+                    valid: false
+                };
+            }
+            if (allowEcoSFallback) {
+                const ECO_S_TO_OEM = {
+                    'S11880': ['68507598AA','68498720AA','68490111AA','162127665']
+                };
+                const oems2 = ECO_S_TO_OEM[up2];
+                if (oems2 && oems2.length) {
+                    const primaryOEM2 = oems2[0];
+                    const oemFallback2 = await tryOemFallback(primaryOEM2, 'LD', 'OIL');
+                    if (oemFallback2) {
+                        console.log(`✅ OEM fallback aplicado (Excepción ECOGARD S): ${query} → ${oemFallback2.sku}`);
+                        return oemFallback2;
+                    }
+                }
+            }
+            // Regla 3: NO HD ni LD (no es Donaldson ni FRAM) → fallback OEM
+            const oemFallback = await tryOemFallback(query, duty, hint.family);
+            if (oemFallback) {
+                console.log(`✅ OEM fallback aplicado (Regla 3): ${query} → ${oemFallback.sku}`);
+                return oemFallback;
+            }
+            return {
+                status: 'NOT_FOUND',
+                query_normalized: query,
+                message: 'Regla 3: NO HD ni LD, pero sin metadata OEM (familia) para generar SKU',
+                valid: false
+            };
+        }
+
+        console.log(`✅ Code validated: ${query} → ${scraperResult.code} (${scraperResult.source})`);
+
+        // Ajuste de duty basado en la fuente resuelta del scraper
+        const sourceUp = String(scraperResult.source || '').toUpperCase();
+        if (sourceUp === 'FRAM' && duty !== 'LD') {
+            console.log(`🔁 Duty adjusted to LD based on FRAM source`);
+            duty = 'LD';
+        } else if (sourceUp === 'DONALDSON' && duty !== 'HD') {
+            console.log(`🔁 Duty adjusted to HD based on Donaldson source`);
+            duty = 'HD';
+        }
+
+        // Política de homologación: HD requiere DONALDSON, LD requiere FRAM
+        const homologationOk = (duty === 'HD' && sourceUp === 'DONALDSON') || (duty === 'LD' && sourceUp === 'FRAM');
+        if (!homologationOk) {
+            const codeUpper = prefixMap.normalize(query);
+            const looksDonaldson = prefixMap.DONALDSON_STRICT_REGEX.test(codeUpper);
+            const looksFram = /^(CA|CF|CH|PH|TG|XG|HM|G|PS)\d/i.test(codeUpper);
+            console.log(`⛔ Homologación requerida no cumplida: duty=${duty}, source=${sourceUp}. looksDonaldson=${looksDonaldson} looksFram=${looksFram}`);
+
+            // Si parece fabricante, NO fallback OEM (reglas 1 y 2)
+            if (looksDonaldson || looksFram) {
+                const famHintC = (prefixMap.resolveBrandFamilyDutyByPrefix(query) || {}).family || hint.family;
+                const oemFallbackC = await tryOemFallback(query, duty, famHintC);
+                if (oemFallbackC) {
+                    console.log(`✅ OEM fallback aplicado (no homologación fabricante): ${query} → ${oemFallbackC.sku}`);
+                    return oemFallbackC;
+                }
+                return {
+                    status: 'NOT_FOUND',
+                    query_normalized: query,
+                    message: 'Fabricante no homologado y sin OEM detectable para aplicar prefijo + últimos 4.',
+                    valid: false
+                };
+            }
+            // Regla: si el duty es HD/LD, exigir homologación del fabricante y NO aplicar fallback OEM
+            // Excepción: LD ECOGARD S-series permite fallback OEM curado
+            {
+                const up3 = prefixMap.normalize(query);
+                const hint3 = prefixMap.resolveBrandFamilyDutyByPrefix(up3) || {};
+                const brandUp3 = String(hint3.brand || hint.brand || '').toUpperCase();
+                const allowEcoSFallback2 = (duty === 'LD' && brandUp3 === 'ECOGARD' && /^S\d{5}$/.test(up3));
+                if (allowEcoSFallback2) {
+                    const ECO_S_TO_OEM = {
+                        'S11880': ['68507598AA','68498720AA','68490111AA','162127665']
+                    };
+                    const oems3 = ECO_S_TO_OEM[up3];
+                    if (oems3 && oems3.length) {
+                        const primaryOEM3 = oems3[0];
+                        const oemFallback3 = await tryOemFallback(primaryOEM3, 'LD', 'OIL');
+                        if (oemFallback3) {
+                            console.log(`✅ OEM fallback aplicado (Excepción ECOGARD S - no homologación): ${query} → ${oemFallback3.sku}`);
+                            return oemFallback3;
+                        }
+                    }
+                }
+            }
+            if (duty === 'HD' || duty === 'LD') {
+                const famHintD = (prefixMap.resolveBrandFamilyDutyByPrefix(query) || {}).family || hint.family;
+                const oemFallbackD = await tryOemFallback(query, duty, famHintD);
+                if (oemFallbackD) {
+                    console.log(`✅ OEM fallback aplicado (HD/LD no homologado): ${query} → ${oemFallbackD.sku}`);
+                    return oemFallbackD;
+                }
+                return {
+                    status: 'NOT_FOUND',
+                    query_normalized: query,
+                    message: 'HD/LD sin homologación y sin OEM detectable para aplicar prefijo + últimos 4.',
+                    valid: false
+                };
+            }
+            // En caso contrario, aplicar Regla 3
+            const oemFallback = await tryOemFallback(query, duty, hint.family);
+            if (oemFallback) {
+                console.log(`✅ OEM fallback aplicado por no homologación (Regla 3): ${query} → ${oemFallback.sku}`);
+                return oemFallback;
+            }
+            return {
+                status: 'NOT_FOUND',
+                query_normalized: query,
+                message: 'Regla 3: NO HD ni LD, pero sin metadata OEM (familia) para generar SKU',
+                valid: false
+            };
+        }
+
+        // ---------------------------------------------------------------------
+        // PRE-CÁLCULO: FAMILIA Y SKU ESPERADO PARA VALIDAR CONTRA MASTER
+        // ---------------------------------------------------------------------
+        const codeForFamilyPre = String(scraperResult?.code || query || '').toUpperCase();
+        let familyPre = null;
+        // Preferir hint de familia si viene del prefijo
+        if (!familyPre && hint.family) {
+            familyPre = hint.family;
+        }
+        // Heurísticas por prefijo FRAM
+        if (/^CA/.test(codeForFamilyPre)) {
+            familyPre = 'AIRE';
+        } else if (/^(CF|CH)/.test(codeForFamilyPre)) {
+            familyPre = 'CABIN';
+        } else if (/^(PH|TG|XG|HM)/.test(codeForFamilyPre)) {
+            familyPre = 'OIL';
+        } else if (/^(G|PS)/.test(codeForFamilyPre)) {
+            familyPre = 'FUEL';
+        } else {
+            // Usar familia derivada del scraper
+            if (duty === 'HD') {
+                familyPre = detectFamilyHD(scraperResult.family);
+            } else {
+                familyPre = detectFamilyLD(scraperResult.family);
+            }
+        }
+
+        // Construir SKU esperado con prefijo oficial y últimos 4 homologados
+        const expectedSkuPre = generateSKU(familyPre, duty, scraperResult.last4);
+
+        // ---------------------------------------------------------------------
+        // PASO 2: BUSCAR SI YA EXISTE SKU EN GOOGLE SHEET MASTER
+        // ---------------------------------------------------------------------
+        console.log(`📊 Step 2: Checking Google Sheet Master for existing SKU...`);
+        
+        try {
+            const existingSKU = await searchInSheet(query);
+
+            if (existingSKU && existingSKU.found) {
+                if (force) {
+                    console.log(`⚙️  FORCE enabled: ignoring Master SKU (${existingSKU.sku}) and regenerating`);
+                } else {
+                    console.log(`✅ SKU already exists in Master: ${query} → ${existingSKU.sku}`);
+                    // Validar contra la homologación actual: familia, duty y últimos 4
+                    if (
+                        existingSKU.sku === expectedSkuPre &&
+                        String(existingSKU.family).toUpperCase() === String(familyPre).toUpperCase() &&
+                        String(existingSKU.duty).toUpperCase() === String(duty).toUpperCase()
+                    ) {
                         return {
                             status: 'OK',
                             found_in_master: true,
@@ -424,226 +839,12 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
                             message: 'SKU encontrado en catálogo Master'
                         };
                     }
-                } catch (sheetErr) {
-                    console.log(`⚠️  Google Sheets lookup error (force path): ${sheetErr.message}`);
+                    // Si no coincide, regenerar y corregir (no retornar aquí)
+                    console.log(
+                        `♻️  Mismatch de SKU en Master. Esperado: ${expectedSkuPre} (family=${familyPre}, duty=${duty}, last4=${scraperResult.last4}) ` +
+                        `pero existe: ${existingSKU.sku}. Se corregirá y se hará upsert.`
+                    );
                 }
-
-                // Deduce family por patrón FRAM, si no, usar OIL como genérico
-                let familyForced = null;
-                if (/^CA/i.test(codeUpper)) {
-                    familyForced = 'AIRE';
-                } else if (/^(CF|CH)/i.test(codeUpper)) {
-                    familyForced = 'CABIN';
-                } else if (/^(PH|TG|XG|HM)/i.test(codeUpper)) {
-                    familyForced = 'OIL';
-                } else if (/^(G|PS)/i.test(codeUpper)) {
-                    familyForced = 'FUEL';
-                } else {
-                    familyForced = 'OIL';
-                }
-
-                const last4Forced = extract4Digits(query);
-                if (!last4Forced) {
-                    console.log(`❌ FORCE failed: no digits found to build SKU for ${query}`);
-                    return {
-                        status: 'NOT_FOUND',
-                        query_normalized: query,
-                        message: 'Sin dígitos para generar SKU forzado',
-                        valid: false
-                    };
-                }
-
-                const skuForced = generateSKU(familyForced, duty, last4Forced);
-                if (!skuForced || skuForced.error) {
-                    console.log(`❌ FORCE failed: ${skuForced?.error || 'error desconocido'}`);
-                    return {
-                        status: 'NOT_FOUND',
-                        query_normalized: query,
-                        message: 'No se pudo generar SKU forzado',
-                        valid: false
-                    };
-                }
-
-                const masterDataForced = {
-                    query_normalized: query,
-                    code_input: query,
-                    code_oem: query,
-                    oem_codes: [query],
-                    duty,
-                    family: familyForced,
-                    sku: skuForced,
-                    media: getMedia(familyForced, duty),
-                    filter_type: familyForced,
-                    source: 'FORCED',
-                    cross_reference: [],
-                    applications: [],
-                    equipment_applications: [],
-                    attributes: {
-                        description: 'FORCED PLACEHOLDER',
-                        manufactured_by: 'ELIMFILTERS',
-                        forced: true
-                    },
-                    last4: last4Forced,
-                    oem_equivalent: query
-                };
-
-                try {
-                    await upsertBySku(masterDataForced, { deleteDuplicates: true });
-                    console.log(`✅ FORCED upsert to Master: ${skuForced}`);
-                } catch (saveErr) {
-                    console.error(`❌ Failed forced upsert: ${saveErr.message}`);
-                }
-
-                return {
-                    status: 'FORCED',
-                    forced: true,
-                    found_in_master: false,
-                    newly_generated: true,
-                    query_normalized: query,
-                    code_input: query,
-                    code_oem: query,
-                    oem_codes: [query],
-                    duty,
-                    family: familyForced,
-                    sku: skuForced,
-                    media: getMedia(familyForced, duty),
-                    source: 'FORCED',
-                    oem_homologated: { code: '' },
-                    cross_reference: [],
-                    applications: [],
-                    engine_applications: [],
-                    equipment_applications: [],
-                    attributes: { description: 'FORCED PLACEHOLDER', manufactured_by: 'ELIMFILTERS', forced: true },
-                    message: 'SKU forzado generado y guardado en catálogo Master'
-                };
-            }
-
-            return {
-                status: 'NOT_FOUND',
-                query_normalized: query,
-                message: 'Código no válido - no encontrado en base de datos OEM',
-                valid: false
-            };
-        }
-
-        console.log(`✅ Code validated: ${query} → ${scraperResult.code} (${scraperResult.source})`);
-
-        // Política de homologación: HD requiere DONALDSON, LD requiere FRAM
-        const sourceUp = String(scraperResult.source || '').toUpperCase();
-        const homologationOk = (duty === 'HD' && sourceUp === 'DONALDSON') || (duty === 'LD' && sourceUp === 'FRAM');
-        if (!homologationOk) {
-            console.log(`⛔ Homologación requerida no cumplida: duty=${duty}, source=${sourceUp}.`);
-            if (force) {
-                console.log(`⚙️  FORCE mode enabled. Generating placeholder due to non-homologated source...`);
-                // Deduce family por patrón
-                let familyForced = null;
-                if (/^CA/i.test(codeUpper)) {
-                    familyForced = 'AIRE';
-                } else if (/^(CF|CH)/i.test(codeUpper)) {
-                    familyForced = 'CABIN';
-                } else if (/^(PH|TG|XG|HM)/i.test(codeUpper)) {
-                    familyForced = 'OIL';
-                } else if (/^(G|PS)/i.test(codeUpper)) {
-                    familyForced = 'FUEL';
-                } else {
-                    familyForced = 'OIL';
-                }
-                const last4Forced = extract4Digits(query);
-                if (!last4Forced) {
-                    return {
-                        status: 'NOT_FOUND',
-                        query_normalized: query,
-                        message: 'Sin dígitos para generar SKU forzado',
-                        valid: false
-                    };
-                }
-                const skuForced = generateSKU(familyForced, duty, last4Forced);
-                if (!skuForced || skuForced.error) {
-                    return {
-                        status: 'NOT_FOUND',
-                        query_normalized: query,
-                        message: 'No se pudo generar SKU forzado',
-                        valid: false
-                    };
-                }
-                const masterDataForced = {
-                    query_normalized: query,
-                    code_input: query,
-                    code_oem: query,
-                    oem_codes: [query],
-                    duty,
-                    family: familyForced,
-                    sku: skuForced,
-                    media: getMedia(familyForced, duty),
-                    filter_type: familyForced,
-                    source: 'FORCED',
-                    cross_reference: [],
-                    applications: [],
-                    equipment_applications: [],
-                    attributes: { description: 'FORCED PLACEHOLDER', manufactured_by: 'ELIMFILTERS', forced: true },
-                    last4: last4Forced,
-                    oem_equivalent: query
-                };
-                try { await upsertBySku(masterDataForced, { deleteDuplicates: true }); } catch (_) {}
-                return {
-                    status: 'FORCED',
-                    forced: true,
-                    found_in_master: false,
-                    newly_generated: true,
-                    query_normalized: query,
-                    code_input: query,
-                    code_oem: query,
-                    oem_codes: [query],
-                    duty,
-                    family: familyForced,
-                    sku: skuForced,
-                    media: getMedia(familyForced, duty),
-                    source: 'FORCED',
-                    oem_homologated: { code: '' },
-                    cross_reference: [],
-                    applications: [],
-                    engine_applications: [],
-                    equipment_applications: [],
-                    attributes: { description: 'FORCED PLACEHOLDER', manufactured_by: 'ELIMFILTERS', forced: true },
-                    message: 'SKU forzado (sin homologación) generado y guardado en catálogo Master'
-                };
-            }
-            return {
-                status: 'NOT_FOUND',
-                query_normalized: query,
-                message: 'Requiere homologación: HD con DONALDSON o LD con FRAM',
-                valid: false
-            };
-        }
-
-        // ---------------------------------------------------------------------
-        // PASO 2: BUSCAR SI YA EXISTE SKU EN GOOGLE SHEET MASTER
-        // ---------------------------------------------------------------------
-        console.log(`📊 Step 2: Checking Google Sheet Master for existing SKU...`);
-        
-        try {
-            const existingSKU = await searchInSheet(query);
-            
-            if (existingSKU && existingSKU.found) {
-                console.log(`✅ SKU already exists in Master: ${query} → ${existingSKU.sku}`);
-                
-                return {
-                    status: 'OK',
-                    found_in_master: true,
-                    query_normalized: query,
-                    code_input: query,
-                    code_oem: existingSKU.code_oem,
-                    oem_codes: existingSKU.oem_codes || [],
-                    duty: existingSKU.duty,
-                    family: existingSKU.family,
-                    sku: existingSKU.sku,
-                    media: existingSKU.media,
-                    source: existingSKU.source,
-                    cross_reference: existingSKU.cross_reference || [],
-                    applications: existingSKU.applications || [],
-                    attributes: existingSKU.attributes || {},
-                    message: 'SKU encontrado en catálogo Master'
-                };
             }
             
             console.log(`⚠️  SKU not found in Master - will generate new SKU`);
@@ -657,15 +858,20 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         // ---------------------------------------------------------------------
         console.log(`🔧 Step 3: Generating new SKU...`);
 
-        // Determine family based on FRAM series or scraper hints
+        // Determine family based on resolved code (prefer validated FRAM/DONALDSON code)
+        const codeForFamily = String(scraperResult?.code || query || '').toUpperCase();
         let family = null;
-        if (/^CA/.test(codeUpper)) {
+        // Prefer prefix hint family when available
+        if (!family && hint.family) {
+            family = hint.family;
+        }
+        if (/^CA/.test(codeForFamily)) {
             family = 'AIRE';
-        } else if (/^(CF|CH)/.test(codeUpper)) {
+        } else if (/^(CF|CH)/.test(codeForFamily)) {
             family = 'CABIN';
-        } else if (/^(PH|TG|XG|HM)/.test(codeUpper)) {
+        } else if (/^(PH|TG|XG|HM)/.test(codeForFamily)) {
             family = 'OIL';
-        } else if (/^(G|PS)/.test(codeUpper)) {
+        } else if (/^(G|PS)/.test(codeForFamily)) {
             family = 'FUEL';
         } else {
             // Use scraper-derived family as hint
@@ -680,13 +886,13 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
             console.log(`❌ Family detection failed for ${scraperResult.code}`);
             if (force) {
                 console.log('⚙️  FORCE mode: applying fallback family heuristics');
-                if (/^CA/i.test(codeUpper)) {
+                if (/^CA/i.test(codeForFamily)) {
                     family = 'AIRE';
-                } else if (/^(CF|CH)/i.test(codeUpper)) {
+                } else if (/^(CF|CH)/i.test(codeForFamily)) {
                     family = 'CABIN';
-                } else if (/^(PH|TG|XG|HM)/i.test(codeUpper)) {
+                } else if (/^(PH|TG|XG|HM)/i.test(codeForFamily)) {
                     family = 'OIL';
-                } else if (/^(G|PS)/i.test(codeUpper)) {
+                } else if (/^(G|PS)/i.test(codeForFamily)) {
                     family = 'FUEL';
                 } else {
                     family = 'OIL';
@@ -723,8 +929,14 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
             specs = getDefaultSpecs(scraperResult.code, scraperResult.source || (duty === 'HD' ? 'DONALDSON' : 'FRAM'));
         }
         
-        const rawOEMList = scraperResult.attributes?.oem_numbers || scraperResult.oem || [];
-        const rawCross = scraperResult.cross || [];
+        const rawOEMList = [
+            ...(Array.isArray(scraperResult.attributes?.oem_numbers) ? scraperResult.attributes.oem_numbers : (scraperResult.oem || [])),
+            ...((specs?.technical_details?.oem_codes) || (specs?.oem_codes) || [])
+        ];
+        const rawCross = [
+            ...(scraperResult.cross || []),
+            ...((specs?.technical_details?.cross_reference) || (specs?.cross_reference) || [])
+        ];
         const rawEquipApps = specs?.equipment_applications || scraperResult.applications || [];
         const rawEngineApps = specs?.engine_applications || [];
         const oemClean = cleanOEMList(rawOEMList, duty);
@@ -759,6 +971,7 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
                 // Specs from extractor (selected fields)
                 height_mm: specs?.dimensions?.height_mm,
                 outer_diameter_mm: specs?.dimensions?.outer_diameter_mm,
+                inner_diameter_mm: specs?.dimensions?.inner_diameter_mm,
                 thread_size: specs?.dimensions?.thread_size,
                 gasket_od_mm: specs?.dimensions?.gasket_od_mm,
                 iso_main_efficiency_percent: specs?.performance?.iso_main_efficiency_percent,
@@ -917,6 +1130,7 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
         const specAttrs = {
             height_mm: specs?.dimensions?.height_mm,
             outer_diameter_mm: specs?.dimensions?.outer_diameter_mm,
+            inner_diameter_mm: specs?.dimensions?.inner_diameter_mm,
             thread_size: specs?.dimensions?.thread_size,
             gasket_od_mm: specs?.dimensions?.gasket_od_mm,
             iso_main_efficiency_percent: specs?.performance?.iso_main_efficiency_percent,
@@ -929,6 +1143,9 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
             fluid_compatibility: specs?.technical_details?.fluid_compatibility,
             disposal_method: specs?.technical_details?.disposal_method,
             service_life_hours: specs?.technical_details?.service_life_hours,
+            pleat_count: specs?.technical_details?.pleat_count,
+            seal_material: specs?.technical_details?.seal_material,
+            housing_material: specs?.technical_details?.housing_material,
             manufactured_by: 'ELIMFILTERS'
         };
         const attributesMerged = { ...(scraperResult.attributes || {}), ...specAttrs };
@@ -976,3 +1193,4 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
 module.exports = {
     detectFilter
 };
+
