@@ -234,7 +234,7 @@ const PORT = process.env.PORT || 8080;
 const server = app.listen(PORT, () => {
     console.log(`
 â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-â•‘   ðŸš€ ELIMFILTERS API v5.0.0               â•‘
+â•‘   ðŸš€ ELIMFILTERS API v${APP_VERSION}               â•‘
 â•‘   ðŸ“¡ Running on port ${PORT}                  â•‘
 â•‘   ðŸŒ Environment: ${process.env.NODE_ENV || 'development'}         â•‘
 â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -244,6 +244,37 @@ const server = app.listen(PORT, () => {
 // Tighten server timeouts
 server.setTimeout(30_000); // inactive socket timeout
 server.headersTimeout = 35_000; // header timeout
+
+// =============================================
+//  AUTO SELF-TEST (Webhook) ON STARTUP
+// =============================================
+try {
+    const autoTest = String(process.env.AUTO_SELF_TEST_ON_START || '').toLowerCase() === 'true';
+    const hasWebhook = Boolean(process.env.DAILY_REPORT_WEBHOOK_URL);
+    if (autoTest && hasWebhook) {
+        const { main: runDailyReport } = require('./scripts/daily_learning_report');
+        const delayMs = Number(process.env.SELF_TEST_START_DELAY_MS || 3000);
+        console.log(`⏱️ Auto‑prueba del webhook programada en ${delayMs} ms...`);
+        setTimeout(() => {
+            try {
+                if (!process.env.REPORT_HOURS) process.env.REPORT_HOURS = '24';
+                runDailyReport()
+                    .then(() => {
+                        console.log('✅ Auto‑prueba ejecutada. Revise el código HTTP en el log del reporte.');
+                    })
+                    .catch((e) => {
+                        console.log('⚠️ Auto‑prueba falló:', e.message);
+                    });
+            } catch (e) {
+                console.log('⚠️ No se pudo iniciar la auto‑prueba:', e.message);
+            }
+        }, delayMs).unref();
+    } else {
+        if (autoTest && !hasWebhook) {
+            console.log('ℹ️ AUTO_SELF_TEST_ON_START habilitado, pero DAILY_REPORT_WEBHOOK_URL no está definido; se omite auto‑prueba.');
+        }
+    }
+} catch (_) {}
 
 module.exports = app;
 
