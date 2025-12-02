@@ -238,6 +238,11 @@ Pilares Arquitectónicos
 
 Flujo de Confianza Descendente
 1) OEM determinista: Si el código normalizado existe en `oem_xref.json`, se usa esa marca/familia y se genera SKU.
+
+Nota de Flujo LD (FRAM)
+- El cruce inicial traduce el código del cliente a un código FRAM y con ello se genera el `SKU_INTERNO` (p. ej. `EL8XXXX`).
+- El servicio `framEnrichmentService.js` recibe ese `SKU_INTERNO` y el `código FRAM` como llave; solo agrega datos técnicos desde el sitio FRAM.
+- No crea ni modifica el formato del SKU; la clave del documento final siempre es el `SKU_INTERNO` ya existente.
 2) Prefijos deterministas: Si no hay OEM directo, se usa `prefixMap` (marca/familia/duty y colisiones).
 3) Scraper/Heurística: Para casos residuales o de validación cruzada (ej.: Donaldson P-series), se usa scraping y señales heurísticas.
 4) Generación de SKU: Con familia y duty determinados, se calcula `last4` y se arma la SKU según `skuRules.json`.

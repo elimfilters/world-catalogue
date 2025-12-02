@@ -66,3 +66,40 @@ Estas reglas están listas para producción y alineadas con el flujo determinist
 ## Flujo de Despliegue
 - Railway auto‑deploy al hacer `git push` (ver `DEPLOYMENT.md`).
 - Verificar con `GET /health` y probar `GET /api/detect/{code}`.
+
+## Rutas por Familia/Prefijo (canónicas)
+- `EA1` (AIRE HD/LD) → HD vía `Donaldson`; LD vía `FRAM`.
+- `EC1` (CABIN HD/LD) → HD vía `Donaldson`; LD vía `FRAM`.
+- `EA2` (CARCAZA AIR FILTER) → HD vía `Donaldson` (solo HD).
+- `EL8` (OIL HD/LD) → HD vía `Donaldson`; LD vía `FRAM`.
+- `EF9` (FUEL HD/LD) → HD vía `Donaldson`; LD vía `FRAM`.
+- `ES9` (FUEL SEPARATOR HD) → HD vía `Donaldson`.
+- `ED4` (AIR DRYER HD) → HD vía `Donaldson`.
+- `EH6` (HYDRAULIC HD) → HD vía `Donaldson`.
+- `EW7` (COOLANT HD) → HD vía `Donaldson`.
+- `ET9` (TURBINE SERIES HD, incl. `ET9-F` elementos) → validadores `Parker/Racor`.
+- `EM9` (MARINE HD/LD, incl. `EM9-S` separadores y `EM9-F/O/A` subtipos) → validadores `Parker/Racor`, `MerCruiser` y `Sierra`.
+
+Notas
+- Los validadores marinos están integrados en `scraperBridge` y proporcionan `last4` y `last4_alnum`.
+- `EM9/ET9` pueden usar los 4 últimos alfanuméricos para SKU cuando aplica.
+
+## Flujo LD (FRAM) y Responsabilidades del Enriquecimiento
+
+- Paso 1: Cruce inicial (LD)
+  - El flujo traduce el código del cliente a un código FRAM verificado.
+  - Con ese resultado se genera el SKU interno según reglas del servidor (p. ej. `EL8XXXX`).
+  - Impacto en SKU: el SKU queda creado en este paso.
+
+- Paso 2: Enriquecimiento (framEnrichmentService.js)
+  - Recibe el `SKU_INTERNO` ya creado y el `código FRAM` como llave de entrada.
+  - Usa el sitio web de FRAM para extraer especificaciones técnicas (dimensiones, performance, referencias).
+  - No modifica el formato ni el valor del `SKU_INTERNO` en ningún caso.
+  - Responsabilidad: devolver un diccionario limpio de datos técnicos para completar la ficha.
+
+- Reglas de almacenamiento (LD / FRAM)
+  - `oem_codes`: contener únicamente códigos; se amplía con los detectados en referencias FRAM.
+  - `cross_reference`: texto legal “Multi-Referencia OEM” si hay equivalencias; “N/A” si no existen.
+  - Clave del documento final: `SKU_INTERNO` generado en Paso 1.
+
+Énfasis al equipo: El `código FRAM` es la llave de entrada para el enriquecimiento, pero la lógica de creación del SKU está protegida y permanece fuera de `framEnrichmentService.js`. Su única función es completar datos técnicos.

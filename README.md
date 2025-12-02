@@ -220,6 +220,19 @@ docker build -t elimfilters-api .
 docker run -p 8080:8080 elimfilters-api
 ```
 
+## 🗺️ Guía de Enriquecimiento de Datos por Tipo de Servicio (Duty)
+
+El sistema soporta dos flujos de enriquecimiento, cada uno con una fuente de datos diferente para garantizar la mayor precisión técnica:
+
+| Tipo de Servicio | Fuente de Datos (Enriquecimiento) | Herramienta | Clave de Enriquecimiento |
+| :--- | :--- | :--- | :--- |
+| **HD (Heavy Duty)** | API de Fleetguard | HTTP Request (rápida) | Código Donaldson (P55XXXX) |
+| **LD (Light Duty)** | **Web Scraping de FRAM** | Playwright/Selenium (robusta) | Código FRAM (PH8A, etc.) |
+
+➡️ Flujo Detallado: Para más detalles sobre la arquitectura y la integridad del SKU, consulte la sección "Flujo LD (FRAM) y Responsabilidades del Enriquecimiento" en `docs/scraper_rules_es.md`:
+
+- `docs/scraper_rules_es.md#flujo-ld-fram-y-responsabilidades-del-enriquecimiento`
+
 ## 📝 Version History
 
 ### v5.0.0 (Current)
@@ -259,3 +272,13 @@ For issues or questions, contact ELIMFILTERS technical support.
   - Ejecutar `npm run validate:oem:candidate` y asegurar cero errores.
 - Referencia:
   - Consultar `MIGRATION.md` para pautas de formato, normalización y reglas de colisión.
+
+## ⚙️ Políticas de Creación y Calidad del SKU
+
+Para asegurar la máxima calidad de datos en el Catálogo Master:
+
+- **Validación de Esenciales:** La escritura se bloquea si faltan datos críticos (ej. altura, diámetro, rosca) para una familia de filtro.
+- **Normalización de Fallbacks:** Los campos vacíos se llenan con `N/A` o `0`.
+- **Política de Temperaturas:** Los límites de temperatura de operación se asignan por defecto según el perfil de la familia de filtro cuando la API no proporciona el dato.
+
+➡️ **Documentación Detallada:** Consulte la documentación completa de la política de datos, incluyendo los valores de temperatura por familia, en [docs/SKU_CREATION_POLICY_ES.md#fallbacks-de-temperatura-por-familia].

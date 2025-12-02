@@ -218,6 +218,29 @@ SCRAPER_TIMEOUT=10000             # Timeout de scrapers (ms)
 CACHE_TTL=3600                    # Cache time-to-live (seg)
 
 ═══════════════════════════════════════════════════════════════
+## 🚀 Quick-Start: Flujo de Detección y Enriquecimiento (LD)
+
+El servicio principal (`detectionServiceFinal.js`) dirige el flujo de enriquecimiento automáticamente. Una vez que se detecta el código inicial (`SKU_INTERNO` y `duty`), el sistema elige la fuente:
+
+```js
+// --- Lógica de Enriquecimiento de Datos ---
+if (duty === 'HD') {
+    // Si es Heavy Duty, usa la API limpia y rápida de Fleetguard.
+    const enrichedData = await fleetguardEnrichmentService.getData(codigoDonaldson);
+    // ...
+} else if (duty === 'LD') {
+    // Si es Light Duty, usa el Web Scraping con Playwright/Selenium en FRAM.
+    // El servicio DEBE recibir el código FRAM y el SKU_INTERNO ya generado.
+    const enrichedData = await framEnrichmentService.getData(codigoFram, skuInterno);
+    // ...
+}
+
+// Nota: El servicio framEnrichmentService solo devuelve el diccionario de datos técnicos.
+// No modifica ni toca el formato del SKU_INTERNO.
+```
+
+Para más detalles, ver `docs/scraper_rules_es.md#flujo-ld-fram-y-responsabilidades-del-enriquecimiento`.
+═══════════════════════════════════════════════════════════════
 🎓 LO QUE APRENDISTE
 ═══════════════════════════════════════════════════════════════
 
