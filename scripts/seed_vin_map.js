@@ -3,9 +3,21 @@
 
 try { require('dotenv').config(); } catch (_) {}
 
+const mongoService = require('../src/services/mongoService');
 const { upsertMapping } = require('../src/services/vinApplicationMapService');
 
 async function main() {
+  if (!process.env.MONGODB_URI) {
+    console.log('ℹ️  MONGODB_URI no está configurado. Configure el URI y reintente.');
+    return;
+  }
+  try {
+    await mongoService.connect();
+    console.log('✅ Conexión a MongoDB establecida');
+  } catch (e) {
+    console.log('❌ Error conectando a MongoDB:', e.message);
+    return;
+  }
   const seeds = [
     // Ford F-150 (ejemplo moderno solicitado)
     { make: 'FORD', model: 'F-150', year: 2020, engine_liters: '5.0L', filter_type: 'OIL',  oem_code_target: 'FL-500S', source: 'seed' },
@@ -34,8 +46,13 @@ async function main() {
   for (const s of seeds) {
     try {
       const res = await upsertMapping(s);
-      console.log('✔ upsert:', res.make_model_year_engine, res.filter_type, '→', res.oem_code_target);
-      ok++;
+      if (res && res.make_model_year_engine) {
+        console.log('✔ upsert:', res.make_model_year_engine, res.filter_type, '→', res.oem_code_target);
+        ok++;
+      } else {
+        console.log('✖ upsert sin resultado válido:', s);
+        fail++;
+      }
     } catch (e) {
       console.log('✖ upsert error:', s, e.message);
       fail++;
