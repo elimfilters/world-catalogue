@@ -6,13 +6,20 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "migrate:marinos": "node scripts/migrate_em9_et9_to_marinos.js",
     "test": "node scripts/test_internal_validation.js",
     "test:internal": "node scripts/test_internal_validation.js",
     "validate:oem": "node scripts/validate_oem_block.js --file src/data/oem_xref.json",
     "validate:oem:candidate": "node scripts/validate_oem_block.js --file src/data/oem_xref.candidate.json",
     "backup:mongo": "node scripts/backup_mongo_to_s3.js",
     "restore:mongo": "node scripts/restore_mongo_from_s3.js",
-    "sheet:populate": "node scripts/populate_master_skus.js"
+    "sheet:populate": "node scripts/populate_master_skus.js",
+    "self-heal:rules": "node src/services/self_heal_rules.js",
+    "self-heal:report": "node scripts/daily_learning_report.js",
+    "audit:marinos": "node scripts/audit_marinos_skus.js",
+    "fix:marinos": "node scripts/fix_marinos_rows.js",
+    "debug:marinos": "node scripts/debug_marinos_headers.js",
+    "seed:vin": "node scripts/seed_vin_map.js"
   },
   "keywords": [
     "elimfilters",
