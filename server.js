@@ -110,6 +110,8 @@ app.use('/api/detect', detectLimiter);
 app.use('/api/detect', detectRoute);
 app.use('/api/import/marinos', marinosImportRoute);
 app.use('/api/routes', routesMapRoute);
+// Mount VIN routes (decode + attribute lookup)
+app.use('/api/vin', vinRoute);
 
 app.use('/api/internal/validate', internalValidateRoute);
 
