@@ -23,6 +23,16 @@ if (!process.env.GOOGLE_CREDENTIALS && !process.env.GOOGLE_PRIVATE_KEY) {
 // ============================================================================
 
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID || '1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U';
+// Multi-sheet support for Kits EK5
+const KIT_SHEET_NAME = process.env.KITS_SHEET_NAME || 'KITS_EK5';
+const KIT_HEADERS = [
+    'SKU',
+    'Tipo de Producto',
+    'Contenido del Kit',
+    'Tecnología',
+    'Filtro Principal (Ref)',
+    'Duty'
+];
 
 // Column mapping (new exact headers from Sheet Master)
 const COLUMNS = {
@@ -216,6 +226,73 @@ async function initSheet() {
         console.error('âŒ Error initializing Google Sheet:', error.message);
         throw error;
     }
+}
+
+// ============================================================================
+// KITS (EK5) - Multi-sheet helpers
+// ============================================================================
+
+async function ensureSheetExists(sheetName, headers) {
+    const doc = await initSheet();
+    let sheet = (doc.sheetsByTitle && doc.sheetsByTitle[sheetName]) || null;
+    if (!sheet) {
+        sheet = await doc.addSheet({ title: sheetName, headerValues: headers });
+        console.log(`➕ Created sheet '${sheetName}' with headers`);
+    } else {
+        // Ensure headers are set exactly as provided
+        try {
+            await sheet.setHeaderRow(headers);
+        } catch (_) {
+            // Fallback: ignore header setting errors silently
+        }
+    }
+    return { doc, sheet };
+}
+
+/**
+ * Upsert a row into a specific sheet by key 'SKU'.
+ * - If targetSheetName equals KIT_SHEET_NAME, uses KIT_HEADERS.
+ * - Defaults to Master sheet when targetSheetName is not provided.
+ * @param {object} rowData - Object with keys matching sheet headers
+ * @param {string} [targetSheetName] - Sheet title to write into
+ */
+async function upsertRow(rowData, targetSheetName) {
+    const name = targetSheetName || null;
+
+    if (name === KIT_SHEET_NAME) {
+        const { sheet } = await ensureSheetExists(KIT_SHEET_NAME, KIT_HEADERS);
+        const rows = await sheet.getRows();
+        const skuUpper = String(rowData['SKU'] || '').trim().toUpperCase();
+        const matches = rows.filter(r => String(r['SKU'] || '').trim().toUpperCase() === skuUpper);
+
+        if (matches.length > 0) {
+            const row = matches[0];
+            Object.entries(rowData).forEach(([k, v]) => { row[k] = v; });
+            await row.save();
+            // Delete duplicates if any
+            for (let i = 1; i < matches.length; i++) {
+                try { await matches[i].delete(); } catch (_) {}
+            }
+            console.log(`☑️ Upserted EK5 kit row for ${rowData['SKU']}`);
+        } else {
+            await sheet.addRow(rowData);
+            console.log(`➕ Inserted EK5 kit row for ${rowData['SKU']}`);
+        }
+        return true;
+    }
+
+    // Default: Master sheet upsert using existing flow
+    await upsertBySku(rowData);
+    return true;
+}
+
+/**
+ * Save EK5 kit data to the dedicated kits sheet
+ * @param {object} kitRowData - { 'SKU', 'Tipo de Producto', 'Contenido del Kit', 'Tecnología', 'Filtro Principal (Ref)', 'Duty' }
+ */
+async function saveKitToSheet(kitRowData) {
+    await ensureSheetExists(KIT_SHEET_NAME, KIT_HEADERS);
+    await upsertRow(kitRowData, KIT_SHEET_NAME);
 }
 
 // ============================================================================
@@ -4186,6 +4263,10 @@ module.exports = {
     appendToSheet,
     upsertBySku,
     syncToSheets,
+    // Kits EK5 helpers
+    ensureSheetExists,
+    upsertRow,
+    saveKitToSheet,
     // Export interno para pruebas y validaciones locales
     buildRowData,
     pingSheets

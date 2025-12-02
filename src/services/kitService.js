@@ -43,6 +43,12 @@ async function processHDKits(maintenanceKits) {
   const col = db.collection('maintenance_kits');
   let saved = 0;
   for (const kit of Array.isArray(maintenanceKits) ? maintenanceKits : []) {
+    // --- 🛑 FILTRO DE OBSOLETOS ---
+    const statusRaw = `${kit?.lifecycleStatus || ''} ${kit?.status || ''} ${kit?.statusDescription || ''}`.toUpperCase();
+    if (statusRaw.includes('OBSOLETE') || statusRaw.includes('DISCONTINUED')) {
+      console.log(`[INFO] Kit ignorado por ser obsoleto: ${kit?.partNumber || 'N/A'}`);
+      continue;
+    }
     const ek5 = deriveEk5Sku(kit?.partNumber);
     if (!ek5) continue;
     const { contenido_estructurado, descripcion_contenido } = summarizeComponents(kit?.components || kit?.items || []);
@@ -66,4 +72,7 @@ async function processHDKits(maintenanceKits) {
 module.exports = {
   processHDKits,
   KIT_PREFIX_HD,
+  // Export helpers for reuse in sheet integration
+  deriveEk5Sku,
+  summarizeComponents,
 };

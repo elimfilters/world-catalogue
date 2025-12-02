@@ -22,6 +22,10 @@ async function doFetch(url) {
   }
 }
 
+// Kits EK5 helpers and Sheets integration
+const { processHDKits, deriveEk5Sku, summarizeComponents } = require('./kitService');
+const { saveKitToSheet } = require('./syncSheetsService');
+
 // ---- Helpers ---------------------------------------------------------------
 
 function toNumberSafe(v) {
@@ -295,7 +299,28 @@ async function enrichHDWithFleetguard(masterData, options) {
     const dutyIsHD = String(md.duty || md.duty_type || '').toUpperCase() === 'HD';
     if (dutyIsHD && Array.isArray(dj.maintenanceKits) && dj.maintenanceKits.length > 0) {
       console.log(`Procesando Kits HD (EK5) para ${skuInterno}...`);
-      await kitService.processHDKits(dj.maintenanceKits);
+      await processHDKits(dj.maintenanceKits);
+      // Guardar en hoja separada KITS_EK5
+      for (const kit of dj.maintenanceKits) {
+        // --- 🛑 FILTRO DE OBSOLETOS ---
+        const statusRaw = `${kit?.lifecycleStatus || ''} ${kit?.status || ''} ${kit?.statusDescription || ''}`.toUpperCase();
+        if (statusRaw.includes('OBSOLETE') || statusRaw.includes('DISCONTINUED')) {
+          console.log(`[INFO] Kit ignorado por ser obsoleto (sheet): ${kit?.partNumber || 'N/A'}`);
+          continue;
+        }
+        const newKitSku = deriveEk5Sku(kit?.partNumber);
+        if (!newKitSku) continue;
+        const { descripcion_contenido } = summarizeComponents(kit?.components || kit?.items || []);
+        const sheetRowData = {
+          'SKU': newKitSku,
+          'Tipo de Producto': 'Kit de Mantenimiento',
+          'Contenido del Kit': descripcion_contenido,
+          'Tecnología': 'ELIMTEK™ Standard',
+          'Filtro Principal (Ref)': skuInterno,
+          'Duty': 'HD'
+        };
+        try { await saveKitToSheet(sheetRowData); } catch (e) { console.log(`⚠️  Save kit to sheet failed: ${e.message}`); }
+      }
     }
   } catch (kitErr) {
     console.log(`⚠️  EK5 kit processing skipped: ${kitErr.message}`);
@@ -327,4 +352,3 @@ module.exports = {
   mapFleetguardToFinal,
   enrichHDWithFleetguard,
 };
-const kitService = require('./kitService');
