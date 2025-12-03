@@ -33,6 +33,8 @@ const KIT_HEADERS = [
     'Filtro Principal (Ref)',
     'Duty'
 ];
+// KITS_EK3 sheet name (LD)
+const KIT_EK3_SHEET_NAME = process.env.KITS_EK3_SHEET_NAME || 'KITS_EK3';
 
 // Column mapping (new exact headers from Sheet Master)
 const COLUMNS = {
@@ -259,8 +261,10 @@ async function ensureSheetExists(sheetName, headers) {
 async function upsertRow(rowData, targetSheetName) {
     const name = targetSheetName || null;
 
-    if (name === KIT_SHEET_NAME) {
-        const { sheet } = await ensureSheetExists(KIT_SHEET_NAME, KIT_HEADERS);
+    // If a target sheet name is provided (e.g., KITS_EK5 or KITS_EK3), perform sheet-specific upsert by 'SKU'
+    if (name) {
+        const headers = KIT_HEADERS; // Both EK5 and EK3 share the same column layout
+        const { sheet } = await ensureSheetExists(name, headers);
         const rows = await sheet.getRows();
         const skuUpper = String(rowData['SKU'] || '').trim().toUpperCase();
         const matches = rows.filter(r => String(r['SKU'] || '').trim().toUpperCase() === skuUpper);
@@ -273,10 +277,10 @@ async function upsertRow(rowData, targetSheetName) {
             for (let i = 1; i < matches.length; i++) {
                 try { await matches[i].delete(); } catch (_) {}
             }
-            console.log(`☑️ Upserted EK5 kit row for ${rowData['SKU']}`);
+            console.log(`☑️ Upserted kit row in '${name}' for ${rowData['SKU']}`);
         } else {
             await sheet.addRow(rowData);
-            console.log(`➕ Inserted EK5 kit row for ${rowData['SKU']}`);
+            console.log(`➕ Inserted kit row in '${name}' for ${rowData['SKU']}`);
         }
         return true;
     }
@@ -293,6 +297,15 @@ async function upsertRow(rowData, targetSheetName) {
 async function saveKitToSheet(kitRowData) {
     await ensureSheetExists(KIT_SHEET_NAME, KIT_HEADERS);
     await upsertRow(kitRowData, KIT_SHEET_NAME);
+}
+
+/**
+ * Save EK3 kit data to the dedicated kits sheet
+ * @param {object} kitRowData - row with headers KIT_HEADERS
+ */
+async function saveKitToSheetLD(kitRowData) {
+    await ensureSheetExists(KIT_EK3_SHEET_NAME, KIT_HEADERS);
+    await upsertRow(kitRowData, KIT_EK3_SHEET_NAME);
 }
 
 // ============================================================================
@@ -4267,6 +4280,8 @@ module.exports = {
     ensureSheetExists,
     upsertRow,
     saveKitToSheet,
+    // Kits EK3 helper
+    saveKitToSheetLD,
     // Export interno para pruebas y validaciones locales
     buildRowData,
     pingSheets
