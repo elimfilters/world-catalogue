@@ -52,39 +52,10 @@ async function resolveBaseData(normCode) {
   };
 }
 
-console.warn("[DETECT][POLICY] Campos incompletos para SKU", {
-  code,
-  norm,
-  family,
-  duty,
-  last4,
-  policy,
-});
-
-if (!family || !duty || !last4) {
-  return {
-    success: true,
-    query: norm,
-    error: null,
-    details: "Partial resolution: missing family/duty/last4 (policy relaxed).",
-    policy: {
-      ...policy,
-      enforceInviolable: false,
-    },
-    resolution_level: "partial",
-    sku: null,
-    norm,
-    duty_type: duty || null,
-    family: family || null,
-    meta: {
-      family,
-      duty,
-      last4,
-      row,
-    },
-  };
-}
-
+/**
+ * Genera un SKU ELIM a partir de family/duty/last4.
+ * Ajusta la lógica a tu convención real.
+ */
 function generateSku({ family, duty, last4 }) {
   if (!family || !duty || !last4) return null;
   return `E-${family}-${duty}-${last4}`;
@@ -127,8 +98,15 @@ async function detectFilter(code, policyOverride = {}) {
 
   const { family, duty, last4, row } = base;
 
-  // 🔧 AQUÍ ESTABA TU BLOQUE DE POLICY VIOLATION ORIGINAL
-  // LO RELAJAMOS PARA QUE NO BLOQUEE CON 422
+  // Log de política + modo relajado
+  console.warn("[DETECT][POLICY] Campos incompletos para SKU", {
+    code,
+    norm,
+    family,
+    duty,
+    last4,
+    policy,
+  });
 
   if (!family || !duty || !last4) {
     return {
