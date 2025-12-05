@@ -532,16 +532,19 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         // Fallback: intentar resolver OEMâ†’FRAM con mapa curado solo si el duty es LD
         if (skuPolicyConfig.allowLdFramCanonization && (!scraperResult || !scraperResult.last4) && duty === 'LD') {
             try {
-                // const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
-                // const framResolved = resolveFramByCuratedOEM(query);
-                // if (framResolved) {
-                    const fr2 = await validateFramCode(framResolved);
-                    if (fr2 && fr2.last4) {
-                        scraperResult = fr2;
-                        duty = 'LD';
-                        console.log(`âœ… Resuelto vÃ­a mapa curado OEMâ†’FRAM (LD): ${query} â†’ ${framResolved}`);
-                    }
-                }
+    // const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
+    // const framResolved = resolveFramByCuratedOEM(query);
+    if (framResolved) {
+        const fr2 = await validateFramCode(framResolved);
+        if (fr2 && fr2.last4) {
+            scraperResult = fr2;
+            duty = 'LD';
+            console.log(`✅ Resuelto vía mapa curado OEM→FRAM (LD): ${query} → ${framResolved}`);
+        }
+    }
+} catch (fallbackErr) {
+    console.log(`⚠️  Error en fallback OEM→FRAM (LD): ${fallbackErr.message}`);
+}
             } catch (fallbackErr) {
                 console.log(`âš ï¸  Error en fallback OEMâ†’FRAM (LD): ${fallbackErr.message}`);
             }
