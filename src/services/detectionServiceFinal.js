@@ -44,26 +44,24 @@ async function tryOemFallback(oemCode, duty, familyHint) {
   const key = canonKey(oemCode);
   const meta = OEM_XREF[key] || null;
 
-  // Intentar resolver por reglas de prefijo OEM si no hay metadata directa
-  let oemResolved = null;
-  try {
-    const { resolveFamilyDutyByOEMPrefix } = require('../config/oemPrefixRules');
-    oemResolved = resolveFamilyDutyByOEMPrefix(String(oemCode || ''), duty) || null;
-  } catch (_) {
-    oemResolved = null;
-  }
+          // Fallback: intentar resolver OEM→FRAM con mapa curado solo si el duty es LD
+        if (skuPolicyConfig.allowLdFramCanonization && (!scraperResult || !scraperResult.last4) && duty === 'LD') {
+            try {
+                const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
+                const framResolved = resolveFramByCuratedOEM(query);
 
-  const family = (meta && meta.family) || (oemResolved && oemResolved.family) || familyHint || null;
-  let effectiveDuty = duty || (oemResolved && oemResolved.duty) || null;
-
-  // Sin familia no se puede generar SKU, respetando política de precisión
-  if (!family) return null;
-  // Si todavía no hay duty, no generar SKU (prefijo requiere duty)
-  if (!effectiveDuty) return null;
-
-  const last4 = extract4Digits(oemCode);
-  const sku = generateSKU(family, effectiveDuty, last4);
-  if (!sku || sku.error) return null;
+                if (framResolved) {
+                    const fr2 = await validateFramCode(framResolved);
+                    if (fr2 && fr2.last4) {
+                        scraperResult = fr2;
+                        duty = 'LD';
+                        console.log(`✅ Resuelto vía mapa curado OEM→FRAM (LD): ${query} → ${framResolved}`);
+                    }
+                }
+            } catch (fallbackErr) {
+                console.log(`⚠️  Error en fallback OEM→FRAM (LD): ${fallbackErr.message}`);
+            }
+        }
 
   // Lógica pura: sin persistencia ni datos por defecto
   const oemClean = [oemCode];
