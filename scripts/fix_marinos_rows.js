@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Saneamiento de filas en Google Sheet 'Marinos':
-// - Reubica textos de mensaje mal ubicados en columnas de especificaciones a la columna 'message'
-// - Inicializa 'query' y 'normsku' a partir de 'sku' cuando falten
+// - Normaliza 'query' con prefixMap.normalize
+// - Asegura que 'normsku' esté en mayúsculas si existe
 // - Mantiene datos existentes; no borra especificaciones reales
 
 const path = require('path');
@@ -10,13 +10,7 @@ try { require('dotenv').config({ path: path.join(__dirname, '..', '.env') }); } 
 const { initSheet, getOrCreateMarinosSheet } = require('../src/services/marineImportService');
 const prefixMap = require('../src/config/prefixMap');
 
-const MESSAGE_TOKENS = new Set([
-  'SKU ya existe en Master',
-  'Listo para upsert en Master',
-  'SKU guardado en Marinos'
-]);
-
-// Columnas de especificación añadidas (objetivo para reubicar mensajes mal colocados)
+// Columnas de especificación (referencia)
 const SPEC_COLUMNS = [
   'height_mm','outer_diameter_mm','thread_size','micron_rating',
   'operating_temperature_min_c','operating_temperature_max_c','fluid_compatibility','disposal_method',
@@ -34,43 +28,24 @@ async function run({ dryRun = false } = {}) {
   const rows = await sheet.getRows();
 
   let processed = 0;
-  let movedMessages = 0;
-  let initializedQuery = 0;
-  let initializedNormsku = 0;
+  let normalizedQuery = 0;
+  let uppercasedNormsku = 0;
 
   for (const row of rows) {
     let changed = false;
 
-    // Reubicar mensajes mal colocados
-    for (const col of SPEC_COLUMNS) {
-      const val = row[col];
-      const s = String(val || '').trim();
-      if (!s) continue;
-      if (MESSAGE_TOKENS.has(s)) {
-        // Mover a message (apend si ya existe)
-        const curMsg = String(row.message || '').trim();
-        row.message = curMsg ? `${curMsg}; ${s}` : s;
-        row[col] = '';
-        movedMessages++;
-        changed = true;
-      }
+    // Normalizar 'query' si trae valor
+    const qRaw = String(row.query || '').trim();
+    if (qRaw) {
+      const qNorm = prefixMap.normalize(qRaw);
+      if (qNorm !== qRaw) { row.query = qNorm; normalizedQuery++; changed = true; }
     }
 
-    // Inicializar query desde sku si falta
-    const sku = String(row.sku || '').toUpperCase().trim();
-    if (sku) {
-      const q = String(row.query || '').trim();
-      if (!q) {
-        row.query = prefixMap.normalize(sku);
-        initializedQuery++;
-        changed = true;
-      }
-      const ns = String(row.normsku || '').toUpperCase().trim();
-      if (!ns) {
-        row.normsku = sku;
-        initializedNormsku++;
-        changed = true;
-      }
+    // Asegurar 'normsku' en mayúsculas
+    const nsRaw = String(row.normsku || '').trim();
+    if (nsRaw) {
+      const nsUp = nsRaw.toUpperCase();
+      if (nsUp !== nsRaw) { row.normsku = nsUp; uppercasedNormsku++; changed = true; }
     }
 
     if (changed && !dryRun) {
@@ -84,9 +59,8 @@ async function run({ dryRun = false } = {}) {
     dryRun,
     rows_total: rows.length,
     rows_changed: processed,
-    moved_messages: movedMessages,
-    initialized_query: initializedQuery,
-    initialized_normsku: initializedNormsku
+    normalized_query: normalizedQuery,
+    uppercased_normsku: uppercasedNormsku
   }, null, 2));
 }
 

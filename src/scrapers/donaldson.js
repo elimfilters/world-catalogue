@@ -242,7 +242,9 @@ const P55_FUEL_EXCEPTIONS = new Set([
   'P551329',
   'P551313',
   'P551311',
-  'P551421'
+  'P551421',
+  // Corrección solicitada: P550440 no es OIL, clasificar como FUEL
+  'P550440'
 ]);
 
 /**
@@ -324,27 +326,63 @@ function detectFamilyFromCode(code) {
  * Find Donaldson code from cross-reference
  */
 function findDonaldsonCode(inputCode) {
-    const normalized = inputCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-    
+    const normalized = String(inputCode || '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+
+    // Helper: canonicalize AF/RS codes → prefix + digits (drop suffix letters)
+    function canonAfRs(token) {
+        const up = String(token || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const m = up.match(/^(AF|RS)(\d{3,})([A-Z]*)$/);
+        if (!m) return null;
+        const prefix = m[1];
+        const digits = m[2];
+        return `${prefix}${digits}`;
+    }
+
     // Direct lookup
     if (DONALDSON_DATABASE[normalized]) {
         return normalized;
     }
-    
-    // Search in cross-references
+
+    // AF/RS canonical direct lookup (e.g., AF25139M → AF25139)
+    const afrsCanon = canonAfRs(normalized);
+    if (afrsCanon && DONALDSON_DATABASE[afrsCanon]) {
+        return afrsCanon;
+    }
+
+    // Search in cross-references with robust normalization
     for (const [donaldsonCode, filterData] of Object.entries(DONALDSON_DATABASE)) {
-        if (filterData.cross_references) {
-            for (const [xrefCode, targetCode] of Object.entries(filterData.cross_references)) {
-                const xrefNormalized = xrefCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                if (xrefNormalized === normalized || 
-                    xrefNormalized.includes(normalized) || 
-                    normalized.includes(xrefNormalized)) {
-                    return donaldsonCode;
-                }
+        const xrefs = filterData?.cross_references || {};
+        for (const [xrefCode] of Object.entries(xrefs)) {
+            const xrefNormalized = String(xrefCode || '')
+                .toUpperCase()
+                .replace(/[^A-Z0-9]/g, '');
+
+            // Exact or substring matches
+            if (
+                xrefNormalized === normalized ||
+                xrefNormalized.includes(normalized) ||
+                normalized.includes(xrefNormalized)
+            ) {
+                return donaldsonCode;
+            }
+
+            // AF/RS canonical comparison (digits-only base)
+            const xrefAfRs = canonAfRs(xrefNormalized);
+            if (afrsCanon && xrefAfRs && afrsCanon === xrefAfRs) {
+                return donaldsonCode;
+            }
+
+            // Digits-only fallback for AF/RS (e.g., RS-3518 vs RS3518M)
+            const inputDigits = (normalized.match(/^(AF|RS)(\d{3,})/) || [])[2];
+            const xrefDigits = (xrefNormalized.match(/^(AF|RS)(\d{3,})/) || [])[2];
+            if (inputDigits && xrefDigits && inputDigits === xrefDigits) {
+                return donaldsonCode;
             }
         }
     }
-    
+
     return null;
 }
 

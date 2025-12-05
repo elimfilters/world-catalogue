@@ -4,6 +4,7 @@ const { scraperBridge } = require('../scrapers/scraperBridge');
 const { generateSKU, generateEM9SubtypeSKU, generateEM9SSeparatorSKU, generateET9SystemSKU, generateET9FElementSKU } = require('../sku/generator');
 const { getMedia } = require('../utils/mediaMapper');
 const { searchInSheet, buildRowData } = require('./syncSheetsService');
+const { extractParkerSpecs, extractMercurySpecs, extractSierraSpecs } = require('./technicalSpecsScraper');
 
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID || '1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U';
 const MARINOS_TITLE = 'Marinos';
@@ -35,36 +36,19 @@ async function initSheet() {
   return doc;
 }
 
-// Header schema for 'Marinos' tab: preserve existing order and append requested columns
+// Esquema de encabezados para la pestaña 'Marinos' ajustado a la lista solicitada
 const INPUT_HEADERS = [
-  // Existing inputs and hints (preserved to avoid data misalignment)
-  'code',
-  'brand_hint',
-  'family_hint',
-  'duty_hint',
-  'description',
-  'oem_codes_raw',
-  'cross_reference_raw',
-  'notes',
-  'engine_applications_raw',
-  'equipment_applications_raw',
-  'oem_codes_extra_raw',
-  'cross_reference_extra_raw',
-  // Existing outputs
+  'query',
   'normsku',
-  'sku',
-  'media_type',
   'duty_type',
   'type',
   'subtype',
-  'oem_codes',
-  'cross_reference',
-  'engine_applications',
-  'equipment_applications',
-  'status',
-  'message',
-  // Requested additions (appended to preserve existing data positions)
-  'query',
+  'description',
+  'media_type',
+  'oem_codes_raw',
+  'cross_reference_raw',
+  'engine_applications_raw',
+  'equipment_applications_raw',
   'height_mm',
   'outer_diameter_mm',
   'thread_size',
@@ -156,7 +140,9 @@ function decideSkuAndFamily(codeRaw, duty, familyHint) {
   }
   if (String(family).toUpperCase() === 'MARINE') {
     const base = 'FUEL';
-    sku = generateEM9SubtypeSKU(base, require('../utils/digitExtractor').extract4Digits(up));
+    // Usar extracción alfanumérica para coherencia con el generador EM9-F/O/A
+    const { extract4Alnum } = require('../utils/digitExtractor');
+    sku = generateEM9SubtypeSKU(base, extract4Alnum(up));
     return { sku, family: 'MARINE' };
   }
   // Fallback generic
@@ -169,13 +155,18 @@ async function importMarinos({ dryRun = true } = {}) {
   const sheet = await getOrCreateMarinosSheet(doc);
   const rows = await sheet.getRows();
   const results = [];
+  // Umbral mínimo para considerar una lista "rica" y permitir sobrescritura
+  const MIN_APP_THRESHOLD = 6;
 
   for (const row of rows) {
-    const code = String(row.code || '').trim();
+    const code = String(row.query || '').trim();
     if (!code) continue;
+    // Normaliza y persiste 'query' si difiere
+    const queryNorm = prefixMap.normalize(code);
+    if (row.query !== queryNorm) row.query = queryNorm;
     const hint = prefixMap.resolveBrandFamilyDutyByPrefix(code) || {};
-    const duty = row.duty_hint || hint.duty || 'HD';
-    const familyHint = row.family_hint || hint.family || null;
+    const duty = row.duty_type || hint.duty || 'HD';
+    const familyHint = row.type || hint.family || null;
 
     let scraper = await scraperBridge(code, duty);
     // If scraper did not classify family, use hint
@@ -184,54 +175,129 @@ async function importMarinos({ dryRun = true } = {}) {
     const media_type = getMedia(famFinal, duty);
 
     const oemA = toArray(row.oem_codes_raw);
-    const oemB = toArray(row.oem_codes_extra_raw);
     const crossA = toArray(row.cross_reference_raw);
-    const crossB = toArray(row.cross_reference_extra_raw);
-    const engines = toArray(row.engine_applications_raw);
-    const equipments = toArray(row.equipment_applications_raw);
+    const enginesRaw = toArray(row.engine_applications_raw);
+    const equipmentsRaw = toArray(row.equipment_applications_raw);
 
-    const oem_codes = Array.from(new Set([code, ...oemA, ...oemB]));
-    const cross_reference = Array.from(new Set([...(scraper?.cross || []), ...crossA, ...crossB]));
+    const oem_codes = Array.from(new Set([code, ...oemA]));
+    const cross_reference = Array.from(new Set([...(scraper?.cross || []), ...crossA]));
 
   const existing = await searchInSheet(sku);
   const isDuplicate = !!existing;
 
   row.normsku = sku;
-  row.sku = sku;
   row.media_type = media_type;
   row.duty_type = duty;
   row.type = famFinal;
   row.subtype = /^R(12|15|20|25|45|60|90|120)(T|S)$/i.test(code) ? 'SEPARATOR' : (/^\d{3,5}(MA|FH)\b/.test(code) ? 'SYSTEM' : (/^(2010|2020|2040)/.test(code) ? 'ELEMENT' : ''));
-  row.oem_codes = JSON.stringify(oem_codes);
-    row.cross_reference = JSON.stringify(cross_reference);
-    row.engine_applications = JSON.stringify(engines);
-    row.equipment_applications = JSON.stringify(equipments);
-    row.status = isDuplicate ? 'DUPLICATE' : 'OK';
-    row.message = isDuplicate ? 'SKU ya existe en Master' : 'Listo para upsert en Master';
+    // ===== Enriquecimiento técnico MARINE (micron/flow/apps/cross) =====
+    try {
+      const sourceUp = String(scraper?.source || '').toUpperCase();
+      let specs = null;
+      if (sourceUp === 'PARKER') {
+        specs = await extractParkerSpecs(code);
+      } else if (sourceUp === 'MERCRUISER') {
+        specs = await extractMercurySpecs(code);
+      } else if (sourceUp === 'SIERRA') {
+        specs = await extractSierraSpecs(code);
+      }
+
+      if (specs) {
+        const perf = specs.performance || {};
+        const tech = specs.technical_details || {};
+        // Micron rating
+        if (perf.micron_rating && String(row.micron_rating || '').trim() !== String(perf.micron_rating)) {
+          row.micron_rating = String(perf.micron_rating);
+        }
+        // Compute rated_flow_gpm from available units
+        const toGpm = (p) => {
+          if (!p) return '';
+          if (p.flow_gph) { const n = Number(p.flow_gph); return isFinite(n) && n > 0 ? (n/60).toFixed(2) : ''; }
+          if (p.flow_lph) { const n = Number(p.flow_lph); return isFinite(n) && n > 0 ? (n/3.785411784/60).toFixed(2) : ''; }
+          if (p.flow_lpm) { const n = Number(p.flow_lpm); return isFinite(n) && n > 0 ? (n/3.785411784).toFixed(2) : ''; }
+          return '';
+        };
+        const gpm = toGpm(perf);
+        if (gpm && String(row.rated_flow_gpm || '').trim() !== String(gpm)) {
+          row.rated_flow_gpm = String(gpm);
+        }
+        // Fluid compatibility (fill if empty)
+        if (tech.fluid_compatibility && !String(row.fluid_compatibility || '').trim()) {
+          row.fluid_compatibility = String(tech.fluid_compatibility);
+        }
+        // Applications into *_raw columns
+        const names = (arr) => {
+          const a = Array.isArray(arr) ? arr : [];
+          return a.map(x => (typeof x === 'string' ? x : (x?.name || ''))).map(s => s.trim()).filter(Boolean);
+        };
+        const enginesScraped = names(specs.engine_applications);
+        const equipmentsScraped = names(specs.equipment_applications);
+
+        if (sourceUp === 'PARKER' || sourceUp === 'SIERRA') {
+          // Consolidación con guardrail de volumen: no reemplazar lista rica por una pobre
+          const enginesMergedList = (
+            enginesScraped.length >= MIN_APP_THRESHOLD
+              ? enginesScraped
+              : (enginesRaw.length >= MIN_APP_THRESHOLD
+                  ? Array.from(new Set([ ...enginesRaw, ...enginesScraped ]))
+                  : enginesScraped)
+          );
+          const enginesNext = enginesMergedList.join(', ');
+          if (enginesNext !== (row.engine_applications_raw || '').trim()) {
+            row.engine_applications_raw = enginesNext;
+          }
+
+          const equipmentsMergedList = (
+            equipmentsScraped.length >= MIN_APP_THRESHOLD
+              ? equipmentsScraped
+              : (equipmentsRaw.length >= MIN_APP_THRESHOLD
+                  ? Array.from(new Set([ ...equipmentsRaw, ...equipmentsScraped ]))
+                  : (equipmentsScraped.length ? equipmentsScraped : equipmentsRaw))
+          );
+          const equipmentsNext = equipmentsMergedList.join(', ');
+          if (equipmentsNext !== (row.equipment_applications_raw || '').trim()) {
+            row.equipment_applications_raw = equipmentsNext;
+          }
+        } else {
+          // Default accumulate behavior for other sources
+          const enginesNext = Array.from(new Set([ ...enginesRaw, ...enginesScraped ])).join(', ');
+          const equipmentsNext = Array.from(new Set([ ...equipmentsRaw, ...equipmentsScraped ])).join(', ');
+          if (enginesNext && enginesNext !== (row.engine_applications_raw || '').trim()) {
+            row.engine_applications_raw = enginesNext;
+          }
+          if (equipmentsNext && equipmentsNext !== (row.equipment_applications_raw || '').trim()) {
+            row.equipment_applications_raw = equipmentsNext;
+          }
+        }
+        // OEM & Cross raw consolidation
+        const oemNext = Array.from(new Set([ ...oem_codes, ...(specs.oem_codes || []) ])).join(', ');
+        if (oemNext && oemNext !== (row.oem_codes_raw || '').trim()) {
+          row.oem_codes_raw = oemNext;
+        }
+        if (sourceUp === 'PARKER' || sourceUp === 'SIERRA') {
+          // Overwrite cross references for PARKER/SIERRA using cleaned scraper output
+          const crossClean = (specs.cross_reference || []).map(s => (typeof s === 'string' ? s : String(s))).map(s => s.trim()).filter(Boolean);
+          const crossNext = crossClean.join(', ');
+          // Escribir incluso si vacío para limpiar ruido histórico
+          if (crossNext !== (row.cross_reference_raw || '').trim()) {
+            row.cross_reference_raw = crossNext;
+          }
+        } else {
+          const crossNext = Array.from(new Set([ ...cross_reference, ...(specs.cross_reference || []) ])).join(', ');
+          if (crossNext && crossNext !== (row.cross_reference_raw || '').trim()) {
+            row.cross_reference_raw = crossNext;
+          }
+        }
+      }
+    } catch (enrichErr) {
+      // No bloquear importación por fallo de enriquecimiento
+    }
+
+    // Solo persistimos campos con valor; los crudos ya están en la hoja
     await row.save();
 
-    if (!dryRun && !isDuplicate) {
-      const data = {
-        status: 'OK',
-        query_normalized: prefixMap.normalize(code),
-        code_input: code,
-        code_oem: code,
-        oem_codes,
-        duty,
-        family: famFinal,
-        sku,
-        media: media_type,
-        source: scraper?.source || 'OEM',
-        cross_reference,
-        applications: engines,
-        equipment_applications: equipments,
-        attributes: {
-          manufactured_by: 'ELIMFILTERS'
-        },
-        message: 'Importador Marinos'
-      };
-      await upsertBySku(data);
-    }
+    // Nota: No escribir en Hoja Master desde el importador de Marinos.
+    // Todas las operaciones quedan limitadas a la pestaña 'Marinos'.
 
     results.push({ code, sku, media_type, duty, family: famFinal, duplicate: isDuplicate });
   }
@@ -239,7 +305,7 @@ async function importMarinos({ dryRun = true } = {}) {
   return { ok: true, processed: results.length, results };
 }
 
-module.exports = { importMarinos, initSheet, getOrCreateMarinosSheet, seedMarinosRow };
+module.exports = { importMarinos, initSheet, getOrCreateMarinosSheet, seedMarinosRow, INPUT_HEADERS };
 
 /**
  * Upsert a detected Marine SKU into the 'Marinos' sheet (not Master).
@@ -263,27 +329,41 @@ async function upsertMarinosBySku(data) {
     return Array.from(new Set(arr.map(v => typeof v === 'string' ? v : (v?.toString?.() || '')).map(s => s.trim()).filter(Boolean))).join(', ');
   };
 
+  // Helper: excluir campos vacíos y no definidos
+  const pruneEmpty = (obj) => {
+    const allowed = new Set(INPUT_HEADERS);
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) {
+      if (!allowed.has(k)) continue;
+      if (v === null || v === undefined) continue;
+      if (typeof v === 'string' && v.trim() === '') continue;
+      if (Array.isArray(v) && v.length === 0) continue;
+      out[k] = v;
+    }
+    return out;
+  };
+
   const rowData = {
     // Base normalized fields
     ...base,
+    query: data.query_normalized || prefixMap.normalize(data.code_input || data.code_oem || ''),
     normsku: skuNorm,
-    sku: skuNorm,
     // Raw inputs
     oem_codes_raw: formatList(data.oem_codes),
     cross_reference_raw: formatList(data.cross_reference),
     engine_applications_raw: formatList((data.applications || []).map(a => a?.name || a)),
     equipment_applications_raw: formatList((data.equipment_applications || []).map(a => a?.name || a)),
-    // Operational
-    status: 'OK',
-    message: 'SKU guardado en Marinos'
+    // Campos operacionales removidos del esquema
   };
 
+  const clean = pruneEmpty(rowData);
+
   if (match) {
-    Object.entries(rowData).forEach(([k, v]) => { match[k] = v; });
+    Object.entries(clean).forEach(([k, v]) => { match[k] = v; });
     await match.save();
     console.log(`✅ Upserted to Google Sheet 'Marinos': ${skuNorm}`);
   } else {
-    await sheet.addRow(rowData);
+    await sheet.addRow(clean);
     console.log(`➕ Inserted into Google Sheet 'Marinos': ${skuNorm}`);
   }
 }

@@ -42,8 +42,19 @@ async function connect() {
     await filtersCollection.createIndex({ timestamp: -1 });
     // Clave única: normsku
     await filtersCollection.createIndex({ normsku: 1 }, { unique: true });
-    // Búsqueda de texto básica sobre código cliente
-    try { await filtersCollection.createIndex({ code_client: 'text' }); } catch (_) {}
+    // Índice de texto para búsqueda catálogo: equipment_applications + engine_applications
+    try {
+      // Eliminar cualquier índice de texto existente para crear uno compuesto
+      const idx = await filtersCollection.indexes();
+      const textNames = (Array.isArray(idx) ? idx : []).filter(ix => {
+        const k = ix && ix.key ? Object.values(ix.key) : [];
+        return Array.isArray(k) && k.some(v => String(v).toLowerCase() === 'text');
+      }).map(ix => ix.name).filter(Boolean);
+      for (const name of textNames) {
+        try { await filtersCollection.dropIndex(name); } catch (_) {}
+      }
+      await filtersCollection.createIndex({ equipment_applications: 'text', engine_applications: 'text' }, { name: 'fts_equipment_engine' });
+    } catch (_) {}
   } catch (e) {
     console.log('⚠️  Index creation skipped:', e.message);
   }
@@ -113,6 +124,61 @@ async function getAllFilters(filter = {}, limit = 100) {
   }
 }
 
+// Full-text catalog search over equipment/engine applications
+async function searchCatalogByText(term, { limit = 20, page = 1, project = null } = {}) {
+  try {
+    if (!hasMongoEnv()) return [];
+    await connect();
+    const q = String(term || '').trim();
+    if (!q) return [];
+    const skip = Math.max(0, (Number(page) - 1) * Number(limit));
+    const baseProjection = {
+      normsku: 1,
+      sku: 1,
+      code_client: 1,
+      code_oem: 1,
+      family: 1,
+      duty: 1,
+      equipment_applications: 1,
+      engine_applications: 1,
+      oem_codes: 1,
+      cross_reference: 1,
+      media: 1,
+      source: 1,
+      timestamp: 1,
+      score: { $meta: 'textScore' }
+    };
+    const projection = project && typeof project === 'object' ? { ...baseProjection, ...project } : baseProjection;
+
+    const cursor = filtersCollection
+      .find({ $text: { $search: q } }, { projection })
+      .sort({ score: { $meta: 'textScore' } })
+      .skip(skip)
+      .limit(Number(limit));
+
+    const results = await cursor.toArray();
+    return results.map(doc => ({
+      score: doc.score,
+      normsku: doc.normsku,
+      sku: doc.sku,
+      code_client: doc.code_client,
+      code_oem: doc.code_oem,
+      family: doc.family,
+      duty: doc.duty,
+      equipment_applications: Array.isArray(doc.equipment_applications) ? doc.equipment_applications : [],
+      engine_applications: Array.isArray(doc.engine_applications) ? doc.engine_applications : [],
+      oem_codes: Array.isArray(doc.oem_codes) ? doc.oem_codes : [],
+      cross_reference: Array.isArray(doc.cross_reference) ? doc.cross_reference : [],
+      media: doc.media,
+      source: doc.source,
+      timestamp: doc.timestamp
+    }));
+  } catch (e) {
+    console.log('⚠️  searchCatalogByText error:', e.message);
+    return [];
+  }
+}
+
 // Write operations
 async function saveToCache(data) {
   try {
@@ -132,8 +198,25 @@ async function saveToCache(data) {
     const toArray = (v) => {
       if (!v) return [];
       if (Array.isArray(v)) return v;
-      return String(v).split(',').map(s => s.trim()).filter(Boolean);
+      // Regla definitiva: dividir por coma + espacio
+      return String(v).split(', ').map(s => s.trim()).filter(Boolean);
     };
+
+    // Guardrail de Persistencia: VOL_LOW
+    const eqAppsArr = Array.isArray(data.equipment_applications) ? data.equipment_applications : toArray(data.equipment_applications);
+    const enAppsArr = Array.isArray(data.engine_applications) ? data.engine_applications : toArray(data.engine_applications || data.applications);
+    const uniq = (arr) => new Set((Array.isArray(arr) ? arr : []).map(s => String(s || '').toLowerCase())).size;
+    const eqCount = uniq(eqAppsArr);
+    const enCount = uniq(enAppsArr);
+    const minRequired = 6;
+    if (eqCount < minRequired || enCount < minRequired) {
+      const msg = `VOL_LOW: insufficient applications (equipment=${eqCount}, engine=${enCount}, min=${minRequired})`;
+      console.log(`⚠️  ${msg}`);
+      const err = new Error(msg);
+      err.code = 'VOL_LOW';
+      err.status = 400;
+      throw err;
+    }
 
     const document = {
       code_client: data.query || data.code_client,
@@ -160,6 +243,10 @@ async function saveToCache(data) {
     };
     return await filtersCollection.insertOne(document);
   } catch (e) {
+    if (String(e?.code).toUpperCase() === 'VOL_LOW' || e?.status === 400 || /VOL_LOW/i.test(String(e?.message || ''))) {
+      // Propagar el error de calidad para que el caller devuelva 400
+      throw e;
+    }
     console.log('⚠️  saveToCache error:', e.message);
     return null;
   }
@@ -179,6 +266,7 @@ module.exports = {
   updateCache,
   deleteFromCache,
   getAllFilters,
+  searchCatalogByText,
   getCacheStats,
   clearCache,
 };

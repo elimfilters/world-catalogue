@@ -1,5 +1,7 @@
 {
-  "68324623AA": { "brand": "MOPAR", "family": "OIL" },
-  "68335191AA": { "brand": "MOPAR", "family": "OIL" },
-  "1R0750": { "brand": "CATERPILLAR", "family": "FUEL" }
+  "23518480": {
+    "brand": "DETROIT DIESEL",
+    "family": "OIL",
+    "notes": "Detroit Diesel OEM spin-on oil filter code. Prefer OEM brand/family over cross refs."
+  }
 }

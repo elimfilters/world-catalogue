@@ -57,13 +57,26 @@ async function extractDonaldsonSpecs(code) {
         
         // Donaldson product page URL
         const url = `https://shop.donaldson.com/store/es-us/product/${code}`;
-        const response = await fetchWithRetries(url, {
-            timeout: 15000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept-Language': 'es-US,es;q=0.9,en;q=0.8'
-            }
-        }, 3, 1200);
+        let response;
+        try {
+            response = await fetchWithRetries(url, {
+                timeout: 15000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept-Language': 'es-US,es;q=0.9,en;q=0.8'
+                }
+            }, 3, 1200);
+        } catch (errEs) {
+            // Fallback a EN-US si la tienda ES-US devuelve 5xx
+            const urlEn = `https://shop.donaldson.com/store/en-us/product/${code}`;
+            response = await fetchWithRetries(urlEn, {
+                timeout: 15000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9,es;q=0.6'
+                }
+            }, 2, 1500);
+        }
 
         const $ = cheerio.load(response.data);
         const specs = {
@@ -744,39 +757,41 @@ async function extractFramSpecs(code) {
             return yr;
         }
         try {
-            const tables = $('table');
-            const apps = [];
-            tables.each((ti, tbl) => {
-                const headers = [];
-                $(tbl).find('thead th, tr:first-child th, tr:first-child td').each((hi, h) => {
-                    headers.push($(h).text().trim().toLowerCase());
-                });
-                const hasYear = headers.some(h => h.includes('year'));
-                const hasMake = headers.some(h => h.includes('make'));
-                const hasModel = headers.some(h => h.includes('model'));
-                if (!(hasYear && hasMake && hasModel)) return;
+            if ($) {
+                const tables = $('table');
+                const apps = [];
+                tables.each((ti, tbl) => {
+                    const headers = [];
+                    $(tbl).find('thead th, tr:first-child th, tr:first-child td').each((hi, h) => {
+                        headers.push($(h).text().trim().toLowerCase());
+                    });
+                    const hasYear = headers.some(h => h.includes('year'));
+                    const hasMake = headers.some(h => h.includes('make'));
+                    const hasModel = headers.some(h => h.includes('model'));
+                    if (!(hasYear && hasMake && hasModel)) return;
 
-                $(tbl).find('tbody tr, tr').slice(1).each((ri, row) => {
-                    const cells = $(row).find('td');
-                    if (cells.length < 3) return;
-                    const yearRaw = $(cells.get(0)).text().trim();
-                    const make = $(cells.get(1)).text().trim();
-                    const model = $(cells.get(2)).text().trim();
-                    const years = normalizeYearRange(yearRaw);
-                    const name = `${make} ${model}`.trim();
-                    if (make && model) {
-                        apps.push({ name, years });
-                    }
+                    $(tbl).find('tbody tr, tr').slice(1).each((ri, row) => {
+                        const cells = $(row).find('td');
+                        if (cells.length < 3) return;
+                        const yearRaw = $(cells.get(0)).text().trim();
+                        const make = $(cells.get(1)).text().trim();
+                        const model = $(cells.get(2)).text().trim();
+                        const years = normalizeYearRange(yearRaw);
+                        const name = `${make} ${model}`.trim();
+                        if (make && model) {
+                            apps.push({ name, years });
+                        }
+                    });
                 });
-            });
-            if (apps.length > 0) {
-                // Deduplicar por nombre+años y limitar
-                const map = new Map();
-                for (const a of apps) {
-                    const key = `${a.name.toUpperCase()}|${a.years}`;
-                    if (!map.has(key)) map.set(key, a);
+                if (apps.length > 0) {
+                    // Deduplicar por nombre+años y limitar
+                    const map = new Map();
+                    for (const a of apps) {
+                        const key = `${a.name.toUpperCase()}|${a.years}`;
+                        if (!map.has(key)) map.set(key, a);
+                    }
+                    specs.equipment_applications = Array.from(map.values()).slice(0, 20);
                 }
-                specs.equipment_applications = Array.from(map.values()).slice(0, 20);
             }
         } catch (appsErr) {
             // Ignore errors; fallback abajo
@@ -826,7 +841,7 @@ async function extractFramSpecs(code) {
         }
         if (specs.equipment_applications.length === 0) {
             // Fallback si no se encontró tabla
-            const applicationText = $('.applications, .fits').text();
+            const applicationText = $ ? $('.applications, .fits').text() : '';
             const vehicleMatches = applicationText.match(/(?:Ford|Chevrolet|GM|Toyota|Honda|Nissan|Dodge|Ram|Jeep)[^,\n]*/gi);
             if (vehicleMatches) {
                 const eqMap = new Map();
@@ -1103,7 +1118,7 @@ async function extractParkerSpecs(code) {
         specs.performance.flow_gph = String(gph);
         specs.performance.flow_lph = gphToLph(gph);
     }
-    // Aplicaciones típicas marinas
+    // Bases por defecto
     specs.engine_applications = [
         { name: 'Marine Diesel Engines', years: '' },
         { name: 'Outboard Engines', years: '' },
@@ -1114,9 +1129,272 @@ async function extractParkerSpecs(code) {
         { name: 'Yachts', years: '' },
         { name: 'Marine Generators', years: '' }
     ];
-    // OEM y cross (mínimo: incluir el mismo código)
+    // OEM por defecto: incluir el mismo código
     specs.oem_codes = [up];
     specs.cross_reference = [];
+
+    // Scraping externo en distribuidores para refuerzo de cross y aplicaciones específicas
+    try {
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+        const sourceCounts = { engines: {}, equipment: {} };
+        const originFromUrl = (u) => {
+            try {
+                const s = String(u || '');
+                const proxMatch = s.match(/r\.jina\.ai\/https?:\/\/([^\/]+)/i);
+                if (proxMatch) return proxMatch[1].toLowerCase();
+                const h = new URL(s).hostname; return String(h || 'unknown').toLowerCase();
+            } catch (_) { return 'unknown'; }
+        };
+        // Conteo por fuente (dominio) para reporte (ya definido arriba)
+        const candidates = [
+            // Fisheries Supply (búsqueda)
+            `https://r.jina.ai/http://www.fisheriessupply.com/search?query=${encodeURIComponent(up)}`,
+            // Defender (búsqueda)
+            `https://r.jina.ai/http://www.defender.com/search?search=${encodeURIComponent(up)}`,
+            // Crowley Marine (búsqueda)
+            `https://r.jina.ai/http://www.crowleymarine.com/search?q=${encodeURIComponent(up)}`,
+            // West Marine (búsqueda)
+            `https://r.jina.ai/http://www.westmarine.com/search?text=${encodeURIComponent(up)}`,
+            // Wholesale Marine (búsqueda)
+            `https://r.jina.ai/http://www.wholesalemarine.com/search.php?search_query=${encodeURIComponent(up)}`,
+            // iBoats (búsqueda)
+            `https://r.jina.ai/http://www.iboats.com/search?query=${encodeURIComponent(up)}`,
+            // PartsVu (búsqueda)
+            `https://r.jina.ai/http://www.partsvu.com/catalogsearch/result/?q=${encodeURIComponent(up)}`,
+            // MarineEngine (búsqueda)
+            `https://r.jina.ai/http://www.marineengine.com/parts/search/?q=${encodeURIComponent(up)}`,
+            // Marine Parts Source (búsqueda)
+            `https://r.jina.ai/http://www.marinepartssource.com/search?q=${encodeURIComponent(up)}`
+        ];
+
+        const crossSet = new Set();
+        const engSet = new Set();
+        const eqSet = new Set();
+
+        function makeProxiedAbsolute(href, baseUrl) {
+            try {
+                const abs = new URL(href, baseUrl);
+                return `https://r.jina.ai/http://${abs.host}${abs.pathname}${abs.search}`;
+            } catch (_) { return null; }
+        }
+
+        function extractDetailLinks($, baseUrl, codeToken) {
+            const upCode = String(codeToken || '').toUpperCase();
+            const links = new Set();
+            $('a[href]').each((_, a) => {
+                const href = String($(a).attr('href') || '').trim();
+                if (!href) return;
+                const txt = String($(a).text() || '').toUpperCase();
+                const hrefUp = href.toUpperCase();
+                const isLikelyDetail = /product|item|sku|detail|\bprod\b|\bp\//i.test(href);
+                const mentionsCode = hrefUp.includes(upCode) || txt.includes(upCode);
+                if (isLikelyDetail && mentionsCode) {
+                    const prox = makeProxiedAbsolute(href, baseUrl);
+                    if (prox) links.add(prox);
+                }
+            });
+            return Array.from(links);
+        }
+
+        function pushCrossTokens(text) {
+            const t = String(text || '');
+            // Buscar secciones típicas "Cross Reference" y pares MARCA + CÓDIGO
+            const lower = t.toLowerCase();
+            const sectIdx = lower.indexOf('cross');
+            const slice = sectIdx !== -1 ? t.slice(sectIdx, sectIdx + 6000) : t;
+            const brandCodePairs = (slice.match(/[A-Z][A-Z0-9 &()\/-]{2,}\s+[:\-]?\s*[A-Z0-9][A-Z0-9\-/, ]{2,}/g) || []);
+            for (const p of brandCodePairs) {
+                const m = p.split(/[:\-]/);
+                if (m.length >= 2) {
+                    const codesStr = m.slice(1).join('-');
+                    const tokens = codesStr.split(/[\s,\/]+/).map(s => s.trim()).filter(Boolean);
+                    for (const tok of tokens) {
+                        // Filtrar ruido: evitar palabras sueltas y números muy cortos
+                        if (/^[A-Z0-9][A-Z0-9\-]{2,}$/.test(tok) && /\d/.test(tok) && !/^(SKU|ITEM|UPC|MPN|MON|TUE|WED|THU|FRI|SAT|SUN|AM|PM)$/i.test(tok)) {
+                            crossSet.add(tok.toUpperCase());
+                        }
+                    }
+                }
+            }
+            // También capturar tokens sueltos con patrones típicos (WIX/FRAM/BALDWIN/DONALDSON)
+            const extra = (slice.match(/\b(WIX|FRAM|BALDWIN|DONALDSON|SIERRA|MERCURY|MERCRUISER|YAMAHA|VOLVO|YANMAR)\s*[A-Z0-9\-]{3,}\b/gi) || []);
+            for (const e of extra) {
+                const tok = e.split(/\s+/).slice(1).join(' ').trim();
+                const clean = tok.replace(/^[^A-Z0-9]+/, '').toUpperCase();
+                if (/^[A-Z0-9][A-Z0-9\-]{3,}$/.test(clean) && /\d/.test(clean) && !/(AM|PM)$/i.test(clean)) crossSet.add(clean);
+            }
+        }
+
+        function pushEngineApps(text) {
+            const body = String(text || '');
+            // Patrones de marcas y modelos marinos específicos
+            const brands = [
+                'VOLVO PENTA', 'YANMAR', 'CUMMINS', 'CATERPILLAR', 'PERKINS', 'MERCRUISER',
+                'YAMAHA', 'SUZUKI', 'HONDA', 'TOHATSU', 'EVINRUDE'
+            ];
+            // Modelos: combinaciones alfanuméricas comunes (D4-300, 4JH4, 6BTA, etc.)
+            const modelRegex = /\b([A-Z]{1,3}[0-9][A-Z0-9\-]{1,6}|[0-9][A-Z][A-Z0-9\-]{1,6})\b/g;
+            const U = body.toUpperCase();
+            for (const brand of brands) {
+                let idx = U.indexOf(brand);
+                while (idx !== -1) {
+                    const window = U.slice(idx, idx + 200);
+                    const models = Array.from(window.matchAll(modelRegex)).map(m => m[1]).filter(Boolean);
+                    if (models.length) {
+                        // Generar combinaciones marca+modelo
+                        for (const md of models.slice(0, 4)) {
+                            const name = `${brand} ${md}`.trim().replace(/[-–—]+$/,'');
+                            // Reglas de filtrado: requerir dígitos en el modelo y excluir ruido
+                            if (/\d/.test(md) && !/(AM|PM)/i.test(name)) {
+                                engSet.add(name.replace(/\s+/g, ' '));
+                            }
+                        }
+                    } else {
+                        // No registrar solo la marca para evitar ruido
+                    }
+                    idx = U.indexOf(brand, idx + brand.length);
+                }
+            }
+            // Capturar expresiones "Fits ... Engine" con marca y modelo
+            const fits = (U.match(/FITS\s+[A-Z][A-Z0-9 &]+?\s+(?:ENGINE|ENGINES)/g) || []).slice(0, 10);
+            for (const f of fits) {
+                const nm = f.replace(/FITS\s+/i, '').replace(/\s+(?:ENGINE|ENGINES)$/i, '').trim();
+                if (nm && nm.length >= 4 && /\d/.test(nm) && !/(AM|PM)/i.test(nm)) {
+                    engSet.add(nm);
+                }
+            }
+
+            // Patrones adicionales por marca para aumentar cobertura (Volvo, Yanmar, MerCruiser, etc.)
+            const extraPatterns = [
+                { brand: 'VOLVO PENTA', regex: /\bD[4-8]-\d{3}\b/g },
+                { brand: 'VOLVO PENTA', regex: /\bKAD\d{2}\b/g },
+                { brand: 'YANMAR', regex: /\b(?:4JH\d|3YM\d|6LY)\b/g },
+                { brand: 'PERKINS', regex: /\b(?:4\.108|M92)\b/g },
+                { brand: 'CUMMINS', regex: /\b(?:6BTA|QSB\d{3})\b/g },
+                { brand: 'CATERPILLAR', regex: /\b(?:3116|3126|3208)\b/g },
+                { brand: 'MERCRUISER', regex: /\b(?:3\.0L|4\.3L|5\.0L|5\.7L|350\s*MAG)\b/gi },
+                { brand: 'YAMAHA', regex: /\b(?:F\d{2,3}|V\d{2,3})\b/g },
+                { brand: 'SUZUKI', regex: /\bDF\d{2,3}\b/g },
+                { brand: 'HONDA', regex: /\bBF\d{2,3}\b/g },
+                { brand: 'TOHATSU', regex: /\bMFS\d{2,3}\b/g }
+            ];
+            for (const { brand, regex } of extraPatterns) {
+                const matches = U.match(regex) || [];
+                for (const m of matches.slice(0, 6)) {
+                    const name = `${brand} ${m}`.replace(/\s+/g, ' ').trim();
+                    if (/\d/.test(m) && !/(AM|PM)/i.test(name)) {
+                        engSet.add(name);
+                    }
+                }
+            }
+        }
+
+        function pushEquipmentApps(text) {
+            const U = String(text || '').toUpperCase();
+            // Generadores y equipos marinos con marca+modelo
+            const eqPatterns = [
+                { brand: 'ONAN', regex: /\b(?:MDK[A-Z]|Q[DNT][0-9]{2}|CUMMINS\s*ONAN\s*[A-Z0-9\-]{3,})\b/g },
+                { brand: 'KOHLER', regex: /\b(?:\d{5}GM|\d{2,3}REZ|\d{2,3}EOZ)\b/g },
+                { brand: 'NORTHERN LIGHTS', regex: /\b(?:M\d{2,3}|LUGGER\s*[A-Z0-9\-]{2,})\b/g },
+                { brand: 'WESTERBEKE', regex: /\b(?:\d{2,3}\s*K[Ww]|Westerbeke\s*[A-Z0-9\-]{2,})\b/gi }
+            ];
+            for (const { brand, regex } of eqPatterns) {
+                const matches = U.match(regex) || [];
+                for (const m of matches.slice(0, 6)) {
+                    const name = `${brand} ${m}`.replace(/\s+/g, ' ').trim();
+                    if (/\d/.test(m) && !/(AM|PM)/i.test(name)) {
+                        eqSet.add(name);
+                    }
+                }
+            }
+            // Genérico pero útil: Boats/Yachts si aparecen como entidades explícitas
+            if (/\bBOATS?\b/.test(U)) eqSet.add('Boats');
+            if (/\bYACHTS?\b/.test(U)) eqSet.add('Yachts');
+            if (/\bMARINE\s+GENERATORS?\b/.test(U)) eqSet.add('Marine Generators');
+        }
+
+        const detailUrls = new Set();
+        for (const url of candidates) {
+            try {
+                const res = await axios.get(url, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                const $ = cheerio.load(String(res.data || ''));
+                const text = $('body').text();
+                // Extraer cross y aplicaciones
+                pushCrossTokens(text);
+                const origin = originFromUrl(url);
+                const prevEng = engSet.size; const prevEq = eqSet.size;
+                pushEngineApps(text);
+                pushEquipmentApps(text);
+                const incEng = Math.max(0, engSet.size - prevEng);
+                const incEq = Math.max(0, eqSet.size - prevEq);
+                if (incEng) sourceCounts.engines[origin] = (sourceCounts.engines[origin] || 0) + incEng;
+                if (incEq) sourceCounts.equipment[origin] = (sourceCounts.equipment[origin] || 0) + incEq;
+                // Extraer enlaces a páginas de detalle
+                extractDetailLinks($, url, up).slice(0, 6).forEach(u => detailUrls.add(u));
+                // Intento de micraje y caudal
+                const micronMatch = text.match(/(?:micron|micraje)\s*[:\-]?\s*(\d{1,2})\s*\bmicron\b/i);
+                if (micronMatch && !specs.performance.micron_rating) specs.performance.micron_rating = micronMatch[1];
+                const flowMatch = text.match(/(?:flow\s*rate|caudal)\s*[:\-]?\s*([0-9]{1,4})\s*(?:gph|gallons per hour)/i);
+                if (flowMatch && !specs.performance.flow_gph) {
+                    const gphNum = Number(flowMatch[1]);
+                    specs.performance.flow_gph = String(gphNum);
+                    specs.performance.flow_lph = gphToLph(gphNum);
+                }
+            } catch (_) { /* continuar con siguiente candidato */ }
+        }
+
+        // Recorrer páginas de detalle recogidas para aumentar fidelidad de modelos/equipos
+        for (const durl of Array.from(detailUrls).slice(0, 10)) {
+            try {
+                const res = await axios.get(durl, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                const $ = cheerio.load(String(res.data || ''));
+                const text = $('body').text();
+                pushCrossTokens(text);
+                const dOrigin = originFromUrl(durl);
+                const prevEng = engSet.size; const prevEq = eqSet.size;
+                pushEngineApps(text);
+                pushEquipmentApps(text);
+                const incEng = Math.max(0, engSet.size - prevEng);
+                const incEq = Math.max(0, eqSet.size - prevEq);
+                if (incEng) sourceCounts.engines[dOrigin] = (sourceCounts.engines[dOrigin] || 0) + incEng;
+                if (incEq) sourceCounts.equipment[dOrigin] = (sourceCounts.equipment[dOrigin] || 0) + incEq;
+                const micronMatch = text.match(/(?:micron|micraje)\s*[:\-]?\s*(\d{1,2})\s*\bmicron\b/i);
+                if (micronMatch && !specs.performance.micron_rating) specs.performance.micron_rating = micronMatch[1];
+                const flowMatch = text.match(/(?:flow\s*rate|caudal)\s*[:\-]?\s*([0-9]{1,4})\s*(?:gph|gallons per hour)/i);
+                if (flowMatch && !specs.performance.flow_gph) {
+                    const gphNum = Number(flowMatch[1]);
+                    specs.performance.flow_gph = String(gphNum);
+                    specs.performance.flow_lph = gphToLph(gphNum);
+                }
+            } catch (_) { /* continuar aún si falla alguna */ }
+        }
+
+        // Aplicar resultados al objeto specs
+        if (engSet.size > 0) {
+            const uniqApps = Array.from(engSet).map(n => ({ name: n, years: '' }));
+            // Limitar a resultados representativos
+            specs.engine_applications = uniqApps.slice(0, 20);
+        }
+        if (eqSet.size > 0) {
+            const uniqEq = Array.from(eqSet).map(n => ({ name: n, years: '' }));
+            specs.equipment_applications = uniqEq.slice(0, 20);
+        }
+        specs.meta = Object.assign({}, specs.meta || {}, { source_counts: sourceCounts });
+        if (crossSet.size > 0) {
+            const banned = new Set(['OUTBOARD','ELECTRIC','MOTORS','FILTERS']);
+            const cleaned = Array.from(crossSet)
+                .map(s => s.replace(/\s+/g, ' ').trim())
+                .filter(s => /\d/.test(s))
+                .filter(s => !/(AM|PM)/i.test(s))
+                .filter(s => !banned.has(s));
+            specs.cross_reference = cleaned.slice(0, 30);
+        }
+    } catch (err) {
+        // No bloquear si scraping externo falla; mantener defaults
+        console.warn(`⚠️ Parker external scraping failed for ${up}: ${err.message}`);
+    }
+
     specs.found = true;
     return specs;
 }
@@ -1133,16 +1411,152 @@ async function extractMercurySpecs(code) {
     specs.technical_details.fluid_compatibility = 'Gasoline/Diesel (Marine)';
     // Micraje genérico marino si no hay sufijo
     if (!specs.performance.micron_rating) specs.performance.micron_rating = '10';
-    specs.engine_applications = [
-        { name: 'MerCruiser Marine Engines', years: '' },
-        { name: 'Mercury Outboard Engines', years: '' }
-    ];
-    specs.equipment_applications = [
-        { name: 'Boats', years: '' },
-        { name: 'Yachts', years: '' }
-    ];
+    // Intento: extraer cross Sierra y aplicaciones detalladas desde fuentes públicas
+    try {
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+        const candidates = [
+            // Mayor cobertura en distribuidores marinos
+            `https://r.jina.ai/http://www.fisheriessupply.com/search?query=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.defender.com/search?search=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.westmarine.com/search?text=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.wholesalemarine.com/search.php?search_query=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.crowleymarine.com/search?q=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.iboats.com/search?query=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.partsvu.com/catalogsearch/result/?q=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.marineengine.com/parts/search/?q=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.marinepartssource.com/search?q=${encodeURIComponent(up)}`
+        ];
+        const crossSet = new Set();
+        const engSet = new Set();
+        const eqSet = new Set();
+        function makeProxiedAbsolute(href, baseUrl) {
+            try {
+                const abs = new URL(href, baseUrl);
+                return `https://r.jina.ai/http://${abs.host}${abs.pathname}${abs.search}`;
+            } catch (_) { return null; }
+        }
+        function extractDetailLinks($, baseUrl, codeToken) {
+            const upCode = String(codeToken || '').toUpperCase();
+            const links = new Set();
+            $('a[href]').each((_, a) => {
+                const href = String($(a).attr('href') || '').trim();
+                if (!href) return;
+                const txt = String($(a).text() || '').toUpperCase();
+                const hrefUp = href.toUpperCase();
+                const isLikelyDetail = /product|item|sku|detail|\bprod\b|\bp\//i.test(href);
+                const mentionsCode = hrefUp.includes(upCode) || txt.includes(upCode);
+                if (isLikelyDetail && mentionsCode) {
+                    const prox = makeProxiedAbsolute(href, baseUrl);
+                    if (prox) links.add(prox);
+                }
+            });
+            return Array.from(links);
+        }
+        const detailUrls = new Set();
+        for (const url of candidates) {
+            try {
+                const res = await axios.get(url, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                const body = String(res.data || '');
+                const $ = cheerio.load(body);
+                const text = $('body').text();
+                const origin = originFromUrl(url);
+                const prevEng = engSet.size; const prevEq = eqSet.size;
+                // Sierra cross pattern
+                (text.match(/\b18-?\d{4,5}\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                // Other Mercury variant patterns (Q/A suffix or hyphenless)
+                (text.match(/\b\d{2}-?\d{4,7}[A-Z]?\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                // Brand + code cross patterns (Quicksilver, Mallory)
+                (text.match(/\bQuicksilver\s*35-?[A-Za-z0-9]{5,8}[A-Z]?\b/gi) || []).forEach(s => crossSet.add(String(s).trim().toUpperCase()));
+                (text.match(/\bMallory\s+9-?\d{3,5}\b/gi) || []).forEach(s => crossSet.add(String(s).trim().toUpperCase()));
+                // Applications: focus on Brand + model/displacement patterns (avoid generic long phrases)
+                // Keep equipment minimal to avoid noisy generic matches
+                (text.match(/\bBoats?\b/gi) || []).forEach(() => eqSet.add('Boats'));
+                (text.match(/\bYachts?\b/gi) || []).forEach(() => eqSet.add('Yachts'));
+                // Expanded engine model patterns (Brand + displacement/model)
+                const extraEng = [];
+                text.replace(/\b(MerCruiser|Mercury)\s+([0-9]\.[0-9]L)\b/g, (_, b, m) => extraEng.push(`${b} ${m}`));
+                text.replace(/\b(MerCruiser|Mercury)\s+(Verado|SeaPro|Pro\s*XS)\s*([0-9]{2,3})\b/gi, (_, b, series, hp) => extraEng.push(`${b} ${series} ${hp}`));
+                text.replace(/\bYamaha\s+(F[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Yamaha ${m}`));
+                text.replace(/\bOMC\s+([0-9]\.[0-9]L)\b/g, (_, m) => extraEng.push(`OMC ${m}`));
+                text.replace(/\bVolvo Penta\s+(D[4-8]-\d{3}|KAD\d{2}|[0-9]\.[0-9][A-Z]{0,3})\b/g, (_, m) => extraEng.push(`Volvo Penta ${m}`));
+                text.replace(/\bYanmar\s+(?:4JH\d|3YM\d|6LY)\b/gi, (_, m) => extraEng.push(`Yanmar ${m.toUpperCase()}`));
+                text.replace(/\bCummins\s+(?:6BTA|QSB\d{3})\b/gi, (_, m) => extraEng.push(`Cummins ${m.toUpperCase()}`));
+                text.replace(/\bCaterpillar\s+(?:3116|3126|3208)\b/gi, (_, m) => extraEng.push(`Caterpillar ${m}`));
+                text.replace(/\bPerkins\s+(?:4\.108|M92)\b/gi, (_, m) => extraEng.push(`Perkins ${m}`));
+                text.replace(/\bEvinrude\s+(E-?TEC\s+[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Evinrude ${m}`));
+                extraEng.forEach(s => engSet.add(s));
+                // Generadores/equipos marinos
+                (text.match(/\b(?:MDK[A-Z]|Q[DNT][0-9]{2})\b/g) || []).forEach(x => eqSet.add(`ONAN ${x}`));
+                (text.match(/\b(?:\d{5}GM|\d{2,3}REZ|\d{2,3}EOZ)\b/g) || []).forEach(x => eqSet.add(`KOHLER ${x}`));
+                (text.match(/\bM\d{2,3}\b/g) || []).forEach(x => eqSet.add(`NORTHERN LIGHTS ${x}`));
+                (text.match(/\b\d{2,3}\s*K[Ww]\b/g) || []).forEach(x => eqSet.add(`WESTERBEKE ${x}`));
+                const incEng = Math.max(0, engSet.size - prevEng);
+                const incEq = Math.max(0, eqSet.size - prevEq);
+                if (incEng) sourceCounts.engines[origin] = (sourceCounts.engines[origin] || 0) + incEng;
+                if (incEq) sourceCounts.equipment[origin] = (sourceCounts.equipment[origin] || 0) + incEq;
+                extractDetailLinks($, url, up).slice(0, 6).forEach(u => detailUrls.add(u));
+            } catch (_) {}
+        }
+        // Visit detail pages for higher-fidelity patterns
+        for (const durl of Array.from(detailUrls).slice(0, 10)) {
+            try {
+                const res = await axios.get(durl, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                const $ = cheerio.load(String(res.data || ''));
+                const text = $('body').text();
+                const dOrigin = originFromUrl(durl);
+                const prevEng = engSet.size; const prevEq = eqSet.size;
+                (text.match(/\b18-?\d{4,5}\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                (text.match(/\b\d{2}-?\d{4,7}[A-Z]?\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                const extraEng = [];
+                text.replace(/\b(MerCruiser|Mercury)\s+([0-9]\.[0-9]L)\b/g, (_, b, m) => extraEng.push(`${b} ${m}`));
+                text.replace(/\b(MerCruiser|Mercury)\s+(Verado|SeaPro|Pro\s*XS)\s*([0-9]{2,3})\b/gi, (_, b, series, hp) => extraEng.push(`${b} ${series} ${hp}`));
+                text.replace(/\bYamaha\s+(F[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Yamaha ${m}`));
+                text.replace(/\bOMC\s+([0-9]\.[0-9]L)\b/g, (_, m) => extraEng.push(`OMC ${m}`));
+                text.replace(/\bVolvo Penta\s+(D[4-8]-\d{3}|KAD\d{2}|[0-9]\.[0-9][A-Z]{0,3})\b/g, (_, m) => extraEng.push(`Volvo Penta ${m}`));
+                text.replace(/\bYanmar\s+(?:4JH\d|3YM\d|6LY)\b/gi, (_, m) => extraEng.push(`Yanmar ${m.toUpperCase()}`));
+                text.replace(/\bCummins\s+(?:6BTA|QSB\d{3})\b/gi, (_, m) => extraEng.push(`Cummins ${m.toUpperCase()}`));
+                text.replace(/\bCaterpillar\s+(?:3116|3126|3208)\b/gi, (_, m) => extraEng.push(`Caterpillar ${m}`));
+                text.replace(/\bPerkins\s+(?:4\.108|M92)\b/gi, (_, m) => extraEng.push(`Perkins ${m}`));
+                text.replace(/\bEvinrude\s+(E-?TEC\s+[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Evinrude ${m}`));
+                extraEng.forEach(s => engSet.add(s));
+                // Generadores/equipos marinos
+                (text.match(/\b(?:MDK[A-Z]|Q[DNT][0-9]{2})\b/g) || []).forEach(x => eqSet.add(`ONAN ${x}`));
+                (text.match(/\b(?:\d{5}GM|\d{2,3}REZ|\d{2,3}EOZ)\b/g) || []).forEach(x => eqSet.add(`KOHLER ${x}`));
+                (text.match(/\bM\d{2,3}\b/g) || []).forEach(x => eqSet.add(`NORTHERN LIGHTS ${x}`));
+                (text.match(/\b\d{2,3}\s*K[Ww]\b/g) || []).forEach(x => eqSet.add(`WESTERBEKE ${x}`));
+                (text.match(/\bBoats?\b/gi) || []).forEach(() => eqSet.add('Boats'));
+                const incEng2 = Math.max(0, engSet.size - prevEng);
+                const incEq2 = Math.max(0, eqSet.size - prevEq);
+                if (incEng2) sourceCounts.engines[dOrigin] = (sourceCounts.engines[dOrigin] || 0) + incEng2;
+                if (incEq2) sourceCounts.equipment[dOrigin] = (sourceCounts.equipment[dOrigin] || 0) + incEq2;
+                (text.match(/\bYachts?\b/gi) || []).forEach(() => eqSet.add('Yachts'));
+            } catch (_) {}
+        }
+        const scrapedCross = Array.from(crossSet).slice(0, 15);
+        const scrapedEng = Array.from(engSet).slice(0, 10).map(n => ({ name: n, years: '' }));
+        const scrapedEq = Array.from(eqSet).slice(0, 10).map(n => ({ name: n, years: '' }));
+        if (scrapedCross.length) specs.cross_reference = scrapedCross;
+        if (scrapedEng.length) specs.engine_applications = scrapedEng;
+        if (scrapedEq.length) specs.equipment_applications = scrapedEq;
+        specs.meta = specs.meta || {};
+        specs.meta.source_counts = sourceCounts;
+    } catch (_) {}
+    // Apply fallbacks conservatively only if scraping yielded no specifics
+    if (!Array.isArray(specs.engine_applications) || specs.engine_applications.length === 0) {
+        specs.engine_applications = [
+            { name: 'MerCruiser Marine Engines', years: '' },
+            { name: 'Mercury Outboard Engines', years: '' }
+        ];
+    }
+    if (!Array.isArray(specs.equipment_applications) || specs.equipment_applications.length === 0) {
+        specs.equipment_applications = [
+            { name: 'Boats', years: '' },
+            { name: 'Yachts', years: '' }
+        ];
+    }
     specs.oem_codes = [up];
-    specs.cross_reference = [];
+    if (!Array.isArray(specs.cross_reference)) specs.cross_reference = [];
     specs.found = true;
     return specs;
 }
@@ -1158,16 +1572,124 @@ async function extractSierraSpecs(code) {
     specs.technical_details.marine_grade = 'Yes';
     specs.technical_details.fluid_compatibility = 'Gasoline/Diesel (Marine)';
     if (!specs.performance.micron_rating) specs.performance.micron_rating = '10';
-    specs.engine_applications = [
-        { name: 'MerCruiser Marine Engines', years: '' },
-        { name: 'Yamaha/OMC Marine Engines', years: '' }
-    ];
-    specs.equipment_applications = [
-        { name: 'Boats', years: '' },
-        { name: 'Yachts', years: '' }
-    ];
+    // Intento: extraer cross Mercury y aplicaciones detalladas desde fuentes públicas
+    try {
+        const axios = require('axios');
+        const cheerio = require('cheerio');
+        const candidates = [
+            `https://r.jina.ai/http://www.fisheriessupply.com/search?query=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.defender.com/search?search=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.westmarine.com/search?text=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.wholesalemarine.com/search.php?search_query=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.crowleymarine.com/search?q=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.iboats.com/search?query=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.partsvu.com/catalogsearch/result/?q=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.marineengine.com/parts/search/?q=${encodeURIComponent(up)}`,
+            `https://r.jina.ai/http://www.marinepartssource.com/search?q=${encodeURIComponent(up)}`
+        ];
+        const crossSet = new Set();
+        const engSet = new Set();
+        const eqSet = new Set();
+        function makeProxiedAbsolute(href, baseUrl) {
+            try { const abs = new URL(href, baseUrl); return `https://r.jina.ai/http://${abs.host}${abs.pathname}${abs.search}`; } catch (_) { return null; }
+        }
+        function extractDetailLinks($, baseUrl, codeToken) {
+            const upCode = String(codeToken || '').toUpperCase();
+            const links = new Set();
+            $('a[href]').each((_, a) => {
+                const href = String($(a).attr('href') || '').trim(); if (!href) return;
+                const txt = String($(a).text() || '').toUpperCase();
+                const hrefUp = href.toUpperCase();
+                const isLikelyDetail = /product|item|sku|detail|\bprod\b|\bp\//i.test(href);
+                const mentionsCode = hrefUp.includes(upCode) || txt.includes(upCode);
+                if (isLikelyDetail && mentionsCode) { const prox = makeProxiedAbsolute(href, baseUrl); if (prox) links.add(prox); }
+            });
+            return Array.from(links);
+        }
+        const detailUrls = new Set();
+        for (const url of candidates) {
+            try {
+                const res = await axios.get(url, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                const body = String(res.data || '');
+                const $ = cheerio.load(body);
+                const text = $('body').text();
+                // Mercury cross pattern
+                (text.match(/\b\d{2}-?\d{4,7}[A-Z]?\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                // Sierra alternative patterns
+                (text.match(/\b18-?\d{4,5}\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                // Brand + code cross patterns
+                (text.match(/\bQuicksilver\s*35-?[A-Za-z0-9]{5,8}[A-Z]?\b/gi) || []).forEach(s => crossSet.add(String(s).trim().toUpperCase()));
+                (text.match(/\bMallory\s+9-?\d{3,5}\b/gi) || []).forEach(s => crossSet.add(String(s).trim().toUpperCase()));
+                // Applications: focus on Brand + model/displacement patterns (avoid generic long phrases)
+                (text.match(/\bBoats?\b/gi) || []).forEach(() => eqSet.add('Boats'));
+                (text.match(/\bYachts?\b/gi) || []).forEach(() => eqSet.add('Yachts'));
+                (text.match(/\b(?:MDK[A-Z]|Q[DNT][0-9]{2})\b/g) || []).forEach(x => eqSet.add(`ONAN ${x}`));
+                (text.match(/\b(?:\d{5}GM|\d{2,3}REZ|\d{2,3}EOZ)\b/g) || []).forEach(x => eqSet.add(`KOHLER ${x}`));
+                (text.match(/\bM\d{2,3}\b/g) || []).forEach(x => eqSet.add(`NORTHERN LIGHTS ${x}`));
+                (text.match(/\b\d{2,3}\s*K[Ww]\b/g) || []).forEach(x => eqSet.add(`WESTERBEKE ${x}`));
+                // Expanded engine model patterns
+                const extraEng = [];
+                text.replace(/\b(MerCruiser|Mercury)\s+([0-9]\.[0-9]L)\b/g, (_, b, m) => extraEng.push(`${b} ${m}`));
+                text.replace(/\b(MerCruiser|Mercury)\s+(Verado|SeaPro|Pro\s*XS)\s*([0-9]{2,3})\b/gi, (_, b, series, hp) => extraEng.push(`${b} ${series} ${hp}`));
+                text.replace(/\bYamaha\s+(F[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Yamaha ${m}`));
+                text.replace(/\bOMC\s+([0-9]\.[0-9]L)\b/g, (_, m) => extraEng.push(`OMC ${m}`));
+                text.replace(/\bVolvo Penta\s+(D[4-8]-\d{3}|KAD\d{2}|[0-9]\.[0-9][A-Z]{0,3})\b/g, (_, m) => extraEng.push(`Volvo Penta ${m}`));
+                text.replace(/\bYanmar\s+(?:4JH\d|3YM\d|6LY)\b/gi, (_, m) => extraEng.push(`Yanmar ${m.toUpperCase()}`));
+                text.replace(/\bCummins\s+(?:6BTA|QSB\d{3})\b/gi, (_, m) => extraEng.push(`Cummins ${m.toUpperCase()}`));
+                text.replace(/\bCaterpillar\s+(?:3116|3126|3208)\b/gi, (_, m) => extraEng.push(`Caterpillar ${m}`));
+                text.replace(/\bPerkins\s+(?:4\.108|M92)\b/gi, (_, m) => extraEng.push(`Perkins ${m}`));
+                text.replace(/\bEvinrude\s+(E-?TEC\s+[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Evinrude ${m}`));
+                extraEng.forEach(s => engSet.add(s));
+                extractDetailLinks($, url, up).slice(0, 6).forEach(u => detailUrls.add(u));
+            } catch (_) {}
+        }
+        for (const durl of Array.from(detailUrls).slice(0, 10)) {
+            try {
+                const res = await axios.get(durl, { timeout: 12000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                const $ = cheerio.load(String(res.data || ''));
+                const text = $('body').text();
+                (text.match(/\b\d{2}-?\d{4,7}[A-Z]?\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                (text.match(/\b18-?\d{4,5}\b/g) || []).forEach(x => crossSet.add(x.replace(/\s+/g,'').toUpperCase()));
+                const extraEng = [];
+                text.replace(/\b(MerCruiser|Mercury)\s+([0-9]\.[0-9]L)\b/g, (_, b, m) => extraEng.push(`${b} ${m}`));
+                text.replace(/\b(MerCruiser|Mercury)\s+(Verado|SeaPro|Pro\s*XS)\s*([0-9]{2,3})\b/gi, (_, b, series, hp) => extraEng.push(`${b} ${series} ${hp}`));
+                text.replace(/\bVolvo Penta\s+(D[4-8]-\d{3}|KAD\d{2}|[0-9]\.[0-9][A-Z]{0,3})\b/g, (_, m) => extraEng.push(`Volvo Penta ${m}`));
+                text.replace(/\bYanmar\s+(?:4JH\d|3YM\d|6LY)\b/gi, (_, m) => extraEng.push(`Yanmar ${m.toUpperCase()}`));
+                text.replace(/\bCummins\s+(?:6BTA|QSB\d{3})\b/gi, (_, m) => extraEng.push(`Cummins ${m.toUpperCase()}`));
+                text.replace(/\bCaterpillar\s+(?:3116|3126|3208)\b/gi, (_, m) => extraEng.push(`Caterpillar ${m}`));
+                text.replace(/\bPerkins\s+(?:4\.108|M92)\b/gi, (_, m) => extraEng.push(`Perkins ${m}`));
+                text.replace(/\bYamaha\s+(F[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Yamaha ${m}`));
+                text.replace(/\bEvinrude\s+(E-?TEC\s+[0-9]{2,3})\b/g, (_, m) => extraEng.push(`Evinrude ${m}`));
+                extraEng.forEach(s => engSet.add(s));
+                (text.match(/\b(?:MDK[A-Z]|Q[DNT][0-9]{2})\b/g) || []).forEach(x => eqSet.add(`ONAN ${x}`));
+                (text.match(/\b(?:\d{5}GM|\d{2,3}REZ|\d{2,3}EOZ)\b/g) || []).forEach(x => eqSet.add(`KOHLER ${x}`));
+                (text.match(/\bM\d{2,3}\b/g) || []).forEach(x => eqSet.add(`NORTHERN LIGHTS ${x}`));
+                (text.match(/\b\d{2,3}\s*K[Ww]\b/g) || []).forEach(x => eqSet.add(`WESTERBEKE ${x}`));
+                (text.match(/\bBoats?\b/gi) || []).forEach(() => eqSet.add('Boats'));
+                (text.match(/\bYachts?\b/gi) || []).forEach(() => eqSet.add('Yachts'));
+            } catch (_) {}
+        }
+        const scrapedCross = Array.from(crossSet).slice(0, 15);
+        const scrapedEng = Array.from(engSet).slice(0, 20).map(n => ({ name: n, years: '' }));
+        const scrapedEq = Array.from(eqSet).slice(0, 12).map(n => ({ name: n, years: '' }));
+        if (scrapedCross.length) specs.cross_reference = scrapedCross;
+        if (scrapedEng.length) specs.engine_applications = scrapedEng;
+        if (scrapedEq.length) specs.equipment_applications = scrapedEq;
+    } catch (_) {}
+    if (!Array.isArray(specs.engine_applications) || specs.engine_applications.length === 0) {
+        specs.engine_applications = [
+            { name: 'MerCruiser Marine Engines', years: '' },
+            { name: 'Yamaha/OMC Marine Engines', years: '' }
+        ];
+    }
+    if (!Array.isArray(specs.equipment_applications) || specs.equipment_applications.length === 0) {
+        specs.equipment_applications = [
+            { name: 'Boats', years: '' },
+            { name: 'Yachts', years: '' }
+        ];
+    }
     specs.oem_codes = [up];
-    specs.cross_reference = [];
+    if (!Array.isArray(specs.cross_reference)) specs.cross_reference = [];
     specs.found = true;
     return specs;
 }

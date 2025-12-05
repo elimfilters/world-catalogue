@@ -127,7 +127,15 @@ async function main() {
       console.log(`✅ Upsert mínimo realizado para SKU: ${sku} (query_norm: ${queryNorm})`);
       successCount++;
     } catch (e) {
-      console.error(`⚠️ Falló procesamiento para ${sku}: ${e.message}`);
+      console.error(`⚠️ Falló procesamiento para ${sku}: ${e.message}. Intentando upsert mínimo...`);
+      try {
+        const data = { sku: sku, query_normalized: queryNorm, minimal: true };
+        await upsertBySku(data, { deleteDuplicates: true });
+        console.log(`✅ Upsert mínimo realizado tras excepción para SKU: ${sku}`);
+        successCount++;
+      } catch (inner) {
+        console.error(`❌ Fallback mínimo también falló para ${sku}: ${inner.message}`);
+      }
     }
   }
 

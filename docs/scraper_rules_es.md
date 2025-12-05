@@ -56,6 +56,10 @@ Estas reglas están listas para producción y alineadas con el flujo determinist
 - Consolidación: una fila por `sku`; alias en `cross_reference`; `query_norm = sku`.
 - Validación: tras escribir referencias, verificar que la búsqueda inversa devuelve la fila canónica para cada código (`OEM` y alias).
 - Campos vacíos: si la fuente es ambigua o no confiable, dejar vacío; nunca poner `N/A`.
+ - Columnas `A–E` (Identificación):
+   - En `HD`: deben provenir del scraper de Donaldson (código homologado oficial). Queda prohibido usar `OEM` si existe homologación Donaldson.
+   - En `LD`: deben reflejar la homologación FRAM en `A–E`. Si FRAM no fabrica el código, aplicar fallback OEM conforme a la política oficial.
+ - Columnas `F–AR` (Técnicas): se nutren exclusivamente del scraper técnico (Fleetguard y fuentes técnicas verificadas). Este scraper no participa en la creación del SKU, sólo en el enriquecimiento técnico.
 
 ## Ejemplo Aplicado (EL82100 / OIL / HD)
 - `oem_codes`: `P552100`
@@ -80,9 +84,10 @@ Estas reglas están listas para producción y alineadas con el flujo determinist
 - `ET9` (TURBINE SERIES HD, incl. `ET9-F` elementos) → validadores `Parker/Racor`.
 - `EM9` (MARINE HD/LD, incl. `EM9-S` separadores y `EM9-F/O/A` subtipos) → validadores `Parker/Racor`, `MerCruiser` y `Sierra`.
 
-Notas
-- Los validadores marinos están integrados en `scraperBridge` y proporcionan `last4` y `last4_alnum`.
-- `EM9/ET9` pueden usar los 4 últimos alfanuméricos para SKU cuando aplica.
+ Notas
+ - Los validadores marinos están integrados en `scraperBridge` y proporcionan `last4` y `last4_alnum`.
+ - `EM9/ET9` pueden usar los 4 últimos alfanuméricos para SKU cuando aplica.
+ - El `scraper de Fleetguard` sólo alimenta columnas técnicas (`F–AR`); no crea ni modifica el SKU.
 
 ## Flujo LD (FRAM) y Responsabilidades del Enriquecimiento
 

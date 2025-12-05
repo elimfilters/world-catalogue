@@ -13,10 +13,13 @@ const { extract4Digits, extract4Alnum } = require('../utils/digitExtractor');
 const { getMedia } = require('../utils/mediaMapper');
 const { noEquivalentFound } = require('../utils/messages');
 const { searchInSheet, upsertBySku } = require('./syncSheetsService');
-const { enrichHDWithFleetguard } = require('./fleetguardEnrichmentService');
+const { resolveAToD } = require('../utils/aToDResolver');
+const { enforceSkuPolicyInvariant } = require('./skuCreationPolicy');
+const { enrichHDWithFleetguard, enrichWithFleetguardAny } = require('./fleetguardEnrichmentService');
 const { enrichFramLD } = require('./framEnrichmentService');
 const { saveToCache } = require('./mongoService');
 const { upsertMarinosBySku } = require('./marineImportService');
+const { skuPolicyConfig } = require('../config/skuPolicyConfig');
 const { extractFramSpecs, extractDonaldsonSpecs, getDefaultSpecs, extractParkerSpecs, extractMercurySpecs, extractSierraSpecs } = require('../services/technicalSpecsScraper');
 // OEM dataset para fallback SOLO cuando el cÃ³digo no es ni Donaldson ni FRAM (Regla 3)
 let OEM_XREF = {};
@@ -40,19 +43,29 @@ function classifyInputCode(code) {
 async function tryOemFallback(oemCode, duty, familyHint) {
   const key = canonKey(oemCode);
   const meta = OEM_XREF[key] || null;
-  // Requisito estricto: solo proceder si el OEM estÃ¡ homologado en OEM_XREF
-  if (!meta) {
-    return null;
+
+  // Intentar resolver por reglas de prefijo OEM si no hay metadata directa
+  let oemResolved = null;
+  try {
+    const { resolveFamilyDutyByOEMPrefix } = require('../config/oemPrefixRules');
+    oemResolved = resolveFamilyDutyByOEMPrefix(String(oemCode || ''), duty) || null;
+  } catch (_) {
+    oemResolved = null;
   }
 
-  const family = meta.family || familyHint || null;
+  const family = (meta && meta.family) || (oemResolved && oemResolved.family) || familyHint || null;
+  let effectiveDuty = duty || (oemResolved && oemResolved.duty) || null;
+
+  // Sin familia no se puede generar SKU, respetando política de precisión
   if (!family) return null;
+  // Si todavía no hay duty, no generar SKU (prefijo requiere duty)
+  if (!effectiveDuty) return null;
 
   const last4 = extract4Digits(oemCode);
-  const sku = generateSKU(family, duty, last4);
+  const sku = generateSKU(family, effectiveDuty, last4);
   if (!sku || sku.error) return null;
 
-  // LÃ³gica pura: sin persistencia ni datos por defecto
+  // Lógica pura: sin persistencia ni datos por defecto
   const oemClean = [oemCode];
   const crossClean = [];
   const equipFinal = [];
@@ -61,7 +74,7 @@ async function tryOemFallback(oemCode, duty, familyHint) {
   const familyUpper = String(family).toUpperCase();
   const attributes = {
     manufactured_by: 'ELIMFILTERS',
-    oem_brand: meta?.brand || undefined
+    oem_brand: (meta && meta.brand) || (oemResolved && oemResolved.brand) || undefined
   };
 
   return {
@@ -71,16 +84,16 @@ async function tryOemFallback(oemCode, duty, familyHint) {
     code_input: normalize.code(oemCode),
     code_oem: normalize.code(oemCode),
     oem_codes: oemClean,
-    duty,
+    duty: effectiveDuty,
     family: familyUpper,
     sku,
-    media: getMedia(familyUpper, duty),
+    media: getMedia(familyUpper, effectiveDuty),
     source: 'OEM',
     cross_reference: crossClean,
     applications: engineFinal,
     equipment_applications: equipFinal,
     attributes,
-    message: 'Fallback OEM homologado: prefijo activo + Ãºltimos 4 del OEM'
+    message: 'Fallback OEM: prefijo por tipo + últimos 4 del OEM'
   };
 }
 
@@ -482,36 +495,24 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         
         const codeUpper = prefixMap.normalize(query);
 
-        // Initial duty via prefix map hint; fallback to FRAM-pattern LD vs HD
+        // NO fijar duty por patrón de código; se definirá por tipo de filtro
+        // (fabricante/familia/aplicaciones). El hint solo orienta en caso de ausencia.
         const hint = prefixMap.resolveBrandFamilyDutyByPrefix(codeUpper) || {};
-        let duty = hint.duty || (/^(CA|CF|CH|PH|TG|XG|HM|G|PS)\d/i.test(codeUpper) ? 'LD' : 'HD');
-        // Override: ECOGARD cabin 'XC' prefix should be treated as LD
-        try {
-            const prefixMatch = codeUpper.match(/^([A-Z]{1,4})/);
-            const prefix = prefixMatch ? prefixMatch[1] : '';
-            if (duty === 'HD' && prefix === 'XC') {
-                duty = 'LD';
-                console.log('ðŸ”„ Duty override â†’ LD for ECOGARD XC prefix');
-            }
-            // Override: WIX numeric XP series (e.g., 57356XP) are automotive LD
-            if (duty === 'HD' && /^\d{5}XP$/.test(codeUpper)) {
-                duty = 'LD';
-                console.log('ðŸ”„ Duty override â†’ LD for WIX XP numeric series');
-            }
-        } catch (_) {}
-        console.log(`âœ… Duty detected: ${duty} (init via prefix hint: ${hint.brand || 'N/A'})`);
+        let duty = null;
+        console.log(`ℹ️ Duty init: null (prefijo no determina duty). Hint brand=${hint.brand || 'N/A'}`);
 
         // Validar cÃ³digo con scrapers
         let scraperResult = await scraperBridge(query, duty);
 
         // Fallback HD: cruce curado aftermarket/OEM â†’ Donaldson (ej. BF7633 â†’ P551313)
-        if ((!scraperResult || !scraperResult.last4) && duty === 'HD') {
+        if ((!scraperResult || !scraperResult.last4)) {
             try {
                 const upHD = prefixMap.normalize(query);
                 const HD_CURATED_MAP = {
                     'BF7633': 'P551313',
                     // Regla de oro: Caterpillar OEM â†’ Donaldson
                     '1R0750': 'P551311',
+                    '1R1807': 'P551807',
                     '8041642': 'P828889'
                 };
                 const mapped = HD_CURATED_MAP[upHD];
@@ -520,7 +521,6 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
                     const don = await validateDonaldsonCode(mapped);
                     if (don && don.last4) {
                         scraperResult = don;
-                        duty = 'HD';
                         console.log(`âœ… Canonizado vÃ­a cruce curado HD (Baldwinâ†’Donaldson): ${query} â†’ ${mapped}`);
                     }
                 }
@@ -530,7 +530,7 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         }
 
         // Fallback: intentar resolver OEMâ†’FRAM con mapa curado solo si el duty es LD
-        if ((!scraperResult || !scraperResult.last4) && duty === 'LD') {
+        if (skuPolicyConfig.allowLdFramCanonization && (!scraperResult || !scraperResult.last4) && duty === 'LD') {
             try {
                 const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
                 const framResolved = resolveFramByCuratedOEM(query);
@@ -624,8 +624,25 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
             const looksFram = /^(CA|CF|CH|PH|TG|XG|HM|G|PS)\d/i.test(codeUpper);
             console.log(`âŒ Invalid code via scrapers: ${query}. looksDonaldson=${looksDonaldson} looksFram=${looksFram}`);
 
+            // Resolución HD para AF/RS a Donaldson si está permitido
+            if (skuPolicyConfig.allowHdAfRsDonaldsonResolution && duty === 'HD' && /^(AF\d{3,}|RS\d{3,})/i.test(codeUpper)) {
+                try {
+                    const { findDonaldsonCode, validateDonaldsonCode } = require('../scrapers/donaldson');
+                    const pcode = findDonaldsonCode(query);
+                    if (pcode) {
+                        const donRes = await validateDonaldsonCode(pcode);
+                        if (donRes && donRes.last4) {
+                            scraperResult = donRes;
+                            console.log(`âœ… Resuelto HD AF/RS â†’ Donaldson: ${query} â†’ ${pcode}`);
+                        }
+                    }
+                } catch (afrsErr) {
+                    console.log(`âš ï¸  Error resolviendo AF/RS a Donaldson: ${afrsErr.message}`);
+                }
+            }
+
             // Nueva regla: Si FRAM/Donaldson no lo fabrican, intentar fallback OEM con prefijo + Ãºltimos 4
-            if (looksDonaldson || looksFram) {
+            if (skuPolicyConfig.allowOemFallbackByPrefix && (looksDonaldson || looksFram)) {
                 const famHintA = (prefixMap.resolveBrandFamilyDutyByPrefix(query) || {}).family || hint.family;
                 const oemFallbackA = await tryOemFallback(query, duty, famHintA);
                 if (oemFallbackA) {
@@ -676,7 +693,7 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
                 }
             }
             // Regla 3: NO HD ni LD (no es Donaldson ni FRAM) â†’ fallback OEM
-            const oemFallback = await tryOemFallback(query, duty, hint.family);
+            const oemFallback = skuPolicyConfig.allowOemFallbackByPrefix ? await tryOemFallback(query, duty, hint.family) : null;
             if (oemFallback) {
                 console.log(`âœ… OEM fallback aplicado (Regla 3): ${query} â†’ ${oemFallback.sku}`);
                 return oemFallback;
@@ -702,14 +719,11 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         }
 
         // PolÃ­tica de homologaciÃ³n: HD requiere DONALDSON, LD requiere FRAM
-        // ExtensiÃ³n marina/turbina: aceptar OEM Parker/Racor (TURBINE SERIES)
-        // y MerCruiser/Sierra (MARINE) para permitir generaciÃ³n jerÃ¡rquica ET9/EM9
+        // Estricto: sin excepciones MARINE/TURBINE (según política del usuario)
         const familyUp = String(scraperResult.family || '').toUpperCase();
         const homologationOk = (
             (duty === 'HD' && sourceUp === 'DONALDSON') ||
-            (duty === 'LD' && sourceUp === 'FRAM') ||
-            (familyUp === 'TURBINE SERIES' && sourceUp === 'PARKER') ||
-            (familyUp === 'MARINE' && (sourceUp === 'PARKER' || sourceUp === 'MERCRUISER' || sourceUp === 'SIERRA'))
+            (duty === 'LD' && sourceUp === 'FRAM')
         );
         if (!homologationOk) {
             const codeUpper = prefixMap.normalize(query);
@@ -893,6 +907,22 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         // Determine family based on resolved code (prefer validated FRAM/DONALDSON code)
         const codeForFamily = String(scraperResult?.code || query || '').toUpperCase();
         let family = null;
+
+        // Hint OEM por prefijo: capturar como fallback, NO sobreescribir fabricante
+        // Regla global: HD → Donaldson, LD → FRAM. La familia se toma del fabricante
+        // cuando esté disponible; el prefijo OEM solo actúa si no logramos detectar familia.
+        let oemHintFamily = null;
+        let oemHintDuty = null;
+        try {
+            const { resolveFamilyDutyByOEMPrefix } = require('../config/oemPrefixRules');
+            const oemHint = resolveFamilyDutyByOEMPrefix(String(query || ''), duty);
+            if (oemHint && (oemHint.family || oemHint.duty)) {
+                if (oemHint.family) oemHintFamily = oemHint.family;
+                // Solo ajustar duty si aún no está fijado
+                if (oemHint.duty && !duty) oemHintDuty = oemHint.duty;
+                console.log(`ℹ️ OEM prefix hint captured: family=${oemHintFamily || 'null'} duty=${oemHintDuty || duty}`);
+            }
+        } catch (_) { /* no bloquear */ }
         // Prefer prefix hint family when available
         if (!family && hint.family) {
             family = hint.family;
@@ -906,12 +936,23 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         } else if (/^(G|PS)/.test(codeForFamily)) {
             family = 'FUEL';
         } else {
-            // Use scraper-derived family as hint
+            // Usar familia derivada del scraper del fabricante según duty
             if (duty === 'HD') {
                 family = detectFamilyHD(scraperResult.family);
             } else {
                 family = detectFamilyLD(scraperResult.family);
             }
+        }
+
+        // Aplicar fallback por prefijo OEM SOLO si la familia aún no se resolvió
+        if (!family && oemHintFamily) {
+            family = oemHintFamily;
+            console.log(`✅ OEM prefix fallback applied for family: ${family}`);
+        }
+        // Aplicar hint de duty por OEM si no estaba definido
+        if (!duty && oemHintDuty) {
+            duty = oemHintDuty;
+            console.log(`✅ OEM prefix fallback applied for duty: ${duty}`);
         }
 
         if (!family) {
@@ -972,35 +1013,18 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         // PASO 4: ENRIQUECER ESPECIFICACIONES (Engines/Equipment) Y GUARDAR EN MASTER
         // ---------------------------------------------------------------------
         console.log(`ðŸ’¾ Step 4: Enriching specs and saving to Google Sheet Master...`);
-        let specs;
-        try {
-            if (sourceUp === 'DONALDSON') {
-                specs = await extractDonaldsonSpecs(scraperResult.code);
-            } else if (sourceUp === 'FRAM') {
-                specs = await extractFramSpecs(scraperResult.code);
-            } else if (sourceUp === 'PARKER') {
-                specs = await extractParkerSpecs(scraperResult.code);
-            } else if (sourceUp === 'MERCRUISER') {
-                specs = await extractMercurySpecs(scraperResult.code);
-            } else if (sourceUp === 'SIERRA') {
-                specs = await extractSierraSpecs(scraperResult.code);
-            } else {
-                specs = getDefaultSpecs(scraperResult.code, scraperResult.source || (duty === 'HD' ? 'DONALDSON' : 'FRAM'));
-            }
-        } catch (e) {
-            specs = getDefaultSpecs(scraperResult.code, scraperResult.source || (duty === 'HD' ? 'DONALDSON' : 'FRAM'));
-        }
+        // Para columnas F–AR usaremos exclusivamente Fleetguard; evitar specs de otros scrapers
+        const specs = getDefaultSpecs(scraperResult.code, scraperResult.source || (duty === 'HD' ? 'DONALDSON' : 'FRAM'));
         
         const rawOEMList = [
-            ...(Array.isArray(scraperResult.attributes?.oem_numbers) ? scraperResult.attributes.oem_numbers : (scraperResult.oem || [])),
-            ...((specs?.technical_details?.oem_codes) || (specs?.oem_codes) || [])
+            ...(Array.isArray(scraperResult.attributes?.oem_numbers) ? scraperResult.attributes.oem_numbers : (scraperResult.oem || []))
         ];
         const rawCross = [
-            ...(scraperResult.cross || []),
-            ...((specs?.technical_details?.cross_reference) || (specs?.cross_reference) || [])
+            ...(scraperResult.cross || [])
         ];
-        const rawEquipApps = specs?.equipment_applications || scraperResult.applications || [];
-        const rawEngineApps = specs?.engine_applications || [];
+        // Aplicaciones serán pobladas por Fleetguard exclusivamente
+        const rawEquipApps = [];
+        const rawEngineApps = [];
         const oemClean = cleanOEMList(rawOEMList, duty);
         const crossClean = cleanCrossList(rawCross, duty, scraperResult.code, scraperResult.source);
         const equipClean = cleanAppsList(rawEquipApps, duty);
@@ -1012,6 +1036,30 @@ const engineFmt = preferBrandModelFormat(engineCons);
 const equipFmt = preferBrandModelFormat(equipCons);
 const engineFinal = ensureMinApps(engineFmt, duty, 'engine');
 const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
+
+        // Enforce policy before constructing and upserting master data
+        const policyProbe = enforceSkuPolicyInvariant({
+            sku,
+            family,
+            duty,
+            source: scraperResult.source,
+            code_oem: scraperResult.code,
+            code_input: query,
+            query_normalized: query,
+            last4: scraperResult.last4,
+            homologated_code: scraperResult.code,
+            fram_code: (String(scraperResult.source || '').toUpperCase() === 'FRAM') ? scraperResult.code : undefined,
+            donaldson_code: (String(scraperResult.source || '').toUpperCase() === 'DONALDSON') ? scraperResult.code : undefined
+        });
+        if (!policyProbe.ok) {
+            console.log(`⛔ Policy violation detected, skipping upsert: ${policyProbe.error}`);
+            return {
+                status: 'POLICY_VIOLATION',
+                query_normalized: query,
+                error: policyProbe.error,
+                valid: false
+            };
+        }
 
         let masterData = {
             query_normalized: query,
@@ -1028,26 +1076,8 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
             applications: engineFinal,
             equipment_applications: equipFinal,
             attributes: {
-                // Basic attributes from scraper
+                // Columnas A–E del scraper original
                 ...scraperResult.attributes,
-                // Specs from extractor (selected fields)
-                height_mm: specs?.dimensions?.height_mm,
-                outer_diameter_mm: specs?.dimensions?.outer_diameter_mm,
-                inner_diameter_mm: specs?.dimensions?.inner_diameter_mm,
-                thread_size: specs?.dimensions?.thread_size,
-                gasket_od_mm: specs?.dimensions?.gasket_od_mm,
-                iso_main_efficiency_percent: specs?.performance?.iso_main_efficiency_percent,
-                iso_test_method: specs?.performance?.iso_test_method,
-                micron_rating: specs?.performance?.micron_rating,
-                flow_gph: specs?.performance?.flow_gph,
-                flow_lph: specs?.performance?.flow_lph,
-                manufacturing_standards: specs?.technical_details?.manufacturing_standards,
-                certification_standards: specs?.technical_details?.certification_standards,
-                operating_temperature_min_c: specs?.technical_details?.operating_temperature_min_c,
-                operating_temperature_max_c: specs?.technical_details?.operating_temperature_max_c,
-                fluid_compatibility: specs?.technical_details?.fluid_compatibility,
-                service_life_hours: specs?.technical_details?.service_life_hours,
-                
                 // Description
                 description: scraperResult.family || family,
                 type: scraperResult.family,
@@ -1066,8 +1096,33 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
             oem_equivalent: scraperResult.code
         };
 
-        // LD Legal Protection & Enrichment (FRAM)
-        if (duty === 'LD' && String(scraperResult.source || '').toUpperCase() === 'FRAM') {
+        // Aplicar resolución canónica A–D (no sobreescribe valores explícitos)
+        try {
+            const ad = resolveAToD(masterData.query_normalized || masterData.code_input || masterData.sku || '', {
+                duty: masterData.duty,
+                type: masterData.filter_type || masterData.family,
+                family: masterData.family,
+                sku: masterData.sku
+            });
+            if (!masterData.duty && ad.duty_type) masterData.duty = ad.duty_type;
+            const canonicalType = ad.type || masterData.attributes.type;
+            if (!masterData.filter_type && canonicalType) masterData.filter_type = canonicalType;
+            if (!masterData.attributes.type && canonicalType) masterData.attributes.type = canonicalType;
+        } catch (_) {}
+
+        // Añadir códigos homologados al masterData para enforcement posterior
+        try {
+            masterData.homologated_code = scraperResult.code;
+            const srcUp = String(scraperResult.source || '').toUpperCase();
+            if (srcUp === 'FRAM') {
+                masterData.fram_code = scraperResult.code;
+            } else if (srcUp === 'DONALDSON') {
+                masterData.donaldson_code = scraperResult.code;
+            }
+        } catch (_) {}
+
+        // LD: enriquecer exclusivamente con Fleetguard para columnas F–AR
+        if (duty === 'LD') {
             // Move cross codes into oem_codes and set cross_reference label
             try {
                 const mergedOEM = Array.from(new Set([...(masterData.oem_codes || []), ...(Array.isArray(crossClean) ? crossClean : [])]));
@@ -1076,23 +1131,27 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
             } catch (_) {
                 masterData.cross_reference = 'N/A';
             }
-
-            // Scrape FRAM page and merge mapped attributes
+            // Enriquecimiento Fleetguard genérico (códigos FRAM/OEM/cross)
             try {
-                const enrichment = await enrichFramLD(scraperResult.code, { family });
-                if (enrichment && enrichment.attributes) {
-                    masterData.attributes = { ...masterData.attributes, ...enrichment.attributes };
+                const { masterData: mdFleetAny } = await enrichWithFleetguardAny(masterData, { family });
+                if (mdFleetAny) {
+                    Object.assign(masterData, mdFleetAny);
                 }
-                if (enrichment && enrichment.oem_codes_from_cross && enrichment.oem_codes_from_cross.length) {
-                    const mergedOEM2 = Array.from(new Set([...(masterData.oem_codes || []), ...enrichment.oem_codes_from_cross]));
-                    masterData.oem_codes = mergedOEM2;
-                    masterData.cross_reference = 'Multi-Referencia OEM';
-                }
-                if (enrichment && enrichment.tecnologia_aplicada) {
-                    masterData.attributes.tecnologia_aplicada = enrichment.tecnologia_aplicada;
-                }
-            } catch (framErr) {
-                console.log(`⚠️  FRAM enrichment skipped: ${framErr.message}`);
+                // Fallback de valores no vacíos en Master
+                masterData.oem_codes = masterData.oem_codes || 'N/A';
+                masterData.cross_reference = masterData.cross_reference || 'N/A';
+                masterData.equipment_applications = masterData.equipment_applications || 'N/A';
+                masterData.engine_applications = masterData.engine_applications || 'N/A';
+                // Atributos clave: si faltan, marcarlos como 'N/A' para el Master
+                masterData.attributes.height_mm = masterData.attributes.height_mm ?? 'N/A';
+                masterData.attributes.outer_diameter_mm = masterData.attributes.outer_diameter_mm ?? 'N/A';
+                masterData.attributes.inner_diameter_mm = masterData.attributes.inner_diameter_mm ?? 'N/A';
+                masterData.attributes.thread_size = masterData.attributes.thread_size ?? 'N/A';
+                masterData.attributes.gasket_od_mm = masterData.attributes.gasket_od_mm ?? 'N/A';
+                masterData.attributes.iso_test_method = masterData.attributes.iso_test_method ?? 'N/A';
+                masterData.attributes.micron_rating = masterData.attributes.micron_rating ?? 'N/A';
+            } catch (fleetAnyErr) {
+                console.log(`⚠️  Fleetguard LD enrichment skipped: ${fleetAnyErr.message}`);
             }
         }
 
@@ -1109,8 +1168,52 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
                     Object.assign(masterData, mdEnriched);
                 }
                 if (mongoDoc) {
-                    // Save enriched document to MongoDB cache (arrays preserved)
-                    try { await saveToCache(mongoDoc); } catch (e) { console.log(`⚠️  Mongo save failed: ${e.message}`); }
+                    // Save enriched document to MongoDB cache (arrays preserved) con guardrail VOL_LOW
+                    try {
+                        await saveToCache(mongoDoc);
+                    } catch (e) {
+                        const isVolLow = String(e?.code).toUpperCase() === 'VOL_LOW' || e?.status === 400 || /VOL_LOW/i.test(String(e?.message || ''));
+                        if (isVolLow) {
+                            // Propaga para que el endpoint responda 400
+                            throw e;
+                        }
+                        console.log(`⚠️  Mongo save failed: ${e.message}`);
+                    }
+                }
+                // Fallback de valores no vacíos en Master
+                masterData.oem_codes = masterData.oem_codes || 'N/A';
+                masterData.cross_reference = masterData.cross_reference || 'N/A';
+                masterData.equipment_applications = masterData.equipment_applications || 'N/A';
+                masterData.engine_applications = masterData.engine_applications || 'N/A';
+                masterData.attributes.height_mm = masterData.attributes.height_mm ?? 'N/A';
+                masterData.attributes.outer_diameter_mm = masterData.attributes.outer_diameter_mm ?? 'N/A';
+                masterData.attributes.inner_diameter_mm = masterData.attributes.inner_diameter_mm ?? 'N/A';
+                masterData.attributes.thread_size = masterData.attributes.thread_size ?? 'N/A';
+                masterData.attributes.gasket_od_mm = masterData.attributes.gasket_od_mm ?? 'N/A';
+                masterData.attributes.iso_test_method = masterData.attributes.iso_test_method ?? 'N/A';
+                masterData.attributes.micron_rating = masterData.attributes.micron_rating ?? 'N/A';
+            }
+            // Para HD no-Donaldson u otros flujos, intentar Fleetguard genérico por tokens
+            if (duty === 'HD' && srcUp2 !== 'DONALDSON') {
+                try {
+                    const { masterData: mdFleetAny } = await enrichWithFleetguardAny(masterData, { family });
+                    if (mdFleetAny) {
+                        Object.assign(masterData, mdFleetAny);
+                    }
+                    // Fallback de valores no vacíos en Master
+                    masterData.oem_codes = masterData.oem_codes || 'N/A';
+                    masterData.cross_reference = masterData.cross_reference || 'N/A';
+                    masterData.equipment_applications = masterData.equipment_applications || 'N/A';
+                    masterData.engine_applications = masterData.engine_applications || 'N/A';
+                    masterData.attributes.height_mm = masterData.attributes.height_mm ?? 'N/A';
+                    masterData.attributes.outer_diameter_mm = masterData.attributes.outer_diameter_mm ?? 'N/A';
+                    masterData.attributes.inner_diameter_mm = masterData.attributes.inner_diameter_mm ?? 'N/A';
+                    masterData.attributes.thread_size = masterData.attributes.thread_size ?? 'N/A';
+                    masterData.attributes.gasket_od_mm = masterData.attributes.gasket_od_mm ?? 'N/A';
+                    masterData.attributes.iso_test_method = masterData.attributes.iso_test_method ?? 'N/A';
+                    masterData.attributes.micron_rating = masterData.attributes.micron_rating ?? 'N/A';
+                } catch (fleetAnyErr) {
+                    console.log(`⚠️  Fleetguard HD-any enrichment skipped: ${fleetAnyErr.message}`);
                 }
             }
         } catch (enrichErr) {
@@ -1254,6 +1357,20 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
                         oem_equivalent: sr.code
                     };
 
+                    // Resolver A–D para candidatos asociados
+                    try {
+                        const adCand = resolveAToD(masterDataCand.query_normalized || masterDataCand.code_input || masterDataCand.sku || '', {
+                            duty: masterDataCand.duty,
+                            type: masterDataCand.filter_type || masterDataCand.family,
+                            family: masterDataCand.family,
+                            sku: masterDataCand.sku
+                        });
+                        if (!masterDataCand.duty && adCand.duty_type) masterDataCand.duty = adCand.duty_type;
+                        const canonicalTypeCand = adCand.type || masterDataCand.attributes.type;
+                        if (!masterDataCand.filter_type && canonicalTypeCand) masterDataCand.filter_type = canonicalTypeCand;
+                        if (!masterDataCand.attributes.type && canonicalTypeCand) masterDataCand.attributes.type = canonicalTypeCand;
+                    } catch (_) {}
+
                     try {
                         await upsertBySku(masterDataCand, { deleteDuplicates: true });
                         console.log(`âœ… Upserted associated homologated SKU: ${skuCand} for ${cQuery}`);
@@ -1345,6 +1462,7 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
             oem_homologated: {
                 code: primaryOEM || ''
             },
+            homologated_code: scraperResult.code,
             cross_reference: crossClean,
             applications: engineFinal,
             engine_applications: engineFinal,

@@ -16,6 +16,7 @@ Estas son las únicas reglas, de obligatorio cumplimiento, que deben permanecer 
 - Una vez cruzado el código de entrada con Donaldson, se crea el SKU así: prefijo establecido + 4 últimos del código Donaldson homologado con el código de entrada, usando las reglas del servidor.
 - Se llena la línea en el Google Sheet Master con la información completa obtenida del scraper.
 - Esta información es la que se mostrará en la salida hacia la página web.
+ - Regla explícita de columnas: las columnas `A–E` del Master Sheet deben provenir del scraper de Donaldson (HD). Queda prohibido rellenarlas con datos de OEM o heurísticas cuando exista homologación a Donaldson. Las columnas `F–AR` se rellenan con datos técnicos del scraper especializado (Fleetguard y otras fuentes técnicas), nunca se usan para crear el SKU.
 
 4) Paso 3b — Si es LD
 - Se hace el cross‑reference con páginas oficiales de FRAM (fram.com/parts-search), catálogos oficiales y distribuidores autorizados.
@@ -23,15 +24,21 @@ Estas son las únicas reglas, de obligatorio cumplimiento, que deben permanecer 
 - Una vez cruzado el código de entrada con FRAM, se crea el SKU así: prefijo establecido + 4 últimos del código FRAM homologado con el código de entrada, usando las reglas del servidor.
 - Se llena la línea en el Google Sheet Master con la información completa obtenida del scraper.
 - Esta información es la que se mostrará en la salida hacia la página web.
+ - Regla explícita de columnas: en flujo `LD`, las columnas `A–E` del Master Sheet deben reflejar la homologación FRAM (sin usar OEM si existe equivalencia FRAM). Las columnas `F–AR` se completan con datos técnicos del scraper de FRAM u otras fuentes técnicas; el scraper no participa en la creación del SKU.
 
 5) Paso 4b — Si es HD o LD pero Donaldson o FRAM no lo fabrican
 - El código de entrada se homologa a su OEM (si el mismo código es un OEM, se usa ese código como OEM).
 - Se asigna el prefijo según el tipo de filtro + 4 últimos números del OEM homologado, usando las reglas oficiales de generación de SKU.
+- La determinación del tipo (familia) y, cuando aplique, del duty se realiza por reglas centralizadas de prefijo OEM y/o tablas curadas con evidencia documental.
 - Se llena la línea en el Google Sheet Master con la información disponible y trazabilidad hacia el OEM.
 
 Prohibiciones
 - No se permite inventar pasos adicionales ni violar las reglas aquí descritas.
 - No se permiten SKUs sin equivalentes oficiales Donaldson/FRAM u OEM homologado.
+ - Queda expresamente prohibido “adivinar” o construir fuera de norma: el SKU se crea únicamente como `prefijo + últimos 4` del código homologado según la tabla oficial de prefijos.
+ - No se pueden establecer reglas nuevas fuera de las documentadas y de la tabla de decisión oficial (`skuRules.json`); cualquier flujo alternativo debe ser añadido a este documento antes de su uso.
+ - Unicidad estricta: cada `normsku` es único en el Master. El sistema bloquea escrituras que generen conflicto y elimina duplicados heredados.
+ - Exclusividad por proveedor: HD usa Donaldson para columnas `A–E` y Fleetguard para `F–AR`; LD usa FRAM para `A–AR`. No se aceptan mezclas ni sustituciones cuando exista homologación válida.
 
 Notas de implementación
 - La generación del SKU utiliza la tabla oficial de prefijos.

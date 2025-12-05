@@ -29,8 +29,8 @@ function maybeResolveFramFromOEM(code) {
 async function scraperBridge(code, duty) {
     const normalizedCode = prefixMap.normalize(code);
     const hint = prefixMap.resolveBrandFamilyDutyByPrefix(normalizedCode) || {};
-    // If hint suggests a duty, prefer it over caller-provided
-    const effectiveDuty = hint.duty || duty;
+    // Si hint sugiere duty, preferirlo sobre el proporcionado; si ninguno, duty desconocido
+    const effectiveDuty = hint.duty || duty || null;
 
     console.log(`🌉 Scraper Bridge: ${normalizedCode} | Duty: ${effectiveDuty} | Hint: ${hint.brand || 'N/A'}/${hint.family || 'N/A'}`);
 
@@ -38,9 +38,9 @@ async function scraperBridge(code, duty) {
     // PASO 1: Intentar DONALDSON primero (regla principal)
     // =========================================================================
     console.log(`📡 Trying Donaldson first (strict series match)...`);
-    // Permitir intento de Donaldson cuando el duty efectivo es HD,
-    // incluso si el código no coincide con el regex estricto.
-    if (prefixMap.DONALDSON_STRICT_REGEX.test(normalizedCode) || hint.brand === 'DONALDSON' || effectiveDuty === 'HD') {
+    const tryBoth = !effectiveDuty;
+    // Intento de Donaldson: siempre si duty desconocido; de lo contrario, según norma HD
+    if (tryBoth || prefixMap.DONALDSON_STRICT_REGEX.test(normalizedCode) || hint.brand === 'DONALDSON' || effectiveDuty === 'HD') {
         const don = await validateDonaldsonCode(normalizedCode);
         if (don && don.valid) {
             return don;
@@ -50,7 +50,7 @@ async function scraperBridge(code, duty) {
     // =========================================================================
     // PASO 2: Intentar FRAM por duty o como fallback
     // =========================================================================
-    if (effectiveDuty === 'LD' || hint.brand === 'FRAM') {
+    if (tryBoth || effectiveDuty === 'LD' || hint.brand === 'FRAM') {
         console.log(`📡 Trying FRAM for LD duty...`);
         const fr = await validateFramCode(normalizedCode);
         if (fr && fr.valid) return fr;
@@ -69,7 +69,7 @@ async function scraperBridge(code, duty) {
                 return fr2;
             }
         }
-    } else {
+    } else if (!tryBoth) {
         // Norma estricta: HD → Donaldson únicamente. Omitir FRAM para duty HD.
         console.log(`⛔ Duty HD: FRAM omitido por norma (HD→Donaldson, LD→FRAM)`);
     }
@@ -181,8 +181,8 @@ function validateRacorCode(code) {
 
 function validateMercruiserCode(code) {
     const up = String(code || '').toUpperCase();
-    // Patrones comunes: 35-802893Q, 35-8xxxxxA/Q (permitir sin guión tras normalización)
-        if (/^\d{2}-?\d{4,7}[A-Z]?$/.test(up)) {
+    // Patrones comunes: 35-802893Q, 35-8xxxxxA/Q, 35-8M0065103 (permitir sin guión tras normalización)
+        if (/^(?:\d{2}-?\d{4,7}[A-Z]?|\d{2}-?8M\d{6,7}[A-Z]?)$/.test(up)) {
             return {
                 valid: true,
                 code: up,

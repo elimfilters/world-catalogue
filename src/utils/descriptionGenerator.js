@@ -1,205 +1,209 @@
-// ============================================================================
-// DESCRIPTION GENERATOR - German Quality ELIMFILTERS
-// Generates professional product descriptions
-// ============================================================================
+// Generates a customer-facing paragraph for Master column F (description)
+// Language-aware and family/subtype/duty adaptive. No external scrapers.
 
-/**
- * Generate professional product description
- * @param {string} family - OIL, FUEL, AIR, CABIN, COOLANT, HYDRAULIC, AIR_DRYER, MARINE
- * @param {string} duty - HD or LD
- * @param {string} subtype - Filter subtype (spin-on, cartridge, panel, etc)
- * @param {string} media - ELIMFILTERS media technology
- * @returns {string} - Professional description
- */
-function generateDescription(family, duty, subtype, media) {
-    const filterType = getFilterType(family, subtype);
-    const technology = getTechnologyDescription(media);
-    const equipment = getEquipmentList(family, duty);
-    const industries = getIndustries(family, duty);
-    
-    return `${filterType} German Quality ELIMFILTERS ${technology}. ${equipment}. Aplicación principal en ${industries}.`;
+function normalizeText(s) {
+  return String(s || '').trim();
 }
 
-/**
- * Get filter type description
- */
-function getFilterType(family, subtype) {
-    const types = {
-        'OIL': {
-            'spin-on': 'Filtro de aceite spin-on',
-            'cartridge': 'Filtro de aceite tipo cartucho',
-            'element': 'Elemento filtrante de aceite',
-            'default': 'Filtro de aceite'
-        },
-        'FUEL': {
-            'separator': 'Filtro separador de combustible diésel',
-            'inline': 'Filtro de combustible diésel inline',
-            'cartridge': 'Filtro de combustible tipo cartucho',
-            'spin-on': 'Filtro de combustible spin-on',
-            'default': 'Filtro de combustible'
-        },
-        'AIR': {
-            'panel': 'Filtro de aire motor panel rectangular',
-            'radial': 'Filtro de aire motor tipo radial',
-            'cylindrical': 'Filtro de aire motor cilíndrico',
-            'safety': 'Elemento de seguridad de aire motor',
-            'default': 'Filtro de aire motor'
-        },
-        'CABIN': {
-            'carbon': 'Filtro de aire de cabina con carbón activado',
-            'electrostatic': 'Filtro de aire de cabina electrostático',
-            'default': 'Filtro de aire de cabina'
-        },
-        'COOLANT': {
-            'spin-on': 'Filtro de refrigerante spin-on',
-            'cartridge': 'Filtro de refrigerante tipo cartucho',
-            'default': 'Filtro de refrigerante'
-        },
-        'HYDRAULIC': {
-            'spin-on': 'Filtro hidráulico de alta presión spin-on',
-            'cartridge': 'Filtro hidráulico tipo cartucho',
-            'inline': 'Filtro hidráulico inline',
-            'default': 'Filtro hidráulico de alta presión'
-        },
-        'AIR_DRYER': {
-            'cartridge': 'Cartucho secador de aire comprimido',
-            'spin-on': 'Filtro secador de aire spin-on',
-            'default': 'Filtro secador de aire (air dryer)'
-        },
-        'MARINE': {
-            'fuel': 'Filtro de combustible marino',
-            'oil': 'Filtro de aceite marino',
-            'separator': 'Filtro separador agua/combustible marino',
-            'default': 'Filtro marino Heavy Duty'
-        }
-    };
-    
-    const familyTypes = types[family] || types['OIL'];
-    return familyTypes[subtype] || familyTypes['default'];
+function pickSubtypePhrase(subtype, family) {
+  const up = String(subtype || '').toUpperCase();
+  const fam = String(family || '').toUpperCase();
+  if (/RADIAL/.test(up)) return fam === 'AIR' ? 'con sello radial' : 'de sello radial';
+  if (/AXIAL/.test(up)) return fam === 'AIR' ? 'con sello axial' : 'de sello axial';
+  if (/SPIN[- ]?ON|ROSCAD/.test(up)) return 'tipo spin-on (roscado)';
+  if (/CARTU?CHO|ELEMENT/.test(up)) return 'tipo cartucho';
+  if (/PANEL/.test(up)) return 'tipo panel';
+  if (/CONI|CYLIN/.test(up)) return 'tipo cónico/cilíndrico';
+  if (/SEPARADOR|W\/F|WATER\s*SEPARATION/i.test(up)) return 'separador de agua/combustible';
+  if (/BYPASS|BY[- ]?PASS/i.test(up)) return 'con válvula bypass';
+  if (/FULL[- ]?FLOW|FLUJO\s*TOTAL/i.test(up)) return 'de flujo total';
+  return '';
 }
 
-/**
- * Get technology description
- */
-function getTechnologyDescription(media) {
-    const descriptions = {
-        'ELIMTEK™ ADVANCED': 'desarrollado con tecnología ELIMTEK™ ADVANCED de celulosa blend reforzada',
-        'ELIMTEK™ SYNTHETIC': 'desarrollado con tecnología ELIMTEK™ SYNTHETIC de alto rendimiento',
-        'ELIMTEK™ ULTRA': 'con tecnología SpectraFilt™ de separación agua/combustible >95%',
-        'MACROCORE™ PRECISION': 'con tecnología DuraCore™ de celulosa plisada optimizada',
-        'MACROCORE™ INDUSTRIAL': 'con tecnología OptiFlow™ de nano-fibra sintética electrospun',
-        'MICROKAPPA™ PURE': 'con tecnología electrostática multi-capa de alta eficiencia',
-        'MICROKAPPA™ PREMIUM': 'con tecnología FiltroMax™ de 4 etapas con carbón activado'
-    };
-    
-    return descriptions[media] || 'desarrollado con tecnología de ingeniería alemana certificada';
+function pickMediaPhrase(media, lang = 'es') {
+  const m = String(media || '').toUpperCase();
+  const isEs = String(lang || 'es').toLowerCase().startsWith('es');
+  if (/MACROCORE/.test(m)) {
+    return isEs
+      ? 'con tecnología MACROCORE™ diseñada con algoritmos inteligentes'
+      : 'with MACROCORE™ technology engineered with intelligent algorithms';
+  }
+  // Mantener frases estándar para otros medios
+  if (/CELLULOSE|CELULOSA/.test(m)) return isEs ? 'con medio de celulosa de eficiencia estándar' : 'with cellulose media for standard efficiency';
+  if (/SYNTH|SINT[ÉE]TICO/.test(m)) return isEs ? 'con medio sintético para mayor eficiencia' : 'with synthetic media for higher efficiency';
+  if (/MICROGLASS|FIBRA/i.test(m)) return isEs ? 'con microfibra para alta retención de partículas' : 'with microglass for high particle retention';
+  return m ? (isEs ? `con medio ${media}` : `with ${media} media`) : '';
 }
 
-/**
- * Get equipment list based on family and duty
- */
-function getEquipmentList(family, duty) {
-    const equipment = {
-        'OIL_HD': 'Diseñado para motores diésel Heavy Duty en camiones Freightliner Cascadia, Kenworth T680, Peterbilt 579, entre otros',
-        'OIL_LD': 'Compatible con Ford F-150, Chevrolet Silverado 1500, Ram 1500, entre otros',
-        'FUEL_HD': 'Diseñado para sistemas de inyección de alta presión en Caterpillar C15, Cummins ISX, Detroit DD15, entre otros',
-        'FUEL_LD': 'Compatible con Ford F-250 Super Duty, Chevrolet Silverado 2500HD, Ram 2500, entre otros',
-        'AIR_HD': 'Diseñado para equipamiento pesado como Caterpillar 320, Komatsu PC200, John Deere 644, entre otros',
-        'AIR_LD': 'Compatible con Toyota Camry, Honda Accord, Nissan Altima, entre otros',
-        'CABIN_LD': 'Compatible con la mayoría de vehículos de pasajeros y comerciales ligeros',
-        'COOLANT_HD': 'Diseñado para sistemas de refrigeración en motores diésel de equipamiento pesado',
-        'HYDRAULIC_HD': 'Diseñado para sistemas hidráulicos de alta presión en excavadoras, cargadores y grúas, entre otros',
-        'AIR_DRYER_HD': 'Diseñado para sistemas de frenos neumáticos en camiones clase 7-8 y equipamiento pesado',
-        'MARINE_HD': 'Diseñado para motores diésel marinos, generadores navales y equipamiento offshore'
-    };
-    
-    const key = `${family}_${duty}`;
-    return equipment[key] || 'Compatible con múltiples aplicaciones de equipamiento automotriz e industrial';
+function genAirES({ duty, subtype, media_type }) {
+  const dutyStr = String(duty || '').toUpperCase() === 'HD' ? 'de servicio pesado' : 'de servicio ligero';
+  const sub = pickSubtypePhrase(subtype, 'AIR');
+  const media = pickMediaPhrase(media_type, 'es');
+  const parts = [
+    `Filtro de aire primario ${dutyStr}${sub ? ', ' + sub : ''}`,
+    'diseñado por ELIMFILTERS para mantener un flujo de aire estable y proteger el sistema de admisión',
+    'al capturar contaminantes antes de que alcancen la cámara de combustión',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
 }
 
-/**
- * Get industries based on family and duty
- */
-function getIndustries(family, duty) {
-    const industries = {
-        'OIL_HD': 'transporte de carga, construcción y minería',
-        'OIL_LD': 'transporte ligero, flotas comerciales y uso personal',
-        'FUEL_HD': 'transporte pesado, generación de energía y equipamiento agrícola',
-        'FUEL_LD': 'pick-ups comerciales, agricultura y construcción',
-        'AIR_HD': 'construcción, minería, agricultura y forestal',
-        'AIR_LD': 'vehículos de pasajeros, flotas de taxi y servicios de entrega',
-        'CABIN_LD': 'vehículos de pasajeros, transporte ejecutivo y flotas comerciales',
-        'COOLANT_HD': 'transporte pesado, construcción y equipamiento industrial',
-        'HYDRAULIC_HD': 'construcción, minería, agricultura y manejo de materiales',
-        'AIR_DRYER_HD': 'transporte pesado, construcción y equipamiento neumático',
-        'MARINE_HD': 'transporte marítimo, generación naval y operaciones offshore'
-    };
-    
-    const key = `${family}_${duty}`;
-    return industries[key] || 'aplicaciones industriales y automotrices';
+function genFuelES({ duty, subtype, media_type }) {
+  const dutyStr = String(duty || '').toUpperCase() === 'HD' ? 'de servicio pesado' : 'de servicio ligero';
+  const sub = pickSubtypePhrase(subtype, 'FUEL');
+  const media = pickMediaPhrase(media_type, 'es');
+  const parts = [
+    `Filtro de combustible ${dutyStr}${sub ? ', ' + sub : ''}`,
+    'ayuda a remover partículas y agua para proteger el sistema de inyección',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
 }
 
-/**
- * Get subtype from filter code or attributes
- * @param {string} family - Filter family
- * @param {object} attributes - Filter attributes from scraper
- * @returns {string} - Filter subtype
- */
-function detectSubtype(family, attributes = {}) {
-    // Try to detect from attributes
-    if (attributes.type) {
-        const typeUpper = attributes.type.toUpperCase();
-        
-        // Oil subtypes
-        if (family === 'OIL') {
-            if (typeUpper.includes('SPIN') || typeUpper.includes('ROSCA')) return 'spin-on';
-            if (typeUpper.includes('CARTRIDGE') || typeUpper.includes('CARTUCHO')) return 'cartridge';
-            if (typeUpper.includes('ELEMENT')) return 'element';
-        }
-        
-        // Fuel subtypes
-        if (family === 'FUEL') {
-            if (typeUpper.includes('SEPARATOR') || typeUpper.includes('SEPARADOR')) return 'separator';
-            if (typeUpper.includes('INLINE') || typeUpper.includes('LINEA')) return 'inline';
-            if (typeUpper.includes('CARTRIDGE') || typeUpper.includes('CARTUCHO')) return 'cartridge';
-            if (typeUpper.includes('SPIN')) return 'spin-on';
-        }
-        
-        // Air subtypes
-        if (family === 'AIR') {
-            if (typeUpper.includes('PANEL')) return 'panel';
-            if (typeUpper.includes('RADIAL')) return 'radial';
-            if (typeUpper.includes('SAFETY') || typeUpper.includes('SEGURIDAD')) return 'safety';
-            if (typeUpper.includes('CYLINDRICAL') || typeUpper.includes('CILINDRICO')) return 'cylindrical';
-        }
-        
-        // Cabin subtypes
-        if (family === 'CABIN') {
-            if (typeUpper.includes('CARBON') || typeUpper.includes('CARBONO')) return 'carbon';
-            return 'electrostatic';
-        }
-    }
-    
-    // Default subtypes by family
-    const defaults = {
-        'OIL': 'spin-on',
-        'FUEL': 'separator',
-        'AIR': 'panel',
-        'CABIN': 'electrostatic',
-        'COOLANT': 'spin-on',
-        'HYDRAULIC': 'spin-on',
-        'AIR_DRYER': 'cartridge',
-        'MARINE': 'separator'
-    };
-    
-    return defaults[family] || 'spin-on';
+function genOilES({ duty, subtype, media_type }) {
+  const dutyStr = String(duty || '').toUpperCase() === 'HD' ? 'de servicio pesado' : 'de servicio ligero';
+  const sub = pickSubtypePhrase(subtype, 'OIL');
+  const media = pickMediaPhrase(media_type, 'es');
+  const parts = [
+    `Filtro de aceite ${dutyStr}${sub ? ', ' + sub : ''}`,
+    'retiene impurezas para extender la vida útil del motor y mantener la viscosidad del aceite dentro de rango',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
 }
 
-// ============================================================================
-// EXPORTS
-// ============================================================================
+function genHydraulicES({ duty, subtype, media_type }) {
+  const sub = pickSubtypePhrase(subtype, 'HYDRAULIC');
+  const media = pickMediaPhrase(media_type, 'es');
+  const base = `Filtro hidráulico${sub ? ' ' + sub : ''}`;
+  const bySubtype = (() => {
+    const s = String(subtype || '').toLowerCase();
+    if (s.includes('pres')) return 'Elemento para filtración crítica de línea de presión';
+    if (s.includes('retor')) return 'Elemento de retorno: controla contaminación al volver al depósito';
+    if (s.includes('suc')) return 'Elemento de succión/in-tank: protege la bomba ante partículas gruesas';
+    if (s.includes('cartu')) return 'Elemento tipo cartucho para portafiltros hidráulicos';
+    return 'Controla contaminación sólida para proteger válvulas y bombas en presión, retorno o succión';
+  })();
+  const parts = [
+    base,
+    bySubtype,
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
 
-module.exports = {
-    generateDescription,
-    detectSubtype
-};
+function genCoolantES({ media_type }) {
+  const media = pickMediaPhrase(media_type, 'es');
+  const parts = [
+    'Filtro de refrigerante mantiene el equilibrio químico del sistema',
+    'ayudando a reducir corrosión y cavitación en el bloque',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function genCabinES({ media_type }) {
+  const media = pickMediaPhrase(media_type, 'es');
+  const parts = [
+    'Filtro de cabina mejora la calidad del aire interior',
+    'capturando polvo, polen y partículas finas para mayor confort del usuario',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function genAirEN({ duty, subtype, media_type }) {
+  const dutyStr = String(duty || '').toUpperCase() === 'HD' ? 'heavy‑duty' : 'light‑duty';
+  const sub = pickSubtypePhrase(subtype, 'AIR');
+  const media = pickMediaPhrase(media_type, 'en');
+  const parts = [
+    `Primary air filter (${dutyStr})${sub ? ', ' + sub : ''}`,
+    'engineered by ELIMFILTERS to stabilize airflow and protect the intake system',
+    'by capturing contaminants before they reach the combustion chamber',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function genFuelEN({ duty, subtype, media_type }) {
+  const dutyStr = String(duty || '').toUpperCase() === 'HD' ? 'heavy‑duty' : 'light‑duty';
+  const sub = pickSubtypePhrase(subtype, 'FUEL');
+  const media = pickMediaPhrase(media_type, 'en');
+  const parts = [
+    `Fuel filter (${dutyStr})${sub ? ', ' + sub : ''}`,
+    'helps remove particles and water to protect the injection system',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function genOilEN({ duty, subtype, media_type }) {
+  const dutyStr = String(duty || '').toUpperCase() === 'HD' ? 'heavy‑duty' : 'light‑duty';
+  const sub = pickSubtypePhrase(subtype, 'OIL');
+  const media = pickMediaPhrase(media_type, 'en');
+  const parts = [
+    `Oil filter (${dutyStr})${sub ? ', ' + sub : ''}`,
+    'retains impurities to extend engine life and keep oil viscosity within range',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function genHydraulicEN({ duty, subtype, media_type }) {
+  const sub = pickSubtypePhrase(subtype, 'HYDRAULIC');
+  const media = pickMediaPhrase(media_type, 'en');
+  const base = `Hydraulic filter${sub ? ' ' + sub : ''}`;
+  const bySubtype = (() => {
+    const s = String(subtype || '').toLowerCase();
+    if (s.includes('pres') || s.includes('press')) return 'Critical filtration element for pressure line service';
+    if (s.includes('retor') || s.includes('return')) return 'Return element: controls contamination back to reservoir';
+    if (s.includes('suc') || s.includes('suct') || s.includes('suction')) return 'Suction/in-tank element: protects pump against coarse particles';
+    if (s.includes('cartu') || s.includes('cart') || s.includes('cartridge')) return 'Cartridge-style element for hydraulic housings';
+    return 'Controls solid contamination to protect valves and pumps in pressure, return or suction circuits';
+  })();
+  const parts = [
+    base,
+    bySubtype,
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function genCoolantEN({ media_type }) {
+  const media = pickMediaPhrase(media_type, 'en');
+  const parts = [
+    'Coolant filter helps maintain the chemical balance of the system',
+    'reducing corrosion and cavitation in the block',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function genCabinEN({ media_type }) {
+  const media = pickMediaPhrase(media_type);
+  const parts = [
+    'Cabin filter improves indoor air quality',
+    'capturing dust, pollen and fine particles for user comfort',
+    media ? media : ''
+  ].filter(Boolean);
+  return parts.join('. ') + '.';
+}
+
+function generateDescription({ family, duty, subtype, media_type, lang = 'es' }) {
+  const fam = String(family || '').toUpperCase();
+  const isEs = String(lang || 'es').toLowerCase().startsWith('es');
+
+  if (fam === 'AIR') return isEs ? genAirES({ duty, subtype, media_type }) : genAirEN({ duty, subtype, media_type });
+  if (fam === 'FUEL') return isEs ? genFuelES({ duty, subtype, media_type }) : genFuelEN({ duty, subtype, media_type });
+  if (fam === 'OIL') return isEs ? genOilES({ duty, subtype, media_type }) : genOilEN({ duty, subtype, media_type });
+  if (fam === 'HYDRAULIC') return isEs ? genHydraulicES({ duty, subtype, media_type }) : genHydraulicEN({ duty, subtype, media_type });
+  if (fam === 'COOLANT') return isEs ? genCoolantES({ media_type }) : genCoolantEN({ media_type });
+  if (fam === 'CABIN') return isEs ? genCabinES({ media_type }) : genCabinEN({ media_type });
+
+  // Fallback generic description
+  return isEs
+    ? 'Elemento filtrante diseñado por ELIMFILTERS para capturar contaminantes y proteger el sistema.'
+    : 'Filter element engineered by ELIMFILTERS to capture contaminants and protect the system.';
+}
+
+module.exports = { generateDescription };

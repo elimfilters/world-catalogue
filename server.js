@@ -23,6 +23,7 @@ const detectRoute = require('./src/api/detect');
 const vinRoute = require('./src/api/vin');
 const marinosImportRoute = require('./src/api/marinosImport');
 const routesMapRoute = require('./src/api/routes');
+const catalogRoute = require('./src/api/catalog');
 
 const internalValidateRoute = require('./src/api/internalValidate');
 
@@ -110,6 +111,7 @@ app.use('/api/detect', detectLimiter);
 app.use('/api/detect', detectRoute);
 app.use('/api/import/marinos', marinosImportRoute);
 app.use('/api/routes', routesMapRoute);
+app.use('/api/catalog', catalogRoute);
 // Mount VIN routes (decode + attribute lookup)
 app.use('/api/vin', vinRoute);
 

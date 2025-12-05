@@ -13,18 +13,25 @@
 
 // Use native fetch if available (Node 18+); otherwise lazy import node-fetch
 const hasGlobalFetch = typeof fetch === 'function';
-async function doFetch(url) {
+async function doFetch(url, headers = {}) {
+  const defaultHeaders = {
+    'Accept': 'application/json, */*;q=0.8',
+    'User-Agent': 'ELIMFILTERS/5.0 (+catalogo; FleetguardEnrichment)'
+  };
+  const mergedHeaders = { ...defaultHeaders, ...headers };
   if (hasGlobalFetch) {
-    return fetch(url, { method: 'GET' });
+    return fetch(url, { method: 'GET', headers: mergedHeaders });
   } else {
     const nodeFetch = (await import('node-fetch')).default;
-    return nodeFetch(url, { method: 'GET' });
+    return nodeFetch(url, { method: 'GET', headers: mergedHeaders });
   }
 }
 
 // Kits EK5 helpers and Sheets integration
 const { processHDKits, deriveEk5Sku, summarizeComponents } = require('./kitService');
 const { saveKitToSheet } = require('./syncSheetsService');
+// Fallback scraper (Playwright/Puppeteer)
+const { scrapeFleetguardBySearch } = require('../scrapers/fleetguardScraper');
 
 // ---- Helpers ---------------------------------------------------------------
 
@@ -80,10 +87,18 @@ function joinList(arr, sep) {
  */
 async function fetchFleetguardJSON(codeDonaldson) {
   try {
-    const url = `https://www.fleetguard.com/api/v1/products/${encodeURIComponent(codeDonaldson)}`;
-    const res = await doFetch(url);
+    const base = process.env.FLEETGUARD_API_BASE || 'https://www.fleetguard.com/api/v1';
+    const token = process.env.FLEETGUARD_API_TOKEN || process.env.FLEETGUARD_TOKEN;
+    const url = `${base}/products/${encodeURIComponent(codeDonaldson)}`;
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await doFetch(url, headers);
     if (!res || !res.ok) {
       return {}; // CRÍTICO: continuar con vacíos
+    }
+    const ct = (res.headers && (res.headers.get?.('content-type') || res.headers['content-type'])) || '';
+    if (!/application\/json/i.test(ct)) {
+      // El endpoint devolvió HTML (por ejemplo login de Salesforce) u otro tipo no-JSON
+      return {};
     }
     const data = await res.json();
     return data || {};
@@ -247,50 +262,129 @@ async function enrichHDWithFleetguard(masterData, options) {
   // Phase 3: map and normalize
   const mapped = mapFleetguardToFinal(dj);
 
+  // --- Fallback scraper: when JSON not available/content-type not JSON ---
+  const jsonEmpty = !dj || (Object.keys(dj).length === 0);
+  const mappedEmpty = !mapped.technical?.height_mm && !mapped.technical?.outer_diameter_mm && !mapped.technical?.thread_size;
+  let scraped;
+  if (jsonEmpty || mappedEmpty) {
+    try {
+      scraped = await scrapeFleetguardBySearch(codeDonaldson);
+      if (scraped && scraped.technical) {
+        // Overlay scraped technicals into mapped
+        mapped.technical = {
+          ...mapped.technical,
+          height_mm: mapped.technical.height_mm ?? scraped.technical.height_mm,
+          outer_diameter_mm: mapped.technical.outer_diameter_mm ?? scraped.technical.outer_diameter_mm,
+          inner_diameter_mm: mapped.technical.inner_diameter_mm ?? scraped.technical.inner_diameter_mm,
+          gasket_od_mm: mapped.technical.gasket_od_mm ?? scraped.technical.gasket_od_mm,
+          gasket_id_mm: mapped.technical.gasket_id_mm ?? scraped.technical.gasket_id_mm,
+          thread_size: mapped.technical.thread_size ?? scraped.technical.thread_size,
+        };
+      }
+      if (Array.isArray(scraped?.crossCodes) && scraped.crossCodes.length > 0) {
+        const codes = scraped.crossCodes.filter(Boolean);
+        // Update lists_sheet and lists_mongo with cross codes (anonymized)
+        mapped.lists_sheet = mapped.lists_sheet || {};
+        mapped.lists_mongo = mapped.lists_mongo || {};
+        mapped.lists_sheet.oem_codes = mapped.lists_sheet.oem_codes || codes.join(', ');
+        mapped.lists_sheet.cross_reference = mapped.lists_sheet.cross_reference || (codes.length > 1 ? 'Multi-Referencia OEM' : '');
+        mapped.lists_mongo.oem_codes = mapped.lists_mongo.oem_codes || codes;
+        mapped.lists_mongo.cross_reference = mapped.lists_mongo.cross_reference || codes.map(code => ({ code }));
+      }
+    } catch (scrapeErr) {
+      console.log(`⚠️  Fleetguard scraper fallback failed: ${scrapeErr.message}`);
+    }
+  }
+
   // Merge into masterData (sheet-visible)
   const md = { ...masterData };
   md.attributes = { ...md.attributes };
 
   Object.assign(md.attributes, {
-    height_mm: mapped.technical.height_mm ?? md.attributes.height_mm,
-    outer_diameter_mm: mapped.technical.outer_diameter_mm ?? md.attributes.outer_diameter_mm,
-    inner_diameter_mm: mapped.technical.inner_diameter_mm ?? md.attributes.inner_diameter_mm,
-    gasket_od_mm: mapped.technical.gasket_od_mm ?? md.attributes.gasket_od_mm,
-    gasket_id_mm: mapped.technical.gasket_id_mm ?? md.attributes.gasket_id_mm,
-    thread_size: mapped.technical.thread_size ?? md.attributes.thread_size,
-    micron_rating: mapped.technical.micron_rating ?? md.attributes.micron_rating,
-    bypass_valve_psi: mapped.technical.bypass_valve_psi ?? md.attributes.bypass_valve_psi,
-    rated_flow_gpm: mapped.technical.rated_flow_gpm ?? md.attributes.rated_flow_gpm,
-    weight_grams: mapped.technical.weight_grams ?? md.attributes.weight_grams,
-    seal_material: mapped.technical.seal_material ?? md.attributes.seal_material,
-    housing_material: mapped.technical.housing_material ?? md.attributes.housing_material,
-    iso_test_method: mapped.technical.iso_test_method ?? md.attributes.iso_test_method,
-    operating_temperature_min_c: mapped.technical.operating_temperature_min_c ?? md.attributes.operating_temperature_min_c,
-    operating_temperature_max_c: mapped.technical.operating_temperature_max_c ?? md.attributes.operating_temperature_max_c,
-    hydrostatic_burst_psi: mapped.technical.hydrostatic_burst_psi ?? md.attributes.hydrostatic_burst_psi,
-    operating_pressure_min_psi: mapped.technical.operating_pressure_min_psi ?? md.attributes.operating_pressure_min_psi,
-    operating_pressure_max_psi: mapped.technical.operating_pressure_max_psi ?? md.attributes.operating_pressure_max_psi,
-    dirt_capacity_grams: mapped.technical.dirt_capacity_grams ?? md.attributes.dirt_capacity_grams,
-    water_separation_efficiency_percent: mapped.technical.water_separation_efficiency_percent ?? md.attributes.water_separation_efficiency_percent,
-    fluid_compatibility: mapped.technical.fluid_compatibility ?? md.attributes.fluid_compatibility,
-    pleat_count: mapped.technical.pleat_count ?? md.attributes.pleat_count,
-    service_life_hours: mapped.technical.service_life_hours ?? md.attributes.service_life_hours,
-    change_interval_km: mapped.technical.change_interval_km ?? md.attributes.change_interval_km,
+    height_mm: md.attributes.height_mm ?? mapped.technical.height_mm,
+    outer_diameter_mm: md.attributes.outer_diameter_mm ?? mapped.technical.outer_diameter_mm,
+    inner_diameter_mm: md.attributes.inner_diameter_mm ?? mapped.technical.inner_diameter_mm,
+    gasket_od_mm: md.attributes.gasket_od_mm ?? mapped.technical.gasket_od_mm,
+    gasket_id_mm: md.attributes.gasket_id_mm ?? mapped.technical.gasket_id_mm,
+    thread_size: md.attributes.thread_size ?? mapped.technical.thread_size,
+    micron_rating: md.attributes.micron_rating ?? mapped.technical.micron_rating,
+    bypass_valve_psi: md.attributes.bypass_valve_psi ?? mapped.technical.bypass_valve_psi,
+    rated_flow_gpm: md.attributes.rated_flow_gpm ?? mapped.technical.rated_flow_gpm,
+    weight_grams: md.attributes.weight_grams ?? mapped.technical.weight_grams,
+    seal_material: md.attributes.seal_material ?? mapped.technical.seal_material,
+    housing_material: md.attributes.housing_material ?? mapped.technical.housing_material,
+    iso_test_method: md.attributes.iso_test_method ?? mapped.technical.iso_test_method,
+    operating_temperature_min_c: md.attributes.operating_temperature_min_c ?? mapped.technical.operating_temperature_min_c,
+    operating_temperature_max_c: md.attributes.operating_temperature_max_c ?? mapped.technical.operating_temperature_max_c,
+    hydrostatic_burst_psi: md.attributes.hydrostatic_burst_psi ?? mapped.technical.hydrostatic_burst_psi,
+    operating_pressure_min_psi: md.attributes.operating_pressure_min_psi ?? mapped.technical.operating_pressure_min_psi,
+    operating_pressure_max_psi: md.attributes.operating_pressure_max_psi ?? mapped.technical.operating_pressure_max_psi,
+    dirt_capacity_grams: md.attributes.dirt_capacity_grams ?? mapped.technical.dirt_capacity_grams,
+    water_separation_efficiency_percent: md.attributes.water_separation_efficiency_percent ?? mapped.technical.water_separation_efficiency_percent,
+    fluid_compatibility: md.attributes.fluid_compatibility ?? mapped.technical.fluid_compatibility,
+    pleat_count: md.attributes.pleat_count ?? mapped.technical.pleat_count,
+    service_life_hours: md.attributes.service_life_hours ?? mapped.technical.service_life_hours,
+    change_interval_km: md.attributes.change_interval_km ?? mapped.technical.change_interval_km,
   });
 
   // Lists for sheet (concatenated)
-  md.oem_codes = mapped.lists_sheet.oem_codes || md.oem_codes;
-  md.cross_reference = mapped.lists_sheet.cross_reference || md.cross_reference;
-  md.equipment_applications = mapped.lists_sheet.equipment_applications || md.equipment_applications;
-  md.engine_applications = mapped.lists_sheet.engine_applications || md.engine_applications;
+  md.oem_codes = md.oem_codes || mapped.lists_sheet.oem_codes;
+  md.cross_reference = md.cross_reference || mapped.lists_sheet.cross_reference;
+  md.equipment_applications = md.equipment_applications || mapped.lists_sheet.equipment_applications;
+  md.engine_applications = md.engine_applications || mapped.lists_sheet.engine_applications;
 
   // Optional description override
-  md.description = mapped.description || md.description;
+  md.description = md.description || mapped.description;
+
+  // Fallback control: if Donaldson didn't provide type/subtype, derive from Fleetguard JSON
+  try {
+    const hasType = Boolean(String(md.type || md.filter_type || md.family || '').trim());
+    const hasSubtype = Boolean(String(md.subtype || md.attributes?.subtype || md.attributes?.style || '').trim());
+
+    // Derive type from Fleetguard productType when missing
+    if (!hasType) {
+      const t = String((dj.productType || dj.productFamily || '')).trim();
+      if (t) {
+        md.type = t; // canonicalization occurs later in buildRowData
+      }
+    }
+
+    // Derive subtype using simple heuristics from Fleetguard JSON when missing
+    if (!hasSubtype) {
+      const txtPool = [
+        dj.productDescription,
+        dj.filterNotes,
+        dj.features,
+        dj.mediaType,
+      ]
+        .map(s => String(s || '').toLowerCase())
+        .join(' | ');
+      const has = (rx) => rx.test(txtPool);
+      let derivedSubtype = '';
+      // Strong cues
+      if (mapped.technical?.thread_size || has(/spin\s*-?on|roscado|enroscable/)) {
+        derivedSubtype = 'Spin-On';
+      } else if (has(/cartridge|elemento|cartucho/)) {
+        derivedSubtype = 'Cartridge';
+      } else if (has(/radial\s*seal|sello\s*radial/)) {
+        derivedSubtype = 'Radial Seal';
+      } else if (has(/axial\s*seal|sello\s*axial/)) {
+        derivedSubtype = 'Axial Seal';
+      } else if (has(/panel/)) {
+        derivedSubtype = 'Panel';
+      }
+      if (derivedSubtype) {
+        md.attributes.subtype = derivedSubtype; // buildRowData will incorporate into descriptor
+      }
+    }
+  } catch (_) {
+    // Non-fatal: continue without subtype/type fallback
+  }
 
   // Tecnologia aplicada (ELIMFILTERS) basada en JSON Fleetguard + familia
   const familyForTech = md.family || md.filter_type || md.type;
   const tecnologia = computeElimfiltersTechnology(dj, familyForTech);
-  if (tecnologia) {
+  if (tecnologia && !md.attributes.tecnologia_aplicada) {
     md.attributes.tecnologia_aplicada = tecnologia;
   }
 
@@ -348,7 +442,102 @@ async function enrichHDWithFleetguard(masterData, options) {
 }
 
 module.exports = {
-  fetchFleetguardJSON,
-  mapFleetguardToFinal,
-  enrichHDWithFleetguard,
+    fetchFleetguardJSON,
+    mapFleetguardToFinal,
+    enrichHDWithFleetguard,
+    /**
+     * Enrich masterData with Fleetguard using any available token (Donaldson/FRAM/OEM/cross).
+     * This is duty-agnostic and intended to populate columns F–AR exclusively from Fleetguard.
+     */
+    async enrichWithFleetguardAny(masterData, options = {}) {
+        const md = { ...masterData };
+        md.attributes = { ...md.attributes };
+
+        const tokens = [];
+        const src = String(md.source || '').toUpperCase();
+        const donCode = src === 'DONALDSON' ? md.code_oem || md.homologated_code || md.donaldson_code : null;
+        const framCode = src === 'FRAM' ? md.code_oem || md.homologated_code || md.fram_code : null;
+        if (donCode) tokens.push(donCode);
+        if (framCode) tokens.push(framCode);
+        const oems = Array.isArray(md.oem_codes) ? md.oem_codes : [];
+        const cross = Array.isArray(md.cross_reference) ? md.cross_reference : [];
+        tokens.push(...oems, ...cross);
+
+        let mapped = null;
+        for (const t of tokens) {
+            const up = String(t || '').trim();
+            if (!up) continue;
+            try {
+                // Primero intentar JSON oficial, luego scraping
+                let data = await fetchFleetguardJSON(up);
+                const isJsonEmpty = !data || (Object.keys(data).length === 0);
+                if (isJsonEmpty) {
+                    data = await scrapeFleetguardBySearch(up);
+                }
+                if (data && (data.found || Object.keys(data).length > 0)) {
+                    mapped = mapFleetguardToFinal(data);
+                    break;
+                }
+            } catch (e) {
+                // continue trying other tokens
+            }
+        }
+
+        if (!mapped) {
+            return { masterData: md, mongoDoc: null };
+        }
+
+        Object.assign(md.attributes, {
+            height_mm: md.attributes.height_mm ?? mapped.technical.height_mm,
+            outer_diameter_mm: md.attributes.outer_diameter_mm ?? mapped.technical.outer_diameter_mm,
+            inner_diameter_mm: md.attributes.inner_diameter_mm ?? mapped.technical.inner_diameter_mm,
+            gasket_od_mm: md.attributes.gasket_od_mm ?? mapped.technical.gasket_od_mm,
+            gasket_id_mm: md.attributes.gasket_id_mm ?? mapped.technical.gasket_id_mm,
+            thread_size: md.attributes.thread_size ?? mapped.technical.thread_size,
+            micron_rating: md.attributes.micron_rating ?? mapped.technical.micron_rating,
+            bypass_valve_psi: md.attributes.bypass_valve_psi ?? mapped.technical.bypass_valve_psi,
+            rated_flow_gpm: md.attributes.rated_flow_gpm ?? mapped.technical.rated_flow_gpm,
+            weight_grams: md.attributes.weight_grams ?? mapped.technical.weight_grams,
+            seal_material: md.attributes.seal_material ?? mapped.technical.seal_material,
+            housing_material: md.attributes.housing_material ?? mapped.technical.housing_material,
+            iso_test_method: md.attributes.iso_test_method ?? mapped.technical.iso_test_method,
+            operating_temperature_min_c: md.attributes.operating_temperature_min_c ?? mapped.technical.operating_temperature_min_c,
+            operating_temperature_max_c: md.attributes.operating_temperature_max_c ?? mapped.technical.operating_temperature_max_c,
+            hydrostatic_burst_psi: md.attributes.hydrostatic_burst_psi ?? mapped.technical.hydrostatic_burst_psi,
+            operating_pressure_min_psi: md.attributes.operating_pressure_min_psi ?? mapped.technical.operating_pressure_min_psi,
+            operating_pressure_max_psi: md.attributes.operating_pressure_max_psi ?? mapped.technical.operating_pressure_max_psi,
+            dirt_capacity_grams: md.attributes.dirt_capacity_grams ?? mapped.technical.dirt_capacity_grams,
+            water_separation_efficiency_percent: md.attributes.water_separation_efficiency_percent ?? mapped.technical.water_separation_efficiency_percent,
+            service_life_hours: md.attributes.service_life_hours ?? mapped.technical.service_life_hours
+        });
+
+        // Listas para Master (concatenadas a string) y descripción
+        md.oem_codes = md.oem_codes || mapped.lists_sheet.oem_codes || 'N/A';
+        md.cross_reference = md.cross_reference || mapped.lists_sheet.cross_reference || 'N/A';
+        md.equipment_applications = md.equipment_applications || mapped.lists_sheet.equipment_applications || 'N/A';
+        md.engine_applications = md.engine_applications || mapped.lists_sheet.engine_applications || 'N/A';
+        md.description = md.description || mapped.description;
+
+        // Tecnologia aplicada
+        const tecnologia = (function deriveTecnologia() {
+            const fam = String(md.filter_type || md.family || '').toUpperCase();
+            const txt = `${mapped.technical.style || ''} ${mapped.technical.media_type || ''}`.toUpperCase();
+            if (fam.includes('AIRE')) {
+                if (txt.includes('ULTRA-WEB') || txt.includes('SYNTEQ')) return 'ULTRA-WEB AIR';
+                return 'CELLULOSE AIR';
+            }
+            if (fam.includes('FUEL')) {
+                if (txt.includes('WATER') || txt.includes('SEPARATOR')) return 'FUEL/WATER SEPARATOR';
+                return 'FUEL FILTRATION';
+            }
+            if (fam.includes('OIL')) {
+                if (txt.includes('SYNTEQ') || txt.includes('SYNTHETIC')) return 'SYNTHETIC LUBE';
+                return 'CELLULOSE LUBE';
+            }
+            return 'STANDARD FILTRATION';
+        })();
+
+        if (!md.attributes.tecnologia_aplicada) md.attributes.tecnologia_aplicada = tecnologia;
+        return { masterData: md, mongoDoc: null };
+    }
 };

@@ -7,8 +7,24 @@
 
 const assert = require('assert');
 const { validateBatch } = require('../src/services/internalValidationService');
+const { spawnSync } = require('child_process');
+const path = require('path');
 
-async function run() {
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  const out = { quiet: false };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--no-strict-note' || a === '-q') {
+      out.quiet = true;
+    } else if (a === '--help' || a === '-h') {
+      out.help = true;
+    }
+  }
+  return out;
+}
+
+async function run({ quiet = false } = {}) {
   const batch = [
     'P552100',
     'WK 950/20',
@@ -43,11 +59,34 @@ async function run() {
   assert.strictEqual(dd.brand, 'DETROIT DIESEL', '23518480 brand should be DETROIT DIESEL');
   assert.strictEqual(dd.family, 'OIL', '23518480 family should be OIL');
 
-  console.log('OK: Internal validation minimal suite passed.');
-  console.log('Summary:', JSON.stringify(summary, null, 2));
+  if (!quiet) {
+    console.log('OK: Internal validation minimal suite passed.');
+    console.log('Summary:', JSON.stringify(summary, null, 2));
+  }
+
+  // Run pressure normalization suite
+  const pressurePath = path.join(__dirname, 'test_pressure_normalization.js');
+  const pr = spawnSync(process.execPath, [pressurePath], { stdio: 'inherit' });
+  if (pr.status !== 0) {
+    throw new Error('Pressure normalization suite failed.');
+  }
+
+  // Run hydraulic descriptions suite (ES/EN)
+  const descPath = path.join(__dirname, 'test_hydraulic_descriptions.js');
+  const dr = spawnSync(process.execPath, [descPath], { stdio: 'inherit' });
+  if (dr.status !== 0) {
+    throw new Error('Hydraulic descriptions suite failed.');
+  }
 }
 
-run().catch(err => {
-  console.error('Test suite failed:', err && err.stack ? err.stack : err);
-  process.exit(1);
-});
+(function main() {
+  const args = parseArgs(process.argv);
+  if (args.help) {
+    console.log('Uso: node repo/scripts/test_internal_validation.js [-q|--no-strict-note]');
+    process.exit(0);
+  }
+  run({ quiet: !!args.quiet }).catch(err => {
+    console.error('Test suite failed:', err && err.stack ? err.stack : err);
+    process.exit(1);
+  });
+})();

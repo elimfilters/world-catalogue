@@ -141,6 +141,23 @@ elimfilters-api/
    → Decodifica número VIN del vehículo
 
 ═══════════════════════════════════════════════════════════════
+🔧 Configuración de Enriquecimiento HD (Fleetguard)
+═══════════════════════════════════════════════════════════════
+
+- El flujo HD llena columnas F–AR del Master con especificaciones de Fleetguard.
+- Variables de entorno requeridas si el endpoint exige autenticación:
+  - `FLEETGUARD_API_BASE` (por defecto `https://www.fleetguard.com/api/v1`)
+  - `FLEETGUARD_API_TOKEN` (Bearer, opcional)
+- Validación rápida del endpoint:
+  - `node scripts/test_fleetguard_endpoint.js P551807`
+  - Debe devolver `Content-Type: application/json` y campos técnicos.
+  - Si devuelve `text/html` (login Salesforce), configure token/base o contacte soporte.
+
+Notas:
+- La detección HD con fuente DONALDSON llama automáticamente al enriquecimiento Fleetguard.
+- Sin JSON válido, las columnas técnicas quedan vacías o “N/A” por diseño.
+
+═══════════════════════════════════════════════════════════════
 🔧 MEJORAS vs VERSIÓN ANTERIOR
 ═══════════════════════════════════════════════════════════════
 

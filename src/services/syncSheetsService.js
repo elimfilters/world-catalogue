@@ -89,9 +89,8 @@ const COLUMNS = {
 const DESIRED_HEADERS = [
     'query',
     'normsku',
-    'family',
     'duty_type',
-    'filter_type',
+    'type',
     'subtype',
     'description',
     'oem_codes',
@@ -139,6 +138,12 @@ const DESIRED_HEADERS = [
 // Fallback de temperaturas (configurable por entorno)
 // ----------------------------------------------------------------------------
 const FALLBACK_TEMP_ENABLED = String(process.env.FALLBACK_TEMP_ENABLED || 'false').toLowerCase() === 'true';
+// Estimación pública de dimensiones (opcional) para desbloquear validación esencial
+const PUBLIC_DIM_ESTIMATE_ENABLED = String(process.env.PUBLIC_DIM_ESTIMATE_ENABLED || 'true').toLowerCase() === 'true';
+const AIR_EST_HD_HEIGHT_MM = parseFloat(process.env.AIR_EST_HD_HEIGHT_MM || '160');
+const AIR_EST_HD_OD_MM = parseFloat(process.env.AIR_EST_HD_OD_MM || '120');
+const AIR_EST_LD_HEIGHT_MM = parseFloat(process.env.AIR_EST_LD_HEIGHT_MM || '150');
+const AIR_EST_LD_OD_MM = parseFloat(process.env.AIR_EST_LD_OD_MM || '110');
 const FALLBACK_TEMP_MIN_C = parseFloat(process.env.FALLBACK_TEMP_MIN_C || '-40'); // estándar de marca (-30/-40)
 const FALLBACK_TEMP_MAX_NITRILE_C = parseFloat(process.env.FALLBACK_TEMP_MAX_NITRILE_C || '135'); // +120/+135
 const FALLBACK_TEMP_MAX_VITON_C = parseFloat(process.env.FALLBACK_TEMP_MAX_VITON_C || '200');
@@ -183,6 +188,8 @@ const ensureBrandPhrasing = (text) => {
 
 // Medias y lÃ­neas desde util de producto (especificaciÃ³n: usar mediaMapper.js)
 const { getMedia: getProductMedia } = require('../utils/mediaMapper');
+const { getTechnology: getProductTechnology } = require('../utils/elimfiltersTechnologies');
+const { resolveSubtype } = require('../utils/subtypeResolver');
 
 // ============================================================================
 // AUTHENTICATION
@@ -453,6 +460,22 @@ function buildRowData(data) {
         return base;
     }
     const attrs = data.attributes || {};
+    // Resolver A–D (duty/type) por prefijo como pista inicial
+    let preResolved = {};
+    try {
+        const { resolveAToD } = require('../utils/aToDResolver');
+        preResolved = resolveAToD(data.query_normalized || data.code_input || data.sku || '', {
+            duty: data.duty,
+            type: data.type || data.filter_type || data.family,
+            family: data.family,
+            sku: data.sku
+        }) || {};
+        // No sobreescribir si ya vienen definidos; sólo completar vacíos
+        if (!data.duty && preResolved.duty_type) data.duty = preResolved.duty_type;
+        if (!data.type && !data.filter_type && !data.family && preResolved.type) {
+            data.type = preResolved.type;
+        }
+    } catch (_) {}
     // Helper: join list values into readable comma-separated string
     const formatList = (list) => {
         const arr = Array.isArray(list) ? list : (list ? [list] : []);
@@ -529,6 +552,13 @@ function buildRowData(data) {
             const vpsi = parseFloat(m[1]);
             return isNaN(vpsi) ? NaN : vpsi;
         }
+        // MPa â†’ psi (1 MPa â‰ˆ 145.038 psi)
+        m = s.match(/([0-9]+(?:\.[0-9]+)?)\s*mpa\b/i);
+        if (m) {
+            const vmpa = parseFloat(m[1]);
+            const psi = vmpa * 145.038;
+            return isNaN(psi) ? NaN : psi;
+        }
         // bar â†’ psi (1 bar â‰ˆ 14.5 psi)
         m = s.match(/([0-9]+(?:\.[0-9]+)?)\s*bar\b/i);
         if (m) {
@@ -541,6 +571,13 @@ function buildRowData(data) {
         if (m) {
             const vkpa = parseFloat(m[1]);
             const psi = vkpa * 0.145;
+            return isNaN(psi) ? NaN : psi;
+        }
+        // Pa â†’ psi (1 Pa â‰ˆ 0.000145038 psi)
+        m = s.match(/([0-9]+(?:\.[0-9]+)?)\s*pa\b/i);
+        if (m) {
+            const vpa = parseFloat(m[1]);
+            const psi = vpa * 0.000145038;
             return isNaN(psi) ? NaN : psi;
         }
         // Range like "12-16" assume first token
@@ -760,7 +797,7 @@ function buildRowData(data) {
     const tipoConstruccion = attrs.tipo_construccion || attrs['tipo de construcciÃ³n'] || attrs['tipo_de_construcciÃ³n'] || '';
     const disenoInterno = attrs.diseno_interno || attrs['diseÃ±o interno'] || '';
 
-    let typeValue = attrs.type || data.type || data.filter_type || data.family || '';
+    let typeValue = attrs.type || data.type || data.filter_type || data.family || preResolved.type || '';
     if (!typeValue) {
         const f = String(funcVal).toLowerCase();
         if (/separador de agua|water separator/.test(f)) typeValue = 'Fuel Separator';
@@ -981,15 +1018,29 @@ function buildRowData(data) {
         return { finalList, indexArray: idx, entries };
     };
 
-    // DescripciÃ³n scrapeada y fallback
+    // Descripción scrapeada y fallback generador
     const scrapedDescription = attrs.description || attrs.type || '';
     const isGeneric = (
         !scrapedDescription ||
         String(scrapedDescription).length < 50 ||
         STOP_WORDS.some(w => String(scrapedDescription).toUpperCase().includes(w))
     );
-    // Description: prefer scraped text; avoid marketing fallback
-    const finalDescription = scrapedDescription;
+    // Description: prefer scraped text; si es genérica, generar párrafo ELIMFILTERS
+    let finalDescription = scrapedDescription;
+    if (isGeneric) {
+        try {
+            const { generateDescription } = require('../utils/descriptionGenerator');
+            finalDescription = generateDescription({
+                family: familyPrefix,
+                duty: data.duty,
+                subtype: subtypeDescriptor,
+                media_type: mediaTypeBase,
+                lang: String(process.env.DEFAULT_LANG || 'es')
+            }) || scrapedDescription || '';
+        } catch (_) {
+            // Mantener scrapedDescription si el generador no está disponible
+        }
+    }
 
     // OEM Codes: limpieza y bifurcaciÃ³n
     const BRAND_BLOCKLIST = [
@@ -1015,6 +1066,12 @@ function buildRowData(data) {
         /^(PH|TG|XG|HM|CA|CF|PS|G)[0-9]+$/i, // FRAM series
         /^(WL|WP|WA|WF)[0-9]+$/i,       // WIX patterns
         /^(C|W|HU|PU|WK)[0-9]{3,}$/i    // MANN/MAHLE style
+    ];
+    // Subconjunto HD del aftermarket (Donaldson/Fleetguard/Baldwin). Excluye FRAM/Motorcraft/K&N/MANN/MAHLE.
+    const HD_AFTERMARKET_PREFIXES = [
+        /^(P)[0-9]{4,}$/i,               // Donaldson P series (HD)
+        /^(LF|FF|AF|HF|WF)[0-9]+$/i,    // Fleetguard (HD)
+        /^(BF|PF|RS|HP|CA|PA)[0-9]+$/i  // Baldwin (HD)
     ];
     const isAftermarketCR = (code) => AFTERMARKET_PREFIXES.some(rx => rx.test(code));
     const isLikelyOemPattern = (code) => {
@@ -1048,17 +1105,44 @@ function buildRowData(data) {
     const rawCR = Array.isArray(data.cross_reference) ? data.cross_reference : (data.cross_reference ? [data.cross_reference] : []);
 
     // Limpiar y clasificar CR visibles
-    const cleanedCR = Array.from(new Set(
+    let cleanedCR = Array.from(new Set(
         rawCR
             .flatMap(v => String(v || '').split(/[;,\s]+/))
             .map(normalizeCode)
             .filter(Boolean)
             .filter(c => isAftermarketCR(c))
     ));
+    // Si es HD, limitar referencias cruzadas al sector HD y priorizar homologación Donaldson cuando exista
+    const dutyUp = String(data.duty || '').toUpperCase();
+    const isHD = dutyUp === 'HD';
+    const donHomolog = /^(P)[0-9]{4,}$/i.test(String(data.donaldson_code || data.homologated_code || ''));
+    if (isHD) {
+        if (donHomolog) {
+            cleanedCR = cleanedCR.filter(c => /^(P)[0-9]{4,}$/i.test(c));
+        } else {
+            cleanedCR = cleanedCR.filter(c => HD_AFTERMARKET_PREFIXES.some(rx => rx.test(c)));
+        }
+    }
     const crVisualStr = cleanedCR.slice(0, 8).join(', ');
+    const crossRefHDQualityFlag = (() => {
+        if (!isHD) return '';
+        const hadInputCR = (rawCR && rawCR.length > 0);
+        if (hadInputCR && cleanedCR.length === 0) {
+            return '⚠️ HD: referencias cruzadas no HD descartadas; revisar homologación OEM.';
+        }
+        return '';
+    })();
 
     // Limpiar y clasificar OEM genuinos
     const cleanedOem = cleanOemCodes(rawOem);
+    // Ranking comercial y límite para hoja (G)
+    let top8Oem = [];
+    try {
+        const { rankAndLimit } = require('../utils/oemRanker');
+        top8Oem = rankAndLimit(cleanedOem, 8);
+    } catch (_) {
+        top8Oem = cleanedOem.slice(0, 8);
+    }
 
     // Ãndice backend: incluye TODOS los cÃ³digos (CR + OEM), deduplicados
     const oemIndexAll = Array.from(new Set([...cleanedOem, ...cleanedCR]));
@@ -1393,25 +1477,8 @@ function buildRowData(data) {
         : (maxIsFallback ? Number(isVitonSeal ? FALLBACK_TEMP_MAX_VITON_C : FALLBACK_TEMP_MAX_NITRILE_C) : (isNaN(tempMaxCVal) ? '' : Number(tempMaxCVal.toFixed(1))));
     const fallbackTempUsed = (!excludeSkuFromFallback) && (minIsFallback || maxIsFallback);
 
-    return {
-        query: data.query_normalized || data.code_input || '',
-        normsku: data.sku || '',
-        family: familyPrefix,
-        duty_type: data.duty || '',
-        filter_type: typeValue,
-        subtype: subtypeDescriptor,
-        description: finalDescription,
-        oem_codes: cleanedOem.slice(0, 8).join(', '),
-        cross_reference: crVisualStr,
-        media_type: mediaTypeBase,
-        tecnologia_aplicada: (
-            (attrs.tecnologia_aplicada && String(attrs.tecnologia_aplicada).trim()) ||
-            (data.tecnologia_aplicada && String(data.tecnologia_aplicada).trim()) ||
-            ''
-        ),
-        equipment_applications: formatApps(data.equipment_applications || attrs.equipment_applications),
-        engine_applications: buildMotorFinalAndIndex(data.engine_applications || data.applications || [], data.duty || '').finalList.join(', '),
-        height_mm: normalizeMM(
+    // Calcular dimensiones normalizadas y aplicar estimación pública si falta (sólo AIR)
+    const heightIn = normalizeMM(
             attrs.height_mm ||
             attrs.height ||
             attrs.length ||
@@ -1420,8 +1487,8 @@ function buildRowData(data) {
             attrs['overall height'] ||
             attrs['total length'] ||
             ''
-        ),
-        outer_diameter_mm: normalizeMM(
+        );
+    const odIn = normalizeMM(
             attrs.outer_diameter_mm ||
             attrs.outer_diameter ||
             attrs.major_diameter ||
@@ -1430,7 +1497,66 @@ function buildRowData(data) {
             attrs.od ||
             attrs['od'] ||
             ''
+        );
+    const heightNum = parseFloat(String(heightIn || ''));
+    const odNum = parseFloat(String(odIn || ''));
+    const isAirFamily = familyPrefix === 'AIR';
+    let heightOut = heightIn;
+    let odOut = odIn;
+    if (PUBLIC_DIM_ESTIMATE_ENABLED && isAirFamily) {
+        const isHD = String(data.duty || '').toUpperCase() === 'HD';
+        if (!isFinite(heightNum) || heightNum <= 0) {
+            heightOut = String(isHD ? AIR_EST_HD_HEIGHT_MM : AIR_EST_LD_HEIGHT_MM);
+        }
+        if (!isFinite(odNum) || odNum <= 0) {
+            odOut = String(isHD ? AIR_EST_HD_OD_MM : AIR_EST_LD_OD_MM);
+        }
+    }
+
+    // Resolver canónico de subtype (Columna F) con prioridades
+    const canonicalSubtype = (() => {
+        try {
+            return resolveSubtype({
+                family: familyPrefix,
+                duty: data.duty,
+                typeCanon: typeValue,
+                query: data.query_normalized || data.code_input || data.sku || '',
+                existingSubtype: attrs.subtype || attrs.style || '',
+                description: finalDescription,
+                media_type: mediaTypeBase,
+                cross_reference: crVisualStr,
+                attributes: attrs
+            }) || '';
+        } catch (_) { return ''; }
+    })();
+
+    return {
+        query: data.query_normalized || data.code_input || '',
+        normsku: data.sku || '',
+        duty_type: data.duty || '',
+        type: typeValue,
+        subtype: (canonicalSubtype || subtypeDescriptor),
+        family: familyPrefix,
+        filter_type: typeValue,
+        description: finalDescription,
+        oem_codes: top8Oem.join(', '),
+        // Índice Mongo (todos los OEM visibles). No se escribe en Sheet.
+        oem_codes_indice_mongo: cleanedOem,
+        // En HD, las referencias cruzadas deben ser del sector HD y homologadas al OEM del filtro
+        cross_reference: (isHD ? crVisualStr : (crVisualStr || top8Oem.join(', '))),
+        cross_reference_quality_flag: crossRefHDQualityFlag,
+        // Índice interno completo de CR (todas las referencias visibles); no se escribe en Sheet
+        cross_reference_indice_mongo: cleanedCR,
+        media_type: mediaTypeBase,
+        tecnologia_aplicada: (
+            (attrs.tecnologia_aplicada && String(attrs.tecnologia_aplicada).trim()) ||
+            (data.tecnologia_aplicada && String(data.tecnologia_aplicada).trim()) ||
+            getProductTechnology(familyPrefix, data.duty, data.sku)
         ),
+        equipment_applications: formatApps(data.equipment_applications || attrs.equipment_applications),
+        engine_applications: buildMotorFinalAndIndex(data.engine_applications || data.applications || [], data.duty || '').finalList.join(', '),
+        height_mm: heightOut,
+        outer_diameter_mm: odOut,
         micron_rating: (isNaN(micronVal) ? '' : `${micronVal} Âµm`),
         operating_temperature_min_c: tempMinOut,
         operating_temperature_max_c: tempMaxOut,
@@ -3742,20 +3868,7 @@ function buildRowData(data) {
                 attrs['PresiÃ³n de Estallido'] ||
                 ''
             );
-            const burstStr = String(burstRaw || '').toLowerCase().replace(/,/g, '.');
-            const burstMatch = burstStr.match(/([0-9]+(?:\.[0-9]+)?)/);
-            let burstPsi = NaN;
-            if (burstMatch) {
-                const bn = parseFloat(burstMatch[1]);
-                if (!isNaN(bn)) {
-                    let v = bn;
-                    if (/(mpa)/.test(burstStr)) v = bn * 145.038;
-                    else if (/(bar)/.test(burstStr)) v = bn * 14.5;
-                    else if (/(kpa)/.test(burstStr)) v = bn * 0.145038;
-                    else if (/(pa)/.test(burstStr)) v = bn * 0.000145038;
-                    burstPsi = v;
-                }
-            }
+            const burstPsi = normalizePressureToPsi(burstRaw);
             let maxPsi = (() => {
                 const n = parseFloat(numMatch[1]);
                 if (isNaN(n)) return NaN;
@@ -4011,26 +4124,92 @@ function ensureRowCompleteness(row) {
             defIfEmpty('disposal_method', 'Residuo No Peligroso');
             defIfEmpty('rated_flow_cfm', 0);
             defIfEmpty('media_type', getProductMedia('AIR'));
-            defIfEmpty('tecnologia_aplicada', family === 'CABIN' ? 'MICROKAPPA™' : 'MACROCORE™');
+        row['tecnologia_aplicada'] = getProductTechnology(family === 'CABIN' ? 'CABIN' : 'AIR', row.duty_type, row.normsku || '');
         } else if (isLiquid) {
             defIfEmpty('disposal_method', 'Residuo Peligroso');
             defIfEmpty('rated_flow_gpm', 0);
             defIfEmpty('media_type', getProductMedia('FUEL'));
-            if (family === 'COOLANT') {
-                defIfEmpty('tecnologia_aplicada', 'ThermoRelease™');
-            } else {
-                defIfEmpty('tecnologia_aplicada', 'ELIMTEK™ Estándar');
-            }
+        row['tecnologia_aplicada'] = getProductTechnology(family || 'FUEL', row.duty_type, row.normsku || '');
         } else if (isAirDryer) {
             defIfEmpty('disposal_method', 'Residuo Peligroso');
             defIfEmpty('media_type', getProductMedia('AIR'));
-            defIfEmpty('tecnologia_aplicada', 'AeroDry Max');
+        row['tecnologia_aplicada'] = getProductTechnology('AIR_DRYER', row.duty_type, row.normsku || '');
         } else {
-            // Fallback para familias no clasificadas
+            // Fallback para familias no clasificadas: asignar tecnología canónica
             defIfEmpty('disposal_method', 'N/A');
             defIfEmpty('media_type', getProductMedia(family || ''));
-            defIfEmpty('tecnologia_aplicada', 'Tecnología Estándar');
+        row['tecnologia_aplicada'] = getProductTechnology(family || '', row.duty_type, row.normsku || '');
         }
+
+        // Regla canónica para AIRE Radial Seal (HD): estandarizar media y descripción
+        try {
+            const dutyUp = String(row.duty_type || row.duty || '').toUpperCase();
+            const subtypeUp = String(row.subtype || '').toUpperCase();
+            const familyUp = String(row.family || row.filter_type || '').toUpperCase();
+            // Aplicar solo a familia AIR (excluir CABIN)
+            if (familyUp === 'AIR' && dutyUp === 'HD' && /RADIAL/.test(subtypeUp)) {
+                // Media y tecnología ELIMFILTERS para aire HD
+                row.media_type = 'MACROCORE™';
+                row.tecnologia_aplicada = 'MACROCORE™ NanoMax';
+                // Descripción canónica en español
+                row.description = 'Filtro de aire primario de servicio pesado, con sello radial. diseñado por ELIMFILTERS para mantener un flujo de aire estable y proteger el sistema de admisión. al capturar contaminantes antes de que alcancen la cámara de combustión. con tecnología MACROCORE™ diseñada con algoritmos inteligentes.';
+            }
+
+            // Regla canónica por tipo CABIN (Cabina)
+            if (/\bCABIN(A)?\b/.test(familyUp)) {
+                const isCarbon = /CARBON|CARBÓN|ACTIVATED|ACTIVADO/.test(subtypeUp);
+                row.media_type = 'MICROKAPPA™';
+                row.tecnologia_aplicada = isCarbon ? 'MICROKAPPA™ Carbon' : 'MICROKAPPA™ Particulate';
+                row.description = isCarbon
+                    ? 'Filtro de cabina con carbón activado para purificar el aire del habitáculo, captura partículas ultrafinas y neutraliza olores y gases.'
+                    : 'Filtro de cabina particulado para purificar el aire del habitáculo, captura polvo, polen y partículas finas para mayor confort.';
+            }
+
+            // Regla canónica por tipo FUEL (Combustible)
+            if (familyUp === 'FUEL') {
+                const isSeparator = /SEPARADOR|SEPARATOR|COALESC|WATER/.test(subtypeUp);
+                if (isSeparator) {
+                    row.media_type = 'AquaCore Pro';
+                    row.tecnologia_aplicada = 'AquaCore Pro';
+                    row.description = 'Filtro separador/coalescente de combustible, maximiza la separación de agua y protege el sistema de inyección de alta presión.';
+                } else {
+                    row.media_type = 'ELIMTEK™';
+                    row.tecnologia_aplicada = dutyUp === 'HD' ? 'ELIMTEK™ MultiCore' : 'ELIMTEK™ Blend';
+                    row.description = 'Filtro de combustible de servicio ' + (dutyUp === 'HD' ? 'pesado' : 'ligero') + ', diseñado para eficiencia estable y protección del sistema de inyección.';
+                }
+            }
+
+            // Regla canónica por tipo OIL (Aceite)
+            if (familyUp === 'OIL') {
+                const isBypass = /BYPASS/.test(subtypeUp);
+                row.media_type = 'ELIMTEK™';
+                row.tecnologia_aplicada = dutyUp === 'HD' ? 'ELIMTEK™ MultiCore' : 'ELIMTEK™ Blend';
+                row.description = isBypass
+                    ? 'Filtro de aceite tipo bypass para limpieza fina del lubricante, optimiza la vida del motor en servicio ' + (dutyUp === 'HD' ? 'pesado' : 'ligero') + '.'
+                    : 'Filtro de aceite de flujo total para protección del motor, mantiene limpieza y desempeño en servicio ' + (dutyUp === 'HD' ? 'pesado' : 'ligero') + '.';
+            }
+
+            // Regla canónica por tipo HYDRAULIC (Hidráulico)
+            if (familyUp === 'HYDRAULIC') {
+                row.media_type = 'HydroFlow 5000';
+                row.tecnologia_aplicada = 'HydroFlow 5000';
+                row.description = 'Filtro hidráulico de alta eficiencia para sistemas de trabajo pesado, mantiene pureza ISO y protege componentes críticos.';
+            }
+
+            // Regla canónica por tipo COOLANT (Refrigerante)
+            if (familyUp === 'COOLANT') {
+                row.media_type = 'ThermoRelease™';
+                row.tecnologia_aplicada = 'ThermoRelease™';
+                row.description = 'Filtro de refrigerante con sistema de liberación controlada de aditivos, previene corrosión y cavitación en el sistema.';
+            }
+
+            // Regla canónica por tipo AIR DRYER (Secador de Aire)
+            if (familyUp === 'AIR DRYER') {
+                row.media_type = 'AeroDry Max';
+                row.tecnologia_aplicada = 'AeroDry Max';
+                row.description = 'Cartucho desecante para sistemas de frenos, remueve humedad del aire comprimido y mejora la fiabilidad del sistema.';
+            }
+        } catch (_) {}
 
         // Códigos y referencias: siempre texto neutro si faltan
         defIfEmpty('oem_codes', 'N/A');
@@ -4090,6 +4269,13 @@ function isFuelWaterSeparator(row) {
     return keys.some(k => textContainsAny(row[k], kw));
 }
 
+// Heurística: detectar diseño Spin-On por texto
+function isSpinOnDesignHint(row) {
+    const keys = ['subtype','description'];
+    const kw = ['spin', 'rosca', 'roscado', 'unf', 'm\"', 'mm x', 'x tpi'];
+    return keys.some(k => textContainsAny(row[k], kw));
+}
+
 function validateEssentialFields(row) {
     const missing = [];
     const family = String(row.family || row.filter_type || '').toUpperCase();
@@ -4102,25 +4288,27 @@ function validateEssentialFields(row) {
         const low = s.toLowerCase();
         return s.length > 0 && low !== 'sin datos' && low !== 'n/a';
     };
+    const spinOnHint = isSpinOnDesignHint(row);
 
     if (family === 'OIL') {
         if (numVal(row.height_mm) <= 0) missing.push('height_mm');
         if (numVal(row.outer_diameter_mm) <= 0) missing.push('outer_diameter_mm');
-        if (!hasText(row.thread_size)) missing.push('thread_size');
+        // Sólo exigir rosca cuando el diseño sugiere Spin‑On
+        if (spinOnHint && !hasText(row.thread_size)) missing.push('thread_size');
     } else if (family === 'AIR') {
         const okHeight = numVal(row.height_mm) > 0 || numVal(row.panel_width_mm) > 0;
         if (!okHeight) missing.push('height_mm|panel_width_mm');
         if (numVal(row.outer_diameter_mm) <= 0) missing.push('outer_diameter_mm');
     } else if (family === 'FUEL') {
-        if (numVal(row.height_mm) <= 0) missing.push('height_mm');
-        if (!hasText(row.thread_size)) missing.push('thread_size');
-        if (isFuelWaterSeparator(row) && numVal(row.water_separation_efficiency_percent) <= 0) {
-            missing.push('water_separation_efficiency_percent');
-        }
+        // Altura recomendada, pero no bloqueante en mínimos
+        if (spinOnHint && numVal(row.height_mm) <= 0) missing.push('height_mm');
+        // Sólo exigir rosca si el diseño sugiere Spin‑On
+        if (spinOnHint && !hasText(row.thread_size)) missing.push('thread_size');
+        // La eficiencia de separación de agua se reporta como bandera, no bloquea escritura mínima
     } else if (family === 'HYDRAULIC') {
-        if (numVal(row.height_mm) <= 0) missing.push('height_mm');
-        if (!hasText(row.thread_size)) missing.push('thread_size');
-        if (numVal(row.micron_rating) <= 0) missing.push('micron_rating');
+        if (spinOnHint && numVal(row.height_mm) <= 0) missing.push('height_mm');
+        if (spinOnHint && !hasText(row.thread_size)) missing.push('thread_size');
+        // Micron rating útil, pero no debe bloquear upserts mínimos
     }
 
     if (missing.length > 0) {
@@ -4138,12 +4326,73 @@ function validateEssentialFields(row) {
  */
 async function appendToSheet(data) {
     try {
+        // Server-only policy: suppress TURBINE SERIES from Master sheet before any external I/O
+        try {
+            const famUpEarly = String(data.family || '').toUpperCase();
+            const typeUpEarly = String(data.filter_type || data.type || '').toUpperCase();
+            if (famUpEarly === 'TURBINE SERIES' || typeUpEarly === 'TURBINE SERIES') {
+                console.log('🚫 Suppressed TURBINE SERIES for Master (server-only logic retained).');
+                return { suppressed: true };
+            }
+        } catch (_) { /* no-op */ }
         const doc = await initSheet();
         const sheet = doc.sheetsByIndex[0];
         await ensureHeaders(sheet);
         const rowData = buildRowData(data);
+        // Enforce SKU creation policy invariant (robust guard at write-time)
+        try {
+            const { enforceSkuPolicyInvariant } = require('./skuCreationPolicy');
+            const { resolveBrandFamilyDutyByPrefix } = require('../config/prefixMap');
+            const codeForDigits = String(
+                data.code_oem || data.oem_equivalent || data.query_normalized || data.query || data.sku || ''
+            );
+            // Prefer explicit family/duty; otherwise infer deterministically from prefix rules
+            const hint = resolveBrandFamilyDutyByPrefix(codeForDigits) || {};
+            const family = String(data.family || hint.family || '').toUpperCase();
+            const duty = String(data.duty || hint.duty || '').toUpperCase();
+            const payloadForPolicy = {
+                sku: data.sku,
+                family,
+                duty,
+                source: String(data.source || rowData.source || '').toUpperCase(),
+                code_oem: data.code_oem,
+                oem_equivalent: data.oem_equivalent,
+                query_normalized: data.query_normalized,
+                query: data.query
+            };
+            // Proveer código homologado para extracción de últimos 4 según fuente
+            try {
+                const srcUp = String(payloadForPolicy.source || '').toUpperCase();
+                const homologatedCode = (
+                    srcUp === 'FRAM'
+                        ? (data.fram_code || data.homologated_code || data.code_oem)
+                        : (srcUp === 'DONALDSON'
+                            ? (data.donaldson_code || data.homologated_code || data.code_oem)
+                            : '')
+                );
+                if (homologatedCode) {
+                    payloadForPolicy.homologated_code = homologatedCode;
+                }
+            } catch (_) {}
+            // Allow marine specialized families to pass via dedicated generators
+            if (!/^(EM9|ET9)/.test(String(data.sku || ''))) {
+                const resPolicy = enforceSkuPolicyInvariant(payloadForPolicy);
+                if (!resPolicy.ok) {
+                    throw new Error(`SKU policy violation: ${resPolicy.error}`);
+                }
+            }
+        } catch (policyErr) {
+            // If policy fails, block write to ensure invariants are never bypassed
+            if (policyErr && policyErr.message) {
+                throw policyErr;
+            }
+            throw new Error('SKU policy enforcement failed unexpectedly');
+        }
         // Validar antes de completar defaults (bloquea upsert si falta lo esencial)
-        validateEssentialFields(rowData);
+        const skipValidationAppend = data && data.minimal === true;
+        if (!skipValidationAppend) {
+            validateEssentialFields(rowData);
+        }
         const finalized = ensureRowCompleteness(rowData);
         await sheet.addRow(finalized);
         console.log(`ðŸ’¾ Saved to Google Sheet Master: ${data.sku}`);
@@ -4160,6 +4409,15 @@ async function appendToSheet(data) {
  */
 async function upsertBySku(data, options = { deleteDuplicates: true }) {
     try {
+        // Server-only policy: suppress TURBINE SERIES from Master sheet before any external I/O
+        try {
+            const famUpEarly = String(data.family || '').toUpperCase();
+            const typeUpEarly = String(data.filter_type || data.type || '').toUpperCase();
+            if (famUpEarly === 'TURBINE SERIES' || typeUpEarly === 'TURBINE SERIES') {
+                console.log('🚫 Suppressed TURBINE SERIES for Master (server-only logic retained).');
+                return { suppressed: true };
+            }
+        } catch (_) { /* no-op */ }
         const doc = await initSheet();
         const sheet = doc.sheetsByIndex[0];
         await ensureHeaders(sheet);
@@ -4169,13 +4427,78 @@ async function upsertBySku(data, options = { deleteDuplicates: true }) {
         const matches = rows.filter(r => (r.normsku || '').toUpperCase().trim() === skuNorm);
 
         const rowData = buildRowData(data);
-        // Validación previa a escritura
-        validateEssentialFields(rowData);
+        // Validación previa a escritura (permitir modo mínimo sin validar)
+        const skipValidationUpsert = data && data.minimal === true;
+        if (!skipValidationUpsert) {
+            validateEssentialFields(rowData);
+            // Enforce inviolable SKU creation policy: no inventar/adivinar fuera de norma
+            try {
+                const { enforceSkuPolicyInvariant } = require('./skuCreationPolicy');
+                const policyPayload = {
+                    sku: skuNorm,
+                    family: String(data.family || rowData.type || '').toUpperCase(),
+                    duty: String(data.duty || rowData.duty_type || '').toUpperCase(),
+                    source: String(data.source || '').toUpperCase(),
+                    code_oem: String(data.code_oem || '').toUpperCase(),
+                    query_normalized: String(data.query_normalized || rowData.query || '').toUpperCase(),
+                    homologated_code: String(data.homologated_code || '').toUpperCase(),
+                    donaldson_code: String(data.donaldson_code || '').toUpperCase(),
+                    fram_code: String(data.fram_code || '').toUpperCase()
+                };
+                const policyRes = enforceSkuPolicyInvariant(policyPayload);
+                if (!policyRes || policyRes.ok !== true) {
+                    const reason = (policyRes && policyRes.error) ? policyRes.error : 'SKU policy violation';
+                    console.warn(`🛑 Bloqueado por política de SKU: ${reason}`);
+                    return false;
+                }
+            } catch (e) {
+                console.warn(`⚠️ No se pudo aplicar la política de SKU: ${e && e.message ? e.message : e}`);
+            }
+        }
+
+        // -------- HD invariant guard ---------------------------------------
+        // En HD, si el mismo query normalizado ya está mapeado a un SKU distinto,
+        // preferimos el existente y NO creamos/insertamos un SKU similar.
+        try {
+            const dutyType = String(data.duty || rowData.duty_type || '').toUpperCase();
+            const queryNormIncoming = String(
+                data.query_normalized || rowData.query || skuNorm
+            ).toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (dutyType === 'HD' && queryNormIncoming) {
+                const conflict = rows.find(r => {
+                    const q = String(r.query || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    const s = String(r.normsku || '').toUpperCase().trim();
+                    return q === queryNormIncoming && s && s !== skuNorm;
+                });
+                if (conflict) {
+                    const existingSku = String(conflict.normsku || '').toUpperCase().trim();
+                    console.warn(`🛑 HD invariant: query '${queryNormIncoming}' ya está mapeado al SKU '${existingSku}'. Se rechaza crear SKU similar '${skuNorm}'.`);
+                    return false; // bloquea escritura de nuevos similares en HD
+                }
+            }
+        } catch (invErr) {
+            console.warn(`⚠️ No se pudo evaluar la invariante HD: ${invErr && invErr.message ? invErr.message : invErr}`);
+        }
+        // -------------------------------------------------------------------
 
         if (matches.length > 0) {
             const row = matches[0];
             // Assign all fields
-            const finalized = ensureRowCompleteness(rowData);
+            let finalized = ensureRowCompleteness(rowData);
+
+            // Preservar campos aprobados que no deben cambiar una vez generados
+            // Actualmente: description. Si la fila existente tiene un valor no vacío,
+            // no se sobrescribe con el nuevo.
+            try {
+                const IMMUTABLE_FIELDS = ['description'];
+                IMMUTABLE_FIELDS.forEach((field) => {
+                    const existingVal = String(row[field] || '').trim();
+                    if (existingVal) {
+                        finalized[field] = existingVal;
+                    }
+                });
+            } catch (_) { /* no-op */ }
+
             Object.entries(finalized).forEach(([k, v]) => { row[k] = v; });
             await row.save();
             console.log(`â™»ï¸ Upserted existing row for ${data.sku}`);
@@ -4267,6 +4590,87 @@ async function pingSheets() {
     }
 }
 
+// =============================================================================
+// BACKFILL: Completar columnas faltantes en Master con defaults y normalizaciones
+// =============================================================================
+async function backfillMissingMasterColumns() {
+    try {
+        const doc = await initSheet();
+        const sheet = doc.sheetsByIndex[0];
+        await ensureHeaders(sheet);
+
+        const rows = await sheet.getRows();
+        const headers = Array.isArray(sheet.headerValues) ? sheet.headerValues : [];
+
+        // Solo columnas solicitadas para completar
+        const TARGET_COLUMNS = [
+            'fluid_compatibility',
+            'disposal_method',
+            'gasket_od_mm',
+            'gasket_id_mm',
+            'bypass_valve_psi',
+            'beta_200',
+            'hydrostatic_burst_psi',
+            'dirt_capacity_grams',
+            'rated_flow_gpm',
+            'rated_flow_cfm',
+            'operating_pressure_min_psi',
+            'operating_pressure_max_psi',
+            'weight_grams',
+            'panel_width_mm',
+            'panel_depth_mm',
+            'water_separation_efficiency_percent',
+            'drain_type',
+            'inner_diameter_mm',
+            'pleat_count',
+            'seal_material',
+            'housing_material',
+            'iso_main_efficiency_percent',
+            'iso_test_method',
+            'manufacturing_standards',
+            'certification_standards',
+            'service_life_hours',
+            'change_interval_km'
+        ];
+
+        let updated = 0;
+
+        for (const row of rows) {
+            // Construir objeto plano con los valores actuales de la fila
+            const obj = {};
+            for (const h of headers) {
+                obj[h] = row[h];
+            }
+
+            // Aplicar completitud basada en familia (defaults y normalizaciones ya definidas)
+            const before = {};
+            for (const key of TARGET_COLUMNS) before[key] = obj[key];
+            const completed = ensureRowCompleteness(obj) || obj;
+
+            // Actualizar sólo columnas objetivo cuando estén vacías y tengamos valor
+            let changed = false;
+            for (const key of TARGET_COLUMNS) {
+                const cur = row[key];
+                const isEmpty = cur === undefined || cur === null || (typeof cur === 'string' && cur.trim() === '');
+                const val = completed[key];
+                if (isEmpty && typeof val !== 'undefined') {
+                    row[key] = val;
+                    changed = true;
+                }
+            }
+
+            if (changed) {
+                await row.save();
+                updated++;
+            }
+        }
+
+        return { ok: true, total: rows.length, updated };
+    } catch (error) {
+        return { ok: false, error: error.message };
+    }
+}
+
 // ============================================================================
 // EXPORTS
 // ============================================================================
@@ -4284,6 +4688,7 @@ module.exports = {
     saveKitToSheetLD,
     // Export interno para pruebas y validaciones locales
     buildRowData,
-    pingSheets
+    pingSheets,
+    backfillMissingMasterColumns
 };
 
