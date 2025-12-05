@@ -5,7 +5,7 @@
 // ============================================================================
 
 const { validateDonaldsonCode } = require('./donaldson');
-const { validateFramCode, resolveFramByCuratedOEM } = require('./fram');
+const { validateFramCode } = require('./fram');
 const { extract4Digits, extract4Alnum } = require('../utils/digitExtractor');
 const prefixMap = require('../config/prefixMap');
 
