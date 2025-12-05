@@ -44,20 +44,25 @@ async function tryOemFallback(oemCode, duty, familyHint) {
   const key = canonKey(oemCode);
   const meta = OEM_XREF[key] || null;
 
-          // Fallback: intentar resolver OEM→FRAM con mapa curado solo si el duty es LD
-        if (skuPolicyConfig.allowLdFramCanonization && (!scraperResult || !scraperResult.last4) && duty === 'LD') {
-            try {
-                const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
-                const framResolved = resolveFramByCuratedOEM(query);
+  // Fallback: intentar resolver OEM→FRAM con mapa curado solo si el duty es LD
+if (skuPolicyConfig.allowLdFramCanonization && (!scraperResult || !scraperResult.last4) && duty === 'LD') {
+    try {
+        const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
+        const framResolved = resolveFramByCuratedOEM(query);
 
-                if (framResolved) {
-                    const fr2 = await validateFramCode(framResolved);
-                    if (fr2 && fr2.last4) {
-                        scraperResult = fr2;
-                        duty = 'LD';
-                        console.log(`✅ Resuelto vía mapa curado OEM→FRAM (LD): ${query} → ${framResolved}`);
-                    }
-                }
+        if (framResolved) {
+            const fr2 = await validateFramCode(framResolved);
+            if (fr2 && fr2.last4) {
+                scraperResult = fr2;
+                duty = 'LD';
+                console.log(`✅ Resuelto vía mapa curado OEM→FRAM (LD): ${query} → ${framResolved}`);
+            }
+        }
+    } catch (fallbackErr) {
+        console.log(`⚠️  Error en fallback OEM→FRAM (LD): ${fallbackErr.message}`);
+    }
+}
+
             } catch (fallbackErr) {
                 console.log(`⚠️  Error en fallback OEM→FRAM (LD): ${fallbackErr.message}`);
             }
