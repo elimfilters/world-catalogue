@@ -532,9 +532,9 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         // Fallback: intentar resolver OEMâ†’FRAM con mapa curado solo si el duty es LD
         if (skuPolicyConfig.allowLdFramCanonization && (!scraperResult || !scraperResult.last4) && duty === 'LD') {
             try {
-                const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
+                // const { resolveFramByCuratedOEM, validateFramCode } = require('../scrapers/fram');
                 // const framResolved = resolveFramByCuratedOEM(query);
-                if (framResolved) {
+                // if (framResolved) {
                     const fr2 = await validateFramCode(framResolved);
                     if (fr2 && fr2.last4) {
                         scraperResult = fr2;
@@ -1488,4 +1488,5 @@ const equipFinal = ensureMinApps(equipFmt, duty, 'equipment');
 module.exports = {
     detectFilter
 };
+
 

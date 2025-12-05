@@ -57,11 +57,8 @@ async function scraperBridge(code, duty) {
 
         // OEM→FRAM resolución curada (p.e. Toyota 90915-YZZN1 → PH4967)
         // Primero intentar resolver usando listas curadas globales de fram.js
-        // let resolvedFram = resolveFramByCuratedOEM(normalizedCode);
-        if (!resolvedFram) {
-            // Fallback adicional local
-            resolvedFram = maybeResolveFramFromOEM(normalizedCode);
-        }
+        let resolvedFram = null; // resolveFramByCuratedOEM(normalizedCode);
+        
         if (resolvedFram) {
             const fr2 = await validateFramCode(resolvedFram);
             if (fr2 && fr2.valid) {
@@ -210,3 +207,4 @@ function validateSierraCode(code) {
         }
     return null;
 }
+
