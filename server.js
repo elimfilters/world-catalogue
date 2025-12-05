@@ -29,6 +29,10 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 // LT Validator
 const { validateAll } = require('./src/services/security/validateLtRules');
+// LT Health helpers
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
 
 // Route imports
 const detectRoute = require('./src/api/detect');
@@ -261,6 +265,45 @@ app.get('/validate/self-test', (req, res) => {
         };
         const ok = validateAll(payload);
         res.status(200).json({ status: 'OK', ok });
+    } catch (e) {
+        res.status(500).json({ status: 'ERROR', error: e.message });
+    }
+});
+
+// =============================================
+//  LT VALIDATOR DETAILED HEALTH
+// =============================================
+app.get('/health/lt', (req, res) => {
+    try {
+        const rulesPath = path.join(__dirname, 'src', 'config', 'LT_RULES_MASTER.json');
+        const raw = fs.readFileSync(rulesPath, 'utf8');
+        const rulesHash = crypto.createHash('sha256').update(raw).digest('hex');
+        const rules = JSON.parse(raw);
+
+        const securityCfg = rules?.rules?.security || {};
+        const securityOk = securityCfg.block_on_rule_violation === true;
+
+        const scraping = rules?.rules?.scraping || {};
+        const scraping_sources = Object.entries(scraping).map(([name, cfg]) => ({
+            name,
+            allowed_for: cfg.allowed_for,
+            columns_allowed: cfg.columns_allowed
+        }));
+
+        const vin_regex = rules?.rules?.vin_engine?.validation_regex || null;
+        const tech_allowed = rules?.rules?.technology_assignment?.allowed_values || [];
+
+        const statusCode = securityOk ? 200 : 500;
+        res.status(statusCode).json({
+            status: securityOk ? 'OK' : 'ERROR',
+            version: APP_VERSION,
+            git_sha: GIT_SHA,
+            rules_hash: rulesHash,
+            scraping_sources,
+            vin_regex,
+            tech_allowed_count: tech_allowed.length,
+            security: securityCfg
+        });
     } catch (e) {
         res.status(500).json({ status: 'ERROR', error: e.message });
     }
