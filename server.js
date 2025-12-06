@@ -218,6 +218,7 @@ app.get('/health/overall', async (req, res) => {
     const start = Date.now();
     let sheets = { ok: false };
     let mongo = { status: 'DISABLED' };
+    let lt = { status: 'UNKNOWN' };
     try {
         sheets = await pingSheets();
     } catch (e) {
@@ -233,9 +234,27 @@ app.get('/health/overall', async (req, res) => {
             try { await mongoService.disconnect(); } catch (_) {}
         }
     }
+    // LT validator quick health snapshot
+    try {
+        const rulesPath = path.join(__dirname, 'src', 'config', 'LT_RULES_MASTER.json');
+        const raw = fs.readFileSync(rulesPath, 'utf8');
+        const rulesHash = crypto.createHash('sha256').update(raw).digest('hex');
+        const rulesHashShort = rulesHash.slice(0, 8);
+        const mtimeIso = new Date(fs.statSync(rulesPath).mtime).toISOString();
+        const rules = JSON.parse(raw);
+        const securityCfg = rules?.rules?.security || {};
+        const securityOk = securityCfg.block_on_rule_violation === true;
+        lt = {
+            status: securityOk ? 'OK' : 'ERROR',
+            rules_hash_short: rulesHashShort,
+            rules_loaded_at: mtimeIso
+        };
+    } catch (e) {
+        lt = { status: 'ERROR', error: e.message };
+    }
     const elapsedMs = Date.now() - start;
 
-    const allOk = sheets.ok && (mongo.status === 'OK' || mongo.status === 'DISABLED');
+    const allOk = sheets.ok && (mongo.status === 'OK' || mongo.status === 'DISABLED') && lt.status === 'OK';
     const statusCode = allOk ? 200 : 500;
     res.status(statusCode).json({
         status: allOk ? 'OK' : 'ERROR',
@@ -245,7 +264,8 @@ app.get('/health/overall', async (req, res) => {
         uptime: process.uptime(),
         response_time_ms: elapsedMs,
         sheets,
-        mongo
+        mongo,
+        lt
     });
 });
 
