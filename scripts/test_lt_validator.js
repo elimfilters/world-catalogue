@@ -1,87 +1,112 @@
-/*
- * Test harness para validateLtRules.js
- * Ejecuta tres casos: EK5 (HD), EK3 (LD) y uno inválido
- */
+#!/usr/bin/env node
+const http = require('http');
+const https = require('https');
 
-const path = require('path');
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const out = {};
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--base' && args[i + 1]) out.base = args[++i];
+  }
+  return out;
+}
+
+function getJSON(url, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const lib = url.startsWith('https') ? https : http;
+    const req = lib.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          resolve({ statusCode: res.statusCode, json });
+        } catch (e) {
+          reject(new Error(`Invalid JSON from ${url}: ${e.message}`));
+        }
+      });
+    });
+    req.on('error', (err) => reject(err));
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`Timeout after ${timeoutMs}ms for ${url}`));
+    });
+  });
+}
+
+function isIsoDateString(s) {
+  if (typeof s !== 'string') return false;
+  const d = new Date(s);
+  return !isNaN(d.getTime());
+}
+
+function validateHealthLt(data) {
+  const errs = [];
+  if (data.status !== 'OK') errs.push('health/lt status != OK');
+  if (!data.rules_hash || typeof data.rules_hash !== 'string' || data.rules_hash.length !== 64) errs.push('rules_hash missing or invalid length');
+  if (!data.rules_hash_short || data.rules_hash_short.length !== 8) errs.push('rules_hash_short missing or invalid length');
+  if (!isIsoDateString(data.rules_loaded_at)) errs.push('rules_loaded_at missing or invalid');
+  if (!data.security || data.security.block_on_rule_violation !== true) errs.push('security.block_on_rule_violation must be true');
+  if (!Array.isArray(data.scraping_sources) || data.scraping_sources.length === 0) errs.push('scraping_sources missing or empty');
+  return errs;
+}
+
+function validateOverall(data) {
+  const errs = [];
+  if (data.status !== 'OK') errs.push('health/overall status != OK');
+  if (!data.lt || data.lt.status !== 'OK') errs.push('overall.lt status != OK');
+  if (!data.lt || !data.lt.rules_hash_short || data.lt.rules_hash_short.length !== 8) errs.push('overall.lt.rules_hash_short invalid');
+  if (!data.lt || !isIsoDateString(data.lt.rules_loaded_at)) errs.push('overall.lt.rules_loaded_at invalid');
+  return errs;
+}
 
 async function main() {
-  const {
-    validateAll,
-    loadRules,
-  } = require(path.join('..', 'src', 'services', 'security', 'validateLtRules.js'));
+  const { base } = parseArgs();
+  const BASE = base || process.env.BASE_URL || 'http://localhost:8081';
+  const urls = {
+    lt: `${BASE}/health/lt`,
+    overall: `${BASE}/health/overall`
+  };
 
-  let rules = null;
+  const results = { ok: false, errors: [], details: {} };
   try {
-    rules = await loadRules();
-    console.log('[info] LT_RULES_MASTER.json cargado correctamente');
+    const ltResp = await getJSON(urls.lt);
+    results.details.lt_statusCode = ltResp.statusCode;
+    const ltErrs = validateHealthLt(ltResp.json);
+    if (ltErrs.length) results.errors.push({ endpoint: 'health/lt', errors: ltErrs });
+    results.details.lt = ltResp.json;
   } catch (e) {
-    console.warn('[warn] No se pudo cargar LT_RULES_MASTER.json, se probará validateAll sin reglas explícitas:', e.message);
+    results.errors.push({ endpoint: 'health/lt', error: e.message });
   }
 
-  const tests = [
-    {
-      name: 'EK5 (HD) Fleetguard válido',
-      input: {
-        duty: 'HD',
-        source: 'Fleetguard',
-        columns: ['Contenido del Kit', 'Filtro Principal (Ref)', 'Tecnología'],
-        sku: 'EK5-0123',
-        technology: 'ELIMTEK™ Standard',
-        vin: '1FDWF7DE7JDF12345',
-        kits: {
-          type: 'EK5',
-          primaryFilter: 'LF16352',
-          contents: ['LF16352 x1', 'AF25139 x1', 'WF2071 x1'],
-        },
-        security: { enabled: true, mode: 'strict' },
-      },
-    },
-    {
-      name: 'EK3 (LD) Fleetguard válido',
-      input: {
-        duty: 'LD',
-        source: 'FRAM',
-        columns: ['Contenido del Kit', 'Filtro Principal (Ref)', 'Tecnología'],
-        sku: 'EK3-0456',
-        technology: 'ELIMTEK™ Standard',
-        vin: '1GCHK23U43F123456',
-        kits: {
-          type: 'EK3',
-          primaryFilter: 'AF25139',
-          contents: ['AF25139 x1', 'LF16352 x1'],
-        },
-        security: { enabled: true, mode: 'strict' },
-      },
-    },
-    {
-      name: 'Caso inválido (fuente/columnas/SKU/VIN)',
-      input: {
-        duty: 'HD',
-        source: 'UnknownBrand',
-        columns: ['Precio', 'Descuento'],
-        sku: 'EK5-00AB',
-        technology: 'ELIMTEK™ Standard',
-        vin: 'XXXX',
-        kits: { type: 'EK5', contents: ['LF16352 x1'] },
-        security: { enabled: false },
-      },
-    },
-  ];
+  try {
+    const overallResp = await getJSON(urls.overall);
+    results.details.overall_statusCode = overallResp.statusCode;
+    const ovErrs = validateOverall(overallResp.json);
+    if (ovErrs.length) results.errors.push({ endpoint: 'health/overall', errors: ovErrs });
+    results.details.overall = overallResp.json;
+  } catch (e) {
+    results.errors.push({ endpoint: 'health/overall', error: e.message });
+  }
 
-  for (const t of tests) {
-    try {
-      const result = rules ? await validateAll(t.input, rules) : await validateAll(t.input);
-      console.log(`\n=== Resultado: ${t.name} ===`);
-      console.log(JSON.stringify(result, null, 2));
-    } catch (err) {
-      console.error(`\n=== Error en: ${t.name} ===`);
-      console.error(err && err.stack ? err.stack : err);
-    }
+  results.ok = results.errors.length === 0;
+
+  if (results.ok) {
+    console.log(JSON.stringify({
+      ok: true,
+      base: BASE,
+      lt_hash_short: results.details.lt?.rules_hash_short,
+      lt_loaded_at: results.details.lt?.rules_loaded_at,
+      summary: 'LT endpoints validated successfully'
+    }));
+    process.exit(0);
+  } else {
+    console.error(JSON.stringify({ ok: false, base: BASE, errors: results.errors }, null, 2));
+    process.exit(2);
   }
 }
 
 main().catch((e) => {
-  console.error('[fatal] Error ejecutando test_lt_validator:', e && e.stack ? e.stack : e);
+  console.error(JSON.stringify({ ok: false, error: e.message }));
   process.exit(1);
 });
