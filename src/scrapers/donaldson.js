@@ -66,7 +66,7 @@ const DONALDSON_DATABASE = {
         },
         applications: ['Heavy Duty Engine Air', 'Freightliner', 'Detroit 60 Series']
     },
-    
+
     // ========== DBL-SERIES (Donaldson Blue Lube) ==========
     'DBL7349': {
         family: 'OIL',
@@ -83,7 +83,7 @@ const DONALDSON_DATABASE = {
         },
         applications: ['Cummins', 'Heavy Duty Diesel']
     },
-    
+
     // ========== DBA-SERIES (Donaldson Blue Air) ==========
     'DBA5000': {
         family: 'AIRE',
@@ -96,7 +96,7 @@ const DONALDSON_DATABASE = {
         cross_references: {},
         applications: ['On-road trucks', 'Off-road equipment', 'Mining']
     },
-    
+
     // ========== ELF-SERIES (Endurance Lube Filter) ==========
     'ELF7349': {
         family: 'OIL',
@@ -239,12 +239,12 @@ const DONALDSON_DATABASE = {
 
 // Curated exceptions: Donaldson P55 subseries items known to be FUEL
 const P55_FUEL_EXCEPTIONS = new Set([
-  'P551329',
-  'P551313',
-  'P551311',
-  'P551421',
-  // Corrección solicitada: P550440 no es OIL, clasificar como FUEL
-  'P550440'
+    'P551329',
+    'P551313',
+    'P551311',
+    'P551421',
+    // Corrección solicitada: P550440 no es OIL, clasificar como FUEL
+    'P550440'
 ]);
 
 /**
@@ -252,7 +252,7 @@ const P55_FUEL_EXCEPTIONS = new Set([
  */
 function detectSeriesType(code) {
     const normalized = code.toUpperCase();
-    
+
     if (normalized.startsWith('DBL')) return 'DBL';
     if (normalized.startsWith('DBA')) return 'DBA';
     if (normalized.startsWith('ELF')) return 'ELF';
@@ -262,7 +262,7 @@ function detectSeriesType(code) {
     if (normalized.startsWith('X')) return 'X';
     if (normalized.startsWith('P')) return 'P';
     if (normalized.startsWith('C')) return 'C';
-    
+
     return null;
 }
 
@@ -272,13 +272,13 @@ function detectSeriesType(code) {
 function detectFamilyFromCode(code) {
     const normalized = code.toUpperCase();
     const series = detectSeriesType(normalized);
-    
+
     // DBL series = always OIL
     if (series === 'DBL') return 'OIL';
-    
+
     // DBA series = always AIRE
     if (series === 'DBA') return 'AIRE';
-    
+
     // ELF series = always OIL
     if (series === 'ELF') return 'OIL';
 
@@ -287,13 +287,13 @@ function detectFamilyFromCode(code) {
 
     // HFA/EAF series = AIRE
     if (series === 'HFA' || series === 'EAF') return 'AIRE';
-    
+
     // X-series (unknown family until confirmed) → no family
     if (series === 'X') return null;
-    
+
     // C-series (Duralite Air) = always AIRE
     if (series === 'C') return 'AIRE';
-    
+
     // P-series: reglas curadas y excepciones
     if (series === 'P') {
         // Excepción curada: P781466 y su PN actualizado P953571 son AIR DRYER
@@ -318,7 +318,7 @@ function detectFamilyFromCode(code) {
         // Otros P-series no son aceptados en nuestra línea
         return null;
     }
-    
+
     return null;
 }
 
@@ -392,18 +392,18 @@ function findDonaldsonCode(inputCode) {
 async function scrapeDonaldson(code) {
     try {
         console.log(`📡 Donaldson scraper: ${code}`);
-        
+
         const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        
+
         // Step 1: Try cross-reference lookup
         let donaldsonCode = findDonaldsonCode(normalized);
-        
+
         if (donaldsonCode && DONALDSON_DATABASE[donaldsonCode]) {
             const filter = DONALDSON_DATABASE[donaldsonCode];
             const series = detectSeriesType(donaldsonCode);
-            
+
             console.log(`✅ Found via cross-reference: ${code} → ${donaldsonCode} (${series}-series)`);
-            
+
             const crossTokens = Object.keys(filter.cross_references || {});
             const orderedCross = orderDonaldsonCrossByPriority(crossTokens);
             return {
@@ -417,14 +417,14 @@ async function scrapeDonaldson(code) {
                 attributes: filter.specifications || {}
             };
         }
-        
+
         // Step 2: Try direct lookup
         if (DONALDSON_DATABASE[normalized]) {
             const filter = DONALDSON_DATABASE[normalized];
             const series = detectSeriesType(normalized);
-            
+
             console.log(`✅ Found directly: ${normalized} (${series}-series)`);
-            
+
             const crossTokens = Object.keys(filter.cross_references || {});
             const orderedCross = orderDonaldsonCrossByPriority(crossTokens);
             return {
@@ -438,7 +438,7 @@ async function scrapeDonaldson(code) {
                 attributes: filter.specifications || {}
             };
         }
-        
+
         // Step 3: Pattern detection (estricto) — aceptar formatos canónicos
         // Solo aceptamos si coincide con el regex estricto de Donaldson
         const series = detectSeriesType(normalized);
@@ -456,10 +456,10 @@ async function scrapeDonaldson(code) {
                 attributes: { product_type: detectedFamily }
             };
         }
-        
+
         // Step 4: Web lookup fallback (DESACTIVADO para validación estricta)
         // Evita homologar por coincidencia textual del sitio.
-        
+
         // Step 5: Not found
         console.log(`⚠️  Donaldson filter not found: ${code}`);
         return {
@@ -475,7 +475,7 @@ async function scrapeDonaldson(code) {
 
     } catch (error) {
         console.error(`❌ Donaldson scraper error: ${error.message}`);
-        
+
         return {
             found: false,
             code: code,
@@ -493,144 +493,118 @@ async function scrapeDonaldson(code) {
 // Orden regional de cruces HD
 // ================================
 function getDonaldsonRegionalPriority() {
-  const region = String(process.env.MARKET_REGION || '').toUpperCase();
-  // OEMs y aftermarket relevantes
-  const OEMS_COMMON = [
-    'CATERPILLAR','DETROIT DIESEL','CUMMINS','MACK','JOHN DEERE','VOLVO','KOMATSU','SCANIA','MAN','DAF','IVECO','RENAULT',
-    'ISUZU','HINO','UD TRUCKS','PACCAR','PERKINS','DEUTZ','KUBOTA','YANMAR','JCB','BOBCAT','TEREX','HITACHI','DOOSAN','SANY',
-    'FORD','CHEVROLET','GM','GMC','DODGE','RAM','KENWORTH','PETERBILT','INTERNATIONAL',
-    'TOYOTA','NISSAN','LEXUS','HONDA','ACURA','MITSUBISHI','BMW','MERCEDES BENZ','VOLKSWAGEN','AUDI','TESLA','OPEL','SKODA','PEUGEOT','CITROEN','FIAT','ALFA ROMEO','SEAT','LAND ROVER','JAGUAR','PORSCHE',
-    'RENAULT TRUCKS','BYD','CHERY','GEELY','GREAT WALL','GWM','JAC','FAW','DONGFENG','FOTON','BAIC','CHANGAN','YUTONG',
-    'CASE','CASE IH','NEW HOLLAND','CNH'
-  ];
-  // Orden base (genérico)
-  let base = [
-    'DONALDSON','FLEETGUARD',
-    // OEMs generales
-    ...OEMS_COMMON,
-    // Aftermarket HD/LD
-    'BALDWIN','WIX','MANN','MAHLE','HENGST','TECFIL','WEGA','VOX','GFC','FRAM','BOSCH','K&N','ACDELCO','NAPA','PURFLUX','HIFI FILTER'
-  ];
-  if (region.includes('EU')) {
-    base = [
-      'DONALDSON','FLEETGUARD','MANN','MAHLE','HENGST',
-      // OEMs europeos primero (trucks + passenger)
-      'SCANIA','MAN','DAF','IVECO','RENAULT TRUCKS','RENAULT','VOLVO',
-      'MERCEDES BENZ','BMW','VOLKSWAGEN','AUDI','SKODA','OPEL','PEUGEOT','CITROEN','FIAT','ALFA ROMEO','SEAT','LAND ROVER','JAGUAR','PORSCHE','TESLA',
-      // Resto OEMs
-      'FORD','TOYOTA','NISSAN','LEXUS','HONDA','ACURA','MITSUBISHI','ISUZU','HINO','UD TRUCKS','BYD','CHERY','GEELY','GREAT WALL','GWM','JAC','FAW','DONGFENG','FOTON','BAIC','CHANGAN','YUTONG',
-      'JOHN DEERE','KOMATSU','CATERPILLAR','DETROIT DIESEL','PERKINS','DEUTZ','KUBOTA','YANMAR','JCB','BOBCAT','TEREX','HITACHI','DOOSAN','SANY',
-      // Aftermarket
-      'BALDWIN','WIX','TECFIL','FRAM','BOSCH','K&N','ACDELCO','NAPA','PURFLUX','HIFI FILTER','WEGA','VOX','GFC'
+    const region = String(process.env.MARKET_REGION || '').toUpperCase();
+    // OEMs y aftermarket relevantes
+    const OEMS_COMMON = [
+        'CATERPILLAR', 'DETROIT DIESEL', 'CUMMINS', 'MACK', 'JOHN DEERE', 'VOLVO', 'KOMATSU', 'SCANIA', 'MAN', 'DAF', 'IVECO', 'RENAULT',
+        'ISUZU', 'HINO', 'UD TRUCKS', 'PACCAR', 'PERKINS', 'DEUTZ', 'KUBOTA', 'YANMAR', 'JCB', 'BOBCAT', 'TEREX', 'HITACHI', 'DOOSAN', 'SANY',
+        'FORD', 'CHEVROLET', 'GM', 'GMC', 'DODGE', 'RAM', 'KENWORTH', 'PETERBILT', 'INTERNATIONAL',
+        'TOYOTA', 'NISSAN', 'LEXUS', 'HONDA', 'ACURA', 'MITSUBISHI', 'BMW', 'MERCEDES BENZ', 'VOLKSWAGEN', 'AUDI', 'TESLA', 'OPEL', 'SKODA', 'PEUGEOT', 'CITROEN', 'FIAT', 'ALFA ROMEO', 'SEAT', 'LAND ROVER', 'JAGUAR', 'PORSCHE',
+        'RENAULT TRUCKS', 'BYD', 'CHERY', 'GEELY', 'GREAT WALL', 'GWM', 'JAC', 'FAW', 'DONGFENG', 'FOTON', 'BAIC', 'CHANGAN', 'YUTONG',
+        'CASE', 'CASE IH', 'NEW HOLLAND', 'CNH'
     ];
-  } else if (region.includes('LATAM')) {
-    base = [
-      'DONALDSON','FLEETGUARD',
-      // Aftermarket LATAM prioritario
-      'TECFIL','WEGA','VOX','GFC',
-      // OEMs HD/LatAm relevantes
-      'CATERPILLAR','DETROIT DIESEL','CUMMINS','MACK','JOHN DEERE','ISUZU','VOLVO','KOMATSU','SCANIA','IVECO','RENAULT','HINO','UD TRUCKS','PACCAR',
-      // OEMs automotrices comunes
-      'FORD','CHEVROLET','GM','GMC','DODGE','RAM','KENWORTH','PETERBILT','INTERNATIONAL',
-      'TOYOTA','NISSAN','LEXUS','HONDA','ACURA','MITSUBISHI','BMW','MERCEDES BENZ','VOLKSWAGEN','AUDI','TESLA','OPEL','SKODA','PEUGEOT','CITROEN','FIAT','BYD','CHERY','GEELY','GREAT WALL','GWM','JAC','FAW','DONGFENG','FOTON','BAIC','CHANGAN','YUTONG',
-      // Agro/industriales presentes en la región
-      'PERKINS','DEUTZ','KUBOTA','YANMAR','JCB','BOBCAT','TEREX','HITACHI','DOOSAN','SANY','CASE','CASE IH','NEW HOLLAND','CNH',
-      // Aftermarket global/HD
-      'BALDWIN','WIX','MANN','FRAM','BOSCH','K&N','ACDELCO','NAPA','MAHLE','HENGST','PURFLUX','HIFI FILTER'
+    // Orden base (genérico)
+    let base = [
+        'DONALDSON', 'FLEETGUARD',
+        // OEMs generales
+        ...OEMS_COMMON,
+        // Aftermarket HD/LD
+        'BALDWIN', 'WIX', 'MANN', 'MAHLE', 'HENGST', 'TECFIL', 'WEGA', 'VOX', 'GFC', 'FRAM', 'BOSCH', 'K&N', 'ACDELCO', 'NAPA', 'PURFLUX', 'HIFI FILTER'
     ];
-  } else if (region.includes('NA') || region.includes('US') || region.includes('USA')) {
-    base = [
-      'DONALDSON','FLEETGUARD',
-      // OEMs HD/NA relevantes
-      'CATERPILLAR','DETROIT DIESEL','CUMMINS','MACK','JOHN DEERE','ISUZU','VOLVO','KOMATSU','SCANIA','IVECO','RENAULT','HINO','UD TRUCKS','PACCAR',
-      // OEMs automotrices comunes
-      'FORD','CHEVROLET','GM','GMC','DODGE','RAM','KENWORTH','PETERBILT','INTERNATIONAL',
-      'TOYOTA','NISSAN','LEXUS','HONDA','ACURA','MITSUBISHI','BMW','MERCEDES BENZ','VOLKSWAGEN','AUDI','TESLA','OPEL','SKODA','PEUGEOT','CITROEN','FIAT','BYD','CHERY','GEELY','GREAT WALL','GWM','JAC','FAW','DONGFENG','FOTON','BAIC','CHANGAN','YUTONG',
-      // Agro/industriales presentes en la región
-      'PERKINS','DEUTZ','KUBOTA','YANMAR','JCB','BOBCAT','TEREX','HITACHI','DOOSAN','SANY','CASE','CASE IH','NEW HOLLAND','CNH',
-      // Aftermarket HD
-      'BALDWIN','WIX','MANN','TECFIL','WEGA','VOX','GFC',
-      // Otros aftermarket
-      'FRAM','BOSCH','K&N','ACDELCO','NAPA','MAHLE','HENGST','PURFLUX','HIFI FILTER'
-    ];
-  }
-  return base;
+    if (region.includes('EU')) {
+        base = [
+            'DONALDSON', 'FLEETGUARD', 'MANN', 'MAHLE', 'HENGST',
+            // OEMs europeos primero (trucks + passenger)
+            'SCANIA', 'MAN', 'DAF', 'IVECO', 'RENAULT TRUCKS', 'RENAULT', 'VOLVO',
+            'MERCEDES BENZ', 'BMW', 'VOLKSWAGEN', 'AUDI', 'SKODA', 'OPEL', 'PEUGEOT', 'CITROEN', 'FIAT', 'ALFA ROMEO', 'SEAT', 'LAND ROVER', 'JAGUAR', 'PORSCHE', 'TESLA',
+            // Resto OEMs
+            'FORD', 'TOYOTA', 'NISSAN', 'LEXUS', 'HONDA', 'ACURA', 'MITSUBISHI', 'ISUZU', 'HINO', 'UD TRUCKS', 'BYD', 'CHERY', 'GEELY', 'GREAT WALL', 'GWM', 'JAC', 'FAW', 'DONGFENG', 'FOTON', 'BAIC', 'CHANGAN', 'YUTONG',
+            'JOHN DEERE', 'KOMATSU', 'CATERPILLAR', 'DETROIT DIESEL', 'PERKINS', 'DEUTZ', 'KUBOTA', 'YANMAR', 'JCB', 'BOBCAT', 'TEREX', 'HITACHI', 'DOOSAN', 'SANY',
+            // Aftermarket
+            'BALDWIN', 'WIX', 'TECFIL', 'FRAM', 'BOSCH', 'K&N', 'ACDELCO', 'NAPA', 'PURFLUX', 'HIFI FILTER', 'WEGA', 'VOX', 'GFC'
+        ];
+    } else if (region.includes('LATAM')) {
+        base = [
+            'DONALDSON', 'FLEETGUARD',
+            // Aftermarket LATAM prioritario
+            'TECFIL', 'WEGA', 'VOX', 'GFC',
+            // OEMs HD/LatAm relevantes
+            'CATERPILLAR', 'DETROIT DIESEL', 'CUMMINS', 'MACK', 'JOHN DEERE', 'ISUZU', 'VOLVO', 'KOMATSU', 'SCANIA', 'IVECO', 'RENAULT', 'HINO', 'UD TRUCKS', 'PACCAR',
+            // OEMs automotrices comunes
+            'FORD', 'CHEVROLET', 'GM', 'GMC', 'DODGE', 'RAM', 'KENWORTH', 'PETERBILT', 'INTERNATIONAL',
+            'TOYOTA', 'NISSAN', 'LEXUS', 'HONDA', 'ACURA', 'MITSUBISHI', 'BMW', 'MERCEDES BENZ', 'VOLKSWAGEN', 'AUDI', 'TESLA', 'OPEL', 'SKODA', 'PEUGEOT', 'CITROEN', 'FIAT', 'BYD', 'CHERY', 'GEELY', 'GREAT WALL', 'GWM', 'JAC', 'FAW', 'DONGFENG', 'FOTON', 'BAIC', 'CHANGAN', 'YUTONG',
+            // Agro/industriales presentes en la región
+            'PERKINS', 'DEUTZ', 'KUBOTA', 'YANMAR', 'JCB', 'BOBCAT', 'TEREX', 'HITACHI', 'DOOSAN', 'SANY', 'CASE', 'CASE IH', 'NEW HOLLAND', 'CNH',
+            // Aftermarket global/HD
+            'BALDWIN', 'WIX', 'MANN', 'FRAM', 'BOSCH', 'K&N', 'ACDELCO', 'NAPA', 'MAHLE', 'HENGST', 'PURFLUX', 'HIFI FILTER'
+        ];
+    } else if (region.includes('NA') || region.includes('US') || region.includes('USA')) {
+        base = [
+            'DONALDSON', 'FLEETGUARD',
+            // OEMs HD/NA relevantes
+            'CATERPILLAR', 'DETROIT DIESEL', 'CUMMINS', 'MACK', 'JOHN DEERE', 'ISUZU', 'VOLVO', 'KOMATSU', 'SCANIA', 'IVECO', 'RENAULT', 'HINO', 'UD TRUCKS', 'PACCAR',
+            // OEMs automotrices comunes
+            'FORD', 'CHEVROLET', 'GM', 'GMC', 'DODGE', 'RAM', 'KENWORTH', 'PETERBILT', 'INTERNATIONAL',
+            'TOYOTA', 'NISSAN', 'LEXUS', 'HONDA', 'ACURA', 'MITSUBISHI', 'BMW', 'MERCEDES BENZ', 'VOLKSWAGEN', 'AUDI', 'TESLA', 'OPEL', 'SKODA', 'PEUGEOT', 'CITROEN', 'FIAT', 'BYD', 'CHERY', 'GEELY', 'GREAT WALL', 'GWM', 'JAC', 'FAW', 'DONGFENG', 'FOTON', 'BAIC', 'CHANGAN', 'YUTONG',
+            // Agro/industriales presentes en la región
+            'PERKINS', 'DEUTZ', 'KUBOTA', 'YANMAR', 'JCB', 'BOBCAT', 'TEREX', 'HITACHI', 'DOOSAN', 'SANY', 'CASE', 'CASE IH', 'NEW HOLLAND', 'CNH',
+            // Aftermarket HD
+            'BALDWIN', 'WIX', 'MANN', 'TECFIL', 'WEGA', 'VOX', 'GFC',
+            // Otros aftermarket
+            'FRAM', 'BOSCH', 'K&N', 'ACDELCO', 'NAPA', 'MAHLE', 'HENGST', 'PURFLUX', 'HIFI FILTER'
+        ];
+    }
+    return base;
 }
 
 // Catálogo de marcas conocidas para extracción robusta
 const KNOWN_BRANDS = [
-  // Aftermarket core
-  'DONALDSON','FLEETGUARD','BALDWIN','WIX','MANN','MAHLE','HENGST','TECFIL','WEGA','VOX','GFC','FRAM','BOSCH','K&N','ACDELCO','NAPA','PURFLUX','HIFI FILTER',
-  // Heavy duty OEMs / engines / equipment
-  'CATERPILLAR','DETROIT DIESEL','CUMMINS','MACK','JOHN DEERE','VOLVO','KOMATSU','SCANIA','MAN','DAF','IVECO','RENAULT','RENAULT TRUCKS',
-  'ISUZU','HINO','UD TRUCKS','PACCAR','PERKINS','DEUTZ','KUBOTA','YANMAR','JCB','BOBCAT','TEREX','HITACHI','DOOSAN','SANY','CASE','CASE IH','NEW HOLLAND','CNH',
-  // NA/US trucks & OEMs
-  'FORD','CHEVROLET','GM','GMC','DODGE','RAM','KENWORTH','PETERBILT','INTERNATIONAL',
-  // EU passenger & trucks
-  'BMW','MERCEDES BENZ','VOLKSWAGEN','AUDI','SKODA','OPEL','TESLA','PEUGEOT','CITROEN','FIAT','ALFA ROMEO','SEAT','LAND ROVER','JAGUAR','PORSCHE',
-  // JP/KR passenger
-  'TOYOTA','NISSAN','LEXUS','HONDA','ACURA','MITSUBISHI','SUBARU','SUZUKI','MAZDA','DAIHATSU',
-  // CN passenger and trucks
-  'BYD','CHERY','GEELY','GREAT WALL','GWM','JAC','FAW','DONGFENG','FOTON','BAIC','CHANGAN','YUTONG'
+    // Aftermarket core
+    'DONALDSON', 'FLEETGUARD', 'BALDWIN', 'WIX', 'MANN', 'MAHLE', 'HENGST', 'TECFIL', 'WEGA', 'VOX', 'GFC', 'FRAM', 'BOSCH', 'K&N', 'ACDELCO', 'NAPA', 'PURFLUX', 'HIFI FILTER',
+    // Heavy duty OEMs / engines / equipment
+    'CATERPILLAR', 'DETROIT DIESEL', 'CUMMINS', 'MACK', 'JOHN DEERE', 'VOLVO', 'KOMATSU', 'SCANIA', 'MAN', 'DAF', 'IVECO', 'RENAULT', 'RENAULT TRUCKS',
+    'ISUZU', 'HINO', 'UD TRUCKS', 'PACCAR', 'PERKINS', 'DEUTZ', 'KUBOTA', 'YANMAR', 'JCB', 'BOBCAT', 'TEREX', 'HITACHI', 'DOOSAN', 'SANY', 'CASE', 'CASE IH', 'NEW HOLLAND', 'CNH',
+    // NA/US trucks & OEMs
+    'FORD', 'CHEVROLET', 'GM', 'GMC', 'DODGE', 'RAM', 'KENWORTH', 'PETERBILT', 'INTERNATIONAL',
+    // EU passenger & trucks
+    'BMW', 'MERCEDES BENZ', 'VOLKSWAGEN', 'AUDI', 'SKODA', 'OPEL', 'TESLA', 'PEUGEOT', 'CITROEN', 'FIAT', 'ALFA ROMEO', 'SEAT', 'LAND ROVER', 'JAGUAR', 'PORSCHE',
+    // JP/KR passenger
+    'TOYOTA', 'NISSAN', 'LEXUS', 'HONDA', 'ACURA', 'MITSUBISHI', 'SUBARU', 'SUZUKI', 'MAZDA', 'DAIHATSU',
+    // CN passenger and trucks
+    'BYD', 'CHERY', 'GEELY', 'GREAT WALL', 'GWM', 'JAC', 'FAW', 'DONGFENG', 'FOTON', 'BAIC', 'CHANGAN', 'YUTONG'
 ];
 
 function inferBrandFromCrossToken(token) {
-  const raw = String(token || '').toUpperCase();
-  // Normalizar separadores → espacios
-  const normalized = raw.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
-  // Buscar la marca de mayor longitud contenida en el token (comparación por includes)
-  let best = null;
-  for (const b of KNOWN_BRANDS) {
-    if (normalized.includes(b)) {
-      if (!best || b.length > best.length) best = b;
+    const raw = String(token || '').toUpperCase();
+    // Normalizar separadores → espacios
+    const normalized = raw.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+    // Buscar la marca de mayor longitud contenida en el token (comparación por includes)
+    let best = null;
+    for (const b of KNOWN_BRANDS) {
+        if (normalized.includes(b)) {
+            if (!best || b.length > best.length) best = b;
+        }
     }
-  }
-  if (best) return best;
-  // Fallback: primera pieza antes de espacio o guión
-  const first = normalized.split(' ')[0];
-  return first;
+    if (best) return best;
+    // Fallback: primera pieza antes de espacio o guión
+    const first = normalized.split(' ')[0];
+    return first;
 }
 
 function orderDonaldsonCrossByPriority(tokens) {
-  const PR = getDonaldsonRegionalPriority();
-  const score = (tok) => {
-    const b = inferBrandFromCrossToken(tok);
-    const idx = PR.indexOf(b);
-    return idx > -1 ? idx : PR.length + 1;
-  };
-  return [...tokens].sort((a, b) => score(a) - score(b));
+    const PR = getDonaldsonRegionalPriority();
+    const score = (tok) => {
+        const b = inferBrandFromCrossToken(tok);
+        const idx = PR.indexOf(b);
+        return idx > -1 ? idx : PR.length + 1;
+    };
+    return [...tokens].sort((a, b) => score(a) - score(b));
 }
 
 // Registro suplementario: Detroit Diesel 23518480 → Donaldson P552100
 // Referencia confirmada como lube filter spin-on full flow
-if (typeof DONALDSON_DATABASE === 'object') {
-  DONALDSON_DATABASE['P552100'] = {
-    family: 'LUBE',
-    applications: [
-      'Lube filter, spin-on, full flow'
-    ],
-    cross_references: {
-      'DETROIT DIESEL 23518480': 'P552100',
-      '23518480': 'P552100'
-    }
-  };
-  // Overlay: Validación externa confirmada
-  // Fuente: Donaldson P169071 – LUBE FILTER, SPIN-ON FULL FLOW
-  // https://shop.donaldson.com/store/es-us/product/P169071/16389
-  DONALDSON_DATABASE['P169071'] = {
-    family: 'LUBE',
-    type: 'LUBE FILTER, SPIN-ON FULL FLOW',
-    specifications: {
-      style: 'Spin-On',
-      function: 'Full Flow'
-    },
-    cross_references: {
-      // Curado: cruce conocido desde tu catálogo
-      'ECG6714A': 'P169071'
-    },
-    applications: []
-  };
-}
+// (Merged into main database)
+
 
 module.exports = {
     scrapeDonaldson,
