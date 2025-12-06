@@ -9,6 +9,7 @@
     "migrate:marinos": "node scripts/migrate_em9_et9_to_marinos.js",
     "test": "node scripts/test_internal_validation.js",
     "test:internal": "node scripts/test_internal_validation.js",
+    "test:lt": "node scripts/test_lt_validator.js",
     "validate:oem": "node scripts/validate_oem_block.js --file src/data/oem_xref.json",
     "validate:oem:candidate": "node scripts/validate_oem_block.js --file src/data/oem_xref.candidate.json",
     "backup:mongo": "node scripts/backup_mongo_to_s3.js",

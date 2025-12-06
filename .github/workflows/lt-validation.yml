@@ -1,0 +1,48 @@
+name: LT Health Validation
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE_URL: ${{ secrets.RAILWAY_BASE_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for deployment to be reachable
+        shell: bash
+        run: |
+          if [ -z "${BASE_URL}" ]; then
+            echo "BASE_URL secret not set. Please add RAILWAY_BASE_URL to repository secrets.";
+            exit 1;
+          fi
+          echo "Waiting for ${BASE_URL} to become reachable..."
+          reachable=0
+          for i in {1..30}; do
+            if curl -sSf "${BASE_URL}/health/overall" > /dev/null; then
+              echo "Service is reachable."; reachable=1; break;
+            fi
+            echo "Attempt $i failed; retrying in 10s..."
+            sleep 10
+          done
+          if [ "$reachable" -ne 1 ]; then
+            echo "Service not reachable after retries.";
+            exit 1;
+          fi
+
+      - name: Run LT validation script
+        run: npm run test:lt
