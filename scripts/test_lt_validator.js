@@ -53,15 +53,16 @@ function validateHealthLt(data) {
 
 function validateOverall(data) {
   const errs = [];
-  // Relaxed validation: only warn on external failures, don't fail test
-  // if (data.status !== 'OK') errs.push('health/overall status != OK');
+  if (data.status !== 'OK') errs.push('health/overall status != OK');
   if (!data.lt || data.lt.status !== 'OK') errs.push('overall.lt status != OK');
+  if (!data.lt || !data.lt.rules_hash_short || data.lt.rules_hash_short.length !== 8) errs.push('overall.lt.rules_hash_short invalid');
+  if (!data.lt || !isIsoDateString(data.lt.rules_loaded_at)) errs.push('overall.lt.rules_loaded_at invalid');
   return errs;
 }
 
 async function main() {
   const { base } = parseArgs();
-  const BASE = base || process.env.BASE_URL || 'http://localhost:8080';
+  const BASE = base || process.env.BASE_URL || 'http://localhost:8081';
   const urls = {
     lt: `${BASE}/health/lt`,
     overall: `${BASE}/health/overall`

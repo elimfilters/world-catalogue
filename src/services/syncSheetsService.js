@@ -6,7 +6,7 @@
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 // Load env locally; attempt parent resolution if needed
-try { require('dotenv').config(); } catch (_) {}
+try { require('dotenv').config(); } catch (_) { }
 const path = require('path');
 if (!process.env.GOOGLE_CREDENTIALS && !process.env.GOOGLE_PRIVATE_KEY) {
     try {
@@ -15,7 +15,7 @@ if (!process.env.GOOGLE_CREDENTIALS && !process.env.GOOGLE_PRIVATE_KEY) {
         if (process.env.GOOGLE_CREDENTIALS || process.env.GOOGLE_PRIVATE_KEY) {
             console.log('ðŸ”§ Loaded env from parent .env');
         }
-    } catch (_) {}
+    } catch (_) { }
 }
 
 // ============================================================================
@@ -154,9 +154,9 @@ const FALLBACK_TEMP_MAX_NITRILE_C = parseFloat(process.env.FALLBACK_TEMP_MAX_NIT
 const FALLBACK_TEMP_MAX_VITON_C = parseFloat(process.env.FALLBACK_TEMP_MAX_VITON_C || '200');
 // Lista de SKUs excluidos de fallbacks de temperatura (mantener null/vacío)
 const FALLBACK_TEMP_SKU_EXCLUDE_LIST = String(process.env.FALLBACK_TEMP_SKU_EXCLUDE_LIST || '')
-  .split(',')
-  .map(s => s.trim().toUpperCase())
-  .filter(Boolean);
+    .split(',')
+    .map(s => s.trim().toUpperCase())
+    .filter(Boolean);
 
 // ============================================================================
 // Descripciones ELIMFILTERS - Diccionario (Prefijo + LÃ­nea)
@@ -192,9 +192,9 @@ const ensureBrandPhrasing = (text) => {
 };
 
 // Medias y lÃ­neas desde util de producto (especificaciÃ³n: usar mediaMapper.js)
-    const { getMedia: getProductMedia } = require('../utils/mediaMapper');
-    const { getTechnology: getProductTechnology } = require('../utils/elimfiltersTechnologies');
-    const { normalizeTechnology } = require('../utils/technologyNormalizer');
+const { getMedia: getProductMedia } = require('../utils/mediaMapper');
+const { getTechnology: getProductTechnology } = require('../utils/elimfiltersTechnologies');
+const { normalizeTechnology } = require('../utils/technologyNormalizer');
 const { resolveSubtype } = require('../utils/subtypeResolver');
 
 // ============================================================================
@@ -288,7 +288,7 @@ async function upsertRow(rowData, targetSheetName) {
             await row.save();
             // Delete duplicates if any
             for (let i = 1; i < matches.length; i++) {
-                try { await matches[i].delete(); } catch (_) {}
+                try { await matches[i].delete(); } catch (_) { }
             }
             console.log(`☑️ Upserted kit row in '${name}' for ${rowData['SKU']}`);
         } else {
@@ -334,7 +334,7 @@ async function searchInSheet(code) {
     try {
         const doc = await initSheet();
         const sheet = doc.sheetsByIndex[0];
-        
+
         const rows = await sheet.getRows();
         const normalizedCode = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -382,12 +382,12 @@ async function searchInSheet(code) {
                 crossMatch = parts.includes(normalizedCode);
             }
 
-            if (queryNorm === normalizedCode || 
-                oemMatch || crossMatch || 
+            if (queryNorm === normalizedCode ||
+                oemMatch || crossMatch ||
                 normsku === normalizedCode) {
 
                 console.log(`ðŸ“Š Found in Google Sheet Master: ${code} â†’ ${getCell(row, 'normsku')}`);
-                
+
                 return {
                     found: true,
                     query: getCell(row, 'query'),
@@ -481,7 +481,7 @@ function buildRowData(data) {
         if (!data.type && !data.filter_type && !data.family && preResolved.type) {
             data.type = preResolved.type;
         }
-    } catch (_) {}
+    } catch (_) { }
     // Helper: join list values into readable comma-separated string
     const formatList = (list) => {
         const arr = Array.isArray(list) ? list : (list ? [list] : []);
@@ -974,7 +974,7 @@ function buildRowData(data) {
     const isPassengerBrand = (brand) => {
         const b = String(brand || '').toUpperCase();
         const LD_BRANDS = [
-            'HONDA','TOYOTA','FORD','CHEVROLET','NISSAN','KIA','HYUNDAI','MAZDA','VOLKSWAGEN','VW','AUDI','BMW','MERCEDES','RENAULT','PEUGEOT','CITROEN','SEAT','FIAT','SUZUKI','SUBARU'
+            'HONDA', 'TOYOTA', 'FORD', 'CHEVROLET', 'NISSAN', 'KIA', 'HYUNDAI', 'MAZDA', 'VOLKSWAGEN', 'VW', 'AUDI', 'BMW', 'MERCEDES', 'RENAULT', 'PEUGEOT', 'CITROEN', 'SEAT', 'FIAT', 'SUZUKI', 'SUBARU'
         ];
         return LD_BRANDS.includes(b);
     };
@@ -1426,7 +1426,7 @@ function buildRowData(data) {
         }
         if ((familyPrefix === 'AIR' || familyPrefix === 'CABIN') && fluidCompatArr.some(v => v !== '')) {
             // If we ever map a liquid for AIR/CABIN, warn
-            const liquids = ['Aceite de Motor','DiÃ©sel','Gasolina','ATF (Fluido de TransmisiÃ³n)','LÃ­quido HidrÃ¡ulico (HV/HL)','Refrigerante (Glicol/Agua)'];
+            const liquids = ['Aceite de Motor', 'DiÃ©sel', 'Gasolina', 'ATF (Fluido de TransmisiÃ³n)', 'LÃ­quido HidrÃ¡ulico (HV/HL)', 'Refrigerante (Glicol/Agua)'];
             if (fluidCompatArr.some(v => liquids.includes(v))) return 'âš ï¸ Incompatible: AIR/CABIN no lleva lÃ­quidos.';
         }
         return '';
@@ -1439,7 +1439,7 @@ function buildRowData(data) {
         if (hazardousHints.test(input)) return 'Residuo Peligroso (GestiÃ³n Controlada)';
         if (nonHazardHints.test(input)) return 'Residuo No Peligroso (Reciclable/ComÃºn)';
         // Fallback by family prefix
-        const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+        const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
         if (liquidFamilies.has(family)) return 'Residuo Peligroso (GestiÃ³n Controlada)';
         if (family === 'AIR' || family === 'CABIN') return 'Residuo No Peligroso (Reciclable/ComÃºn)';
         // Default conservative
@@ -1462,7 +1462,7 @@ function buildRowData(data) {
         if ((familyPrefix === 'AIR' || familyPrefix === 'CABIN') && isHaz) {
             return 'âš ï¸ AIR/CABIN no deberÃ­a ser Residuo Peligroso.';
         }
-        const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+        const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
         if (liquidFamilies.has(familyPrefix) && isNonHaz) {
             return 'âš ï¸ LÃ­quidos deben ser Residuo Peligroso (GestiÃ³n Controlada).';
         }
@@ -1486,25 +1486,25 @@ function buildRowData(data) {
 
     // Calcular dimensiones normalizadas y aplicar estimación pública si falta (sólo AIR)
     const heightIn = normalizeMM(
-            attrs.height_mm ||
-            attrs.height ||
-            attrs.length ||
-            attrs.overall_height ||
-            attrs.total_length ||
-            attrs['overall height'] ||
-            attrs['total length'] ||
-            ''
-        );
+        attrs.height_mm ||
+        attrs.height ||
+        attrs.length ||
+        attrs.overall_height ||
+        attrs.total_length ||
+        attrs['overall height'] ||
+        attrs['total length'] ||
+        ''
+    );
     const odIn = normalizeMM(
-            attrs.outer_diameter_mm ||
-            attrs.outer_diameter ||
-            attrs.major_diameter ||
-            attrs['outer diameter'] ||
-            attrs['major diameter'] ||
-            attrs.od ||
-            attrs['od'] ||
-            ''
-        );
+        attrs.outer_diameter_mm ||
+        attrs.outer_diameter ||
+        attrs.major_diameter ||
+        attrs['outer diameter'] ||
+        attrs['major diameter'] ||
+        attrs.od ||
+        attrs['od'] ||
+        ''
+    );
     const heightNum = parseFloat(String(heightIn || ''));
     const odNum = parseFloat(String(odIn || ''));
     const isAirFamily = familyPrefix === 'AIR';
@@ -1590,7 +1590,7 @@ function buildRowData(data) {
         disposal_method: disposalMethodStr,
         gasket_od_mm: (() => {
             // Only relevant for spin-on in liquid families
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!liquidFamilies.has(familyPrefix)) return '';
             if (!isSpinOnDesign) return '';
             const valStr = normalizeMM(
@@ -1622,7 +1622,7 @@ function buildRowData(data) {
             );
             const norm = normalizeThreadSize(rawThread);
             // Validation of prefix/design: only Spin-On liquid families should have thread_size
-            const liquidFamilies = new Set(['OIL','FUEL','COOLANT','HYDRAULIC']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'COOLANT', 'HYDRAULIC']);
             if (!liquidFamilies.has(familyPrefix)) return '';
             if (familyPrefix === 'AIR' || familyPrefix === 'CABIN') return '';
             // If we lack explicit spin-on, accept when source provides a thread value
@@ -1634,7 +1634,7 @@ function buildRowData(data) {
         disposal_method_indice_mongo: disposalMethodStr || undefined,
         disposal_method_quality_flag: disposalQualityFlag,
         gasket_id_mm: (() => {
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!liquidFamilies.has(familyPrefix)) return '';
             if (!isSpinOnDesign) return '';
             const valStr = normalizeMM(
@@ -1655,7 +1655,7 @@ function buildRowData(data) {
         })(),
         bypass_valve_psi: (() => {
             // Only meaningful for Spin-On Full-Flow in liquid families OIL/FUEL
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             const isFullFlow = /full[- ]?flow|flujo total/i.test(String(subtypeDescriptor || ''));
             if (!liquidFamilies.has(familyPrefix)) return '';
             if (!isSpinOnDesign) return '';
@@ -1676,7 +1676,7 @@ function buildRowData(data) {
         })(),
         beta_200: (() => {
             // Solo aplica a filtros de fase lÃ­quida OIL/FUEL/HYDRAULIC
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.beta_200 ||
@@ -1692,7 +1692,7 @@ function buildRowData(data) {
             return isNaN(val) || val <= 0 ? '' : Number(val);
         })(),
         hydrostatic_burst_psi: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.hydrostatic_burst_psi ||
@@ -1713,7 +1713,7 @@ function buildRowData(data) {
         operating_pressure_max_psi: attrs.operating_pressure_max_psi || '',
         weight_grams: attrs.weight_grams || '',
         panel_width_mm: (() => {
-            const applicable = new Set(['AIR','CABIN']);
+            const applicable = new Set(['AIR', 'CABIN']);
             if (!applicable.has(familyPrefix)) return '';
             const isPanelDesign = /panel/i.test(String(subtypeDescriptor || ''));
             if (!isPanelDesign) return '';
@@ -1735,7 +1735,7 @@ function buildRowData(data) {
             return isNaN(num) ? '' : Number(num.toFixed(2));
         })(),
         panel_depth_mm: (() => {
-            const applicable = new Set(['AIR','CABIN']);
+            const applicable = new Set(['AIR', 'CABIN']);
             if (!applicable.has(familyPrefix)) return '';
             const isPanelDesign = /panel/i.test(String(subtypeDescriptor || ''));
             if (!isPanelDesign) return '';
@@ -1938,12 +1938,12 @@ function buildRowData(data) {
             if (withMicron.length) {
                 const preferred = withMicron.filter(p => p.micron === 20 || p.micron === 10);
                 if (preferred.length) {
-                    chosen = preferred.sort((a,b) => b.percent - a.percent)[0];
+                    chosen = preferred.sort((a, b) => b.percent - a.percent)[0];
                 } else {
-                    chosen = withMicron.sort((a,b) => b.percent - a.percent)[0];
+                    chosen = withMicron.sort((a, b) => b.percent - a.percent)[0];
                 }
             } else {
-                chosen = parsed.sort((a,b) => b.percent - a.percent)[0];
+                chosen = parsed.sort((a, b) => b.percent - a.percent)[0];
             }
             if (!chosen || isNaN(chosen.percent)) return '';
             return String(Number(chosen.percent.toFixed(1))); // solo nÃºmero, sin "%"
@@ -2004,8 +2004,8 @@ function buildRowData(data) {
             };
             const all = Array.from(new Set(candidates.flatMap(normalizeAll)));
             if (!all.length) return '';
-            const ORDER = ['ISO 9001','IATF 16949','ISO 14001','ISO 45001'];
-            const sorted = all.sort((a,b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+            const ORDER = ['ISO 9001', 'IATF 16949', 'ISO 14001', 'ISO 45001'];
+            const sorted = all.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
             return sorted.join(', ');
         })(),
         certification_standards: (() => {
@@ -2031,10 +2031,10 @@ function buildRowData(data) {
                 return Array.from(out);
             };
             const all = Array.from(new Set(candidates.flatMap(extract)));
-            const ORDER = ['CE','ECE','SAE','API','ASTM'];
+            const ORDER = ['CE', 'ECE', 'SAE', 'API', 'ASTM'];
             let base = '';
             if (all.length) {
-                const sorted = all.sort((a,b) => ORDER.indexOf(a) - ORDER.indexOf(b));
+                const sorted = all.sort((a, b) => ORDER.indexOf(a) - ORDER.indexOf(b));
                 base = sorted.join(', ');
             }
             if (fallbackTempUsed) {
@@ -2504,7 +2504,7 @@ function buildRowData(data) {
                 if (/iso\s*-?\s*45001/i.test(text)) out.add('ISO 45001');
                 return Array.from(out);
             })();
-            const required = ['ISO 9001','IATF 16949','ISO 14001'];
+            const required = ['ISO 9001', 'IATF 16949', 'ISO 14001'];
             const missing = required.filter(r => !arr.includes(r));
             if (missing.length) {
                 return `âš ï¸ ELIMFILTERS: faltan certificaciones requeridas: ${missing.join(', ')}.`;
@@ -2631,9 +2631,9 @@ function buildRowData(data) {
             let chosen;
             if (withMicron.length) {
                 const preferred = withMicron.filter(p => p.micron === 20 || p.micron === 10);
-                chosen = (preferred.length ? preferred : withMicron).sort((a,b) => b.percent - a.percent)[0];
+                chosen = (preferred.length ? preferred : withMicron).sort((a, b) => b.percent - a.percent)[0];
             } else {
-                chosen = parsed.sort((a,b) => b.percent - a.percent)[0];
+                chosen = parsed.sort((a, b) => b.percent - a.percent)[0];
             }
             return (chosen && !isNaN(chosen.percent)) ? chosen.percent : undefined;
         })(),
@@ -2645,17 +2645,17 @@ function buildRowData(data) {
             const isCabin = /\bcabin\b|\bcabina\b/.test(typeRaw);
             const valStr = String(
                 (attrs.iso_main_efficiency_percent ||
-                 attrs['ISO Efficiency'] ||
-                 attrs['Multi-Pass Efficiency'] ||
-                 attrs['Multi Pass Efficiency'] ||
-                 attrs['Î²x Efficiency'] ||
-                 attrs['Beta Efficiency'] ||
-                 attrs['Efficiency @ 10 Âµm'] ||
-                 attrs['Efficiency @ 20 Âµm'] ||
-                 attrs['Efficiency at 10 micron'] ||
-                 attrs['Efficiency at 20 micron'] ||
-                 attrs['Eficiencia ISO'] ||
-                 attrs['Eficiencia Multi-Pass'] || ''
+                    attrs['ISO Efficiency'] ||
+                    attrs['Multi-Pass Efficiency'] ||
+                    attrs['Multi Pass Efficiency'] ||
+                    attrs['Î²x Efficiency'] ||
+                    attrs['Beta Efficiency'] ||
+                    attrs['Efficiency @ 10 Âµm'] ||
+                    attrs['Efficiency @ 20 Âµm'] ||
+                    attrs['Efficiency at 10 micron'] ||
+                    attrs['Efficiency at 20 micron'] ||
+                    attrs['Eficiencia ISO'] ||
+                    attrs['Eficiencia Multi-Pass'] || ''
                 )).toLowerCase();
             const pm = valStr.match(/(\d+(?:\.\d+)?)\s*%?/);
             const val = pm ? parseFloat(pm[1]) : NaN;
@@ -2786,8 +2786,8 @@ function buildRowData(data) {
                 return '';
             })();
             const hasHousingSignals = (
-                !isNaN(parseFloat(String(attrs.hydrostatic_burst_psi || '').replace(/[^0-9\.]/g,''))) ||
-                !isNaN(parseFloat(String(attrs.operating_pressure_max_psi || '').replace(/[^0-9\.]/g,'')))
+                !isNaN(parseFloat(String(attrs.hydrostatic_burst_psi || '').replace(/[^0-9\.]/g, ''))) ||
+                !isNaN(parseFloat(String(attrs.operating_pressure_max_psi || '').replace(/[^0-9\.]/g, '')))
             );
             if ((isSpinOn || isSeparator || (isCartridge && hasHousingSignals)) && !normalized) {
                 return 'âš ï¸ Falta Material de Carcasa (AL) para diseÃ±o requerido (spin-on/separador/cartucho con carcasa).';
@@ -2954,7 +2954,7 @@ function buildRowData(data) {
             return '';
         })(),
         panel_depth_mm_indice_mongo: (() => {
-            const applicable = new Set(['AIR','CABIN']);
+            const applicable = new Set(['AIR', 'CABIN']);
             if (!applicable.has(familyPrefix)) return undefined;
             const isPanelDesign = /panel/i.test(String(subtypeDescriptor || ''));
             if (!isPanelDesign) return undefined;
@@ -2975,7 +2975,7 @@ function buildRowData(data) {
             return isNaN(num) ? undefined : Number(num.toFixed(2));
         })(),
         panel_depth_quality_flag: (() => {
-            const applicable = new Set(['AIR','CABIN']);
+            const applicable = new Set(['AIR', 'CABIN']);
             if (!applicable.has(familyPrefix)) return '';
             const isPanelDesign = /panel/i.test(String(subtypeDescriptor || ''));
             if (!isPanelDesign) return '';
@@ -3009,7 +3009,7 @@ function buildRowData(data) {
             return '';
         })(),
         panel_width_mm_indice_mongo: (() => {
-            const applicable = new Set(['AIR','CABIN']);
+            const applicable = new Set(['AIR', 'CABIN']);
             if (!applicable.has(familyPrefix)) return undefined;
             const isPanelDesign = /panel/i.test(String(subtypeDescriptor || ''));
             if (!isPanelDesign) return undefined;
@@ -3030,7 +3030,7 @@ function buildRowData(data) {
             return isNaN(num) ? undefined : Number(num.toFixed(2));
         })(),
         panel_width_quality_flag: (() => {
-            const applicable = new Set(['AIR','CABIN']);
+            const applicable = new Set(['AIR', 'CABIN']);
             if (!applicable.has(familyPrefix)) return '';
             const isPanelDesign = /panel/i.test(String(subtypeDescriptor || ''));
             if (!isPanelDesign) return '';
@@ -3062,7 +3062,7 @@ function buildRowData(data) {
         operating_temperature_max_c_indice_mongo: (isNaN(tempMaxCVal) ? undefined : Number(tempMaxCVal.toFixed(1))),
         operating_temperature_max_quality_flag: tempMaxQualityFlag,
         bypass_valve_psi_indice_mongo: (() => {
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             const isFullFlow = /full[- ]?flow|flujo total/i.test(String(subtypeDescriptor || ''));
             if (!liquidFamilies.has(familyPrefix)) return undefined;
             if (!isSpinOnDesign) return undefined;
@@ -3104,7 +3104,7 @@ function buildRowData(data) {
             return '';
         })(),
         hydrostatic_burst_psi: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.hydrostatic_burst_psi ||
@@ -3121,7 +3121,7 @@ function buildRowData(data) {
             return isNaN(val) || val <= 0 ? '' : Math.round(val);
         })(),
         hydrostatic_burst_psi_indice_mongo: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.hydrostatic_burst_psi ||
@@ -3138,7 +3138,7 @@ function buildRowData(data) {
             return isNaN(val) || val <= 0 ? undefined : Math.round(val);
         })(),
         hydrostatic_burst_quality_flag: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return '';
             const rawBurst = (
                 attrs.hydrostatic_burst_psi ||
@@ -3185,7 +3185,7 @@ function buildRowData(data) {
             return '';
         })(),
         dirt_capacity_grams: (() => {
-            const applicable = new Set(['AIR','OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['AIR', 'OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.dirt_capacity_grams ||
@@ -3215,7 +3215,7 @@ function buildRowData(data) {
             return Math.round(grams * 100) / 100; // 2 decimales
         })(),
         dirt_capacity_grams_indice_mongo: (() => {
-            const applicable = new Set(['AIR','OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['AIR', 'OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.dirt_capacity_grams ||
@@ -3244,7 +3244,7 @@ function buildRowData(data) {
             return Math.round(grams * 100) / 100;
         })(),
         dirt_capacity_quality_flag: (() => {
-            const applicable = new Set(['AIR','OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['AIR', 'OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.dirt_capacity_grams ||
@@ -3295,7 +3295,7 @@ function buildRowData(data) {
         })(),
         // Peso del filtro (Columna AD): normaliza y convierte a gramos
         weight_grams: (() => {
-            const applicable = new Set(['AIR','OIL','FUEL','HYDRAULIC','CABIN','COOLANT']);
+            const applicable = new Set(['AIR', 'OIL', 'FUEL', 'HYDRAULIC', 'CABIN', 'COOLANT']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.weight_grams ||
@@ -3326,7 +3326,7 @@ function buildRowData(data) {
             return Math.round(grams * 100) / 100;
         })(),
         weight_grams_indice_mongo: (() => {
-            const applicable = new Set(['AIR','OIL','FUEL','HYDRAULIC','CABIN','COOLANT']);
+            const applicable = new Set(['AIR', 'OIL', 'FUEL', 'HYDRAULIC', 'CABIN', 'COOLANT']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.weight_grams ||
@@ -3356,7 +3356,7 @@ function buildRowData(data) {
             return Math.round(grams * 100) / 100;
         })(),
         weight_quality_flag: (() => {
-            const applicable = new Set(['AIR','OIL','FUEL','HYDRAULIC','CABIN','COOLANT']);
+            const applicable = new Set(['AIR', 'OIL', 'FUEL', 'HYDRAULIC', 'CABIN', 'COOLANT']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.weight_grams ||
@@ -3435,7 +3435,7 @@ function buildRowData(data) {
             return '';
         })(),
         rated_flow_gpm: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.rated_flow_gpm ||
@@ -3469,7 +3469,7 @@ function buildRowData(data) {
             return Math.round(gpm * 100) / 100;
         })(),
         rated_flow_gpm_indice_mongo: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.rated_flow_gpm ||
@@ -3502,7 +3502,7 @@ function buildRowData(data) {
             return Math.round(gpm * 100) / 100;
         })(),
         rated_flow_quality_flag: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.rated_flow_gpm ||
@@ -3555,7 +3555,7 @@ function buildRowData(data) {
             return '';
         })(),
         rated_flow_cfm: (() => {
-            const applicable = new Set(['AIR','AIR DRYER']);
+            const applicable = new Set(['AIR', 'AIR DRYER']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.rated_flow_cfm ||
@@ -3592,7 +3592,7 @@ function buildRowData(data) {
             return Math.round(cfm * 100) / 100;
         })(),
         rated_flow_cfm_indice_mongo: (() => {
-            const applicable = new Set(['AIR','AIR DRYER']);
+            const applicable = new Set(['AIR', 'AIR DRYER']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.rated_flow_cfm ||
@@ -3628,7 +3628,7 @@ function buildRowData(data) {
             return Math.round(cfm * 100) / 100;
         })(),
         rated_flow_air_quality_flag: (() => {
-            const applicable = new Set(['AIR','AIR DRYER']);
+            const applicable = new Set(['AIR', 'AIR DRYER']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.rated_flow_cfm ||
@@ -3682,7 +3682,7 @@ function buildRowData(data) {
             return '';
         })(),
         operating_pressure_min_psi: (() => {
-            const applicable = new Set(['HYDRAULIC','FUEL']);
+            const applicable = new Set(['HYDRAULIC', 'FUEL']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.operating_pressure_min_psi ||
@@ -3714,7 +3714,7 @@ function buildRowData(data) {
             return Math.round(psi * 100) / 100;
         })(),
         operating_pressure_min_psi_indice_mongo: (() => {
-            const applicable = new Set(['HYDRAULIC','FUEL']);
+            const applicable = new Set(['HYDRAULIC', 'FUEL']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.operating_pressure_min_psi ||
@@ -3745,7 +3745,7 @@ function buildRowData(data) {
             return Math.round(psi * 100) / 100;
         })(),
         operating_pressure_min_quality_flag: (() => {
-            const applicable = new Set(['HYDRAULIC','FUEL']);
+            const applicable = new Set(['HYDRAULIC', 'FUEL']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.operating_pressure_min_psi ||
@@ -3798,7 +3798,7 @@ function buildRowData(data) {
             return '';
         })(),
         operating_pressure_max_psi: (() => {
-            const applicable = new Set(['HYDRAULIC','FUEL','OIL']);
+            const applicable = new Set(['HYDRAULIC', 'FUEL', 'OIL']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.operating_pressure_max_psi ||
@@ -3830,7 +3830,7 @@ function buildRowData(data) {
             return Math.round(psi * 100) / 100;
         })(),
         operating_pressure_max_psi_indice_mongo: (() => {
-            const applicable = new Set(['HYDRAULIC','FUEL','OIL']);
+            const applicable = new Set(['HYDRAULIC', 'FUEL', 'OIL']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.operating_pressure_max_psi ||
@@ -3862,7 +3862,7 @@ function buildRowData(data) {
             return Math.round(psi * 100) / 100;
         })(),
         operating_pressure_max_quality_flag: (() => {
-            const applicable = new Set(['HYDRAULIC','FUEL','OIL']);
+            const applicable = new Set(['HYDRAULIC', 'FUEL', 'OIL']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.operating_pressure_max_psi ||
@@ -3916,7 +3916,7 @@ function buildRowData(data) {
             return '';
         })(),
         beta_200_indice_mongo: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return undefined;
             const raw = (
                 attrs.beta_200 ||
@@ -3932,7 +3932,7 @@ function buildRowData(data) {
             return isNaN(val) || val <= 0 ? undefined : Number(val);
         })(),
         beta_200_quality_flag: (() => {
-            const applicable = new Set(['OIL','FUEL','HYDRAULIC']);
+            const applicable = new Set(['OIL', 'FUEL', 'HYDRAULIC']);
             if (!applicable.has(familyPrefix)) return '';
             const raw = (
                 attrs.beta_200 ||
@@ -3951,7 +3951,7 @@ function buildRowData(data) {
             return '';
         })(),
         gasket_od_mm_indice_mongo: (() => {
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!liquidFamilies.has(familyPrefix)) return undefined;
             if (!isSpinOnDesign) return undefined;
             const valStr = normalizeMM(
@@ -3971,7 +3971,7 @@ function buildRowData(data) {
             return isNaN(val) ? undefined : Number(val.toFixed(2));
         })(),
         gasket_od_quality_flag: (() => {
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!liquidFamilies.has(familyPrefix)) return '';
             if (!isSpinOnDesign) return '';
             const gasketStr = normalizeMM(
@@ -4020,7 +4020,7 @@ function buildRowData(data) {
             return '';
         })(),
         gasket_id_mm_indice_mongo: (() => {
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!liquidFamilies.has(familyPrefix)) return undefined;
             if (!isSpinOnDesign) return undefined;
             const valStr = normalizeMM(
@@ -4040,7 +4040,7 @@ function buildRowData(data) {
             return isNaN(val) ? undefined : Number(val.toFixed(2));
         })(),
         gasket_id_quality_flag: (() => {
-            const liquidFamilies = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
             if (!liquidFamilies.has(familyPrefix)) return '';
             if (!isSpinOnDesign) return '';
             const tol = 0.5;
@@ -4102,7 +4102,7 @@ function buildRowData(data) {
                 ''
             );
             const norm = normalizeThreadSize(rawThread);
-            const liquidFamilies = new Set(['OIL','FUEL','COOLANT','HYDRAULIC']);
+            const liquidFamilies = new Set(['OIL', 'FUEL', 'COOLANT', 'HYDRAULIC']);
             if (!liquidFamilies.has(familyPrefix)) return undefined;
             if (familyPrefix === 'AIR' || familyPrefix === 'CABIN') return undefined;
             if (!isSpinOnDesign && !norm) return undefined;
@@ -4130,19 +4130,19 @@ function ensureRowCompleteness(row) {
         };
 
         const numericDefaults = [
-            'height_mm','outer_diameter_mm',
-            'gasket_od_mm','gasket_id_mm','bypass_valve_psi','beta_200','hydrostatic_burst_psi','dirt_capacity_grams',
-            'rated_flow_gpm','rated_flow_cfm','operating_pressure_min_psi','operating_pressure_max_psi','weight_grams',
-            'panel_width_mm','panel_depth_mm','water_separation_efficiency_percent','inner_diameter_mm','pleat_count',
-            'iso_main_efficiency_percent','service_life_hours','change_interval_km'
+            'height_mm', 'outer_diameter_mm',
+            'gasket_od_mm', 'gasket_id_mm', 'bypass_valve_psi', 'beta_200', 'hydrostatic_burst_psi', 'dirt_capacity_grams',
+            'rated_flow_gpm', 'rated_flow_cfm', 'operating_pressure_min_psi', 'operating_pressure_max_psi', 'weight_grams',
+            'panel_width_mm', 'panel_depth_mm', 'water_separation_efficiency_percent', 'inner_diameter_mm', 'pleat_count',
+            'iso_main_efficiency_percent', 'service_life_hours', 'change_interval_km'
         ];
         for (const k of numericDefaults) defIfEmpty(k, 0);
 
         // Strings neutrales
         const stringDefaults = [
-            'thread_size','drain_type','seal_material','housing_material','iso_test_method',
-            'manufacturing_standards','certification_standards','equipment_applications','engine_applications',
-            'technology_name','technology_tier','technology_scope','technology_equivalents','technology_oem_detected'
+            'thread_size', 'drain_type', 'seal_material', 'housing_material', 'iso_test_method',
+            'manufacturing_standards', 'certification_standards', 'equipment_applications', 'engine_applications',
+            'technology_name', 'technology_tier', 'technology_scope', 'technology_equivalents', 'technology_oem_detected'
         ];
         for (const k of stringDefaults) defIfEmpty(k, 'N/A');
 
@@ -4151,21 +4151,21 @@ function ensureRowCompleteness(row) {
             defIfEmpty('disposal_method', 'Residuo No Peligroso');
             defIfEmpty('rated_flow_cfm', 0);
             defIfEmpty('media_type', getProductMedia('AIR'));
-        row['tecnologia_aplicada'] = getProductTechnology(family === 'CABIN' ? 'CABIN' : 'AIR', row.duty_type, row.normsku || '');
+            row['tecnologia_aplicada'] = getProductTechnology(family === 'CABIN' ? 'CABIN' : 'AIR', row.duty_type, row.normsku || '');
         } else if (isLiquid) {
             defIfEmpty('disposal_method', 'Residuo Peligroso');
             defIfEmpty('rated_flow_gpm', 0);
             defIfEmpty('media_type', getProductMedia('FUEL'));
-        row['tecnologia_aplicada'] = getProductTechnology(family || 'FUEL', row.duty_type, row.normsku || '');
+            row['tecnologia_aplicada'] = getProductTechnology(family || 'FUEL', row.duty_type, row.normsku || '');
         } else if (isAirDryer) {
             defIfEmpty('disposal_method', 'Residuo Peligroso');
             defIfEmpty('media_type', getProductMedia('AIR'));
-        row['tecnologia_aplicada'] = getProductTechnology('AIR_DRYER', row.duty_type, row.normsku || '');
+            row['tecnologia_aplicada'] = getProductTechnology('AIR_DRYER', row.duty_type, row.normsku || '');
         } else {
             // Fallback para familias no clasificadas: asignar tecnología canónica
             defIfEmpty('disposal_method', 'N/A');
             defIfEmpty('media_type', getProductMedia(family || ''));
-        row['tecnologia_aplicada'] = getProductTechnology(family || '', row.duty_type, row.normsku || '');
+            row['tecnologia_aplicada'] = getProductTechnology(family || '', row.duty_type, row.normsku || '');
         }
 
         // Regla canónica para AIRE Radial Seal (HD): estandarizar media y descripción
@@ -4236,7 +4236,7 @@ function ensureRowCompleteness(row) {
                 row.tecnologia_aplicada = 'AeroDry Max';
                 row.description = 'Cartucho desecante para sistemas de frenos, remueve humedad del aire comprimido y mejora la fiabilidad del sistema.';
             }
-        } catch (_) {}
+        } catch (_) { }
 
         // Códigos y referencias: siempre texto neutro si faltan
         defIfEmpty('oem_codes', 'N/A');
@@ -4275,7 +4275,7 @@ function ensureRowCompleteness(row) {
                 if (numericDefaults.includes(h)) row[h] = 0; else row[h] = 'N/A';
             }
         }
-    } catch (_) {}
+    } catch (_) { }
     return row;
 }
 
@@ -4290,15 +4290,15 @@ function textContainsAny(str, keywords) {
 
 function isFuelWaterSeparator(row) {
     const family = String(row.family || row.filter_type || '').toUpperCase();
-    if (!['FUEL','FUEL SEPARATOR'].includes(family)) return false;
-    const keys = ['subtype','description','media_type'];
-    const kw = ['water','separ','separador','separation','agua'];
+    if (!['FUEL', 'FUEL SEPARATOR'].includes(family)) return false;
+    const keys = ['subtype', 'description', 'media_type'];
+    const kw = ['water', 'separ', 'separador', 'separation', 'agua'];
     return keys.some(k => textContainsAny(row[k], kw));
 }
 
 // Heurística: detectar diseño Spin-On por texto
 function isSpinOnDesignHint(row) {
-    const keys = ['subtype','description'];
+    const keys = ['subtype', 'description'];
     // Palabras clave más estrictas para evitar falsos positivos
     const kw = ['spin-on', 'spin on', 'rosca', 'roscado', 'unf ', 'm\"', 'mm x', ' x tpi'];
     return keys.some(k => textContainsAny(row[k], kw));
@@ -4401,7 +4401,7 @@ async function appendToSheet(data) {
                 if (homologatedCode) {
                     payloadForPolicy.homologated_code = homologatedCode;
                 }
-            } catch (_) {}
+            } catch (_) { }
             // Allow marine specialized families to pass via dedicated generators
             if (!/^(EM9|ET9)/.test(String(data.sku || ''))) {
                 const resPolicy = enforceSkuPolicyInvariant(payloadForPolicy);
@@ -4424,7 +4424,7 @@ async function appendToSheet(data) {
             } catch (err) {
                 if (err && err.code === 'ESSENTIALS_VALIDATION_FAILED') {
                     const fam = String(rowData.family || rowData.filter_type || '').toUpperCase();
-                    const allowedMinimal = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+                    const allowedMinimal = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
                     if (allowedMinimal.has(fam)) {
                         console.warn(`⚠️ Escritura mínima por faltantes esenciales (${fam}): ${err.message}`);
                         skipValidationAppend = true; // degradar a modo mínimo
@@ -4478,7 +4478,7 @@ async function upsertBySku(data, options = { deleteDuplicates: true }) {
             } catch (err) {
                 if (err && err.code === 'ESSENTIALS_VALIDATION_FAILED') {
                     const fam = String(rowData.family || rowData.filter_type || '').toUpperCase();
-                    const allowedMinimal = new Set(['OIL','FUEL','HYDRAULIC','COOLANT']);
+                    const allowedMinimal = new Set(['OIL', 'FUEL', 'HYDRAULIC', 'COOLANT']);
                     if (allowedMinimal.has(fam)) {
                         console.warn(`⚠️ Upsert en modo mínimo por faltantes esenciales (${fam}): ${err.message}`);
                         skipValidationUpsert = true; // degradar a modo mínimo
@@ -4605,7 +4605,7 @@ async function syncToSheets(filters) {
         }
 
         console.log(`âœ… Sync complete: ${filters.length} filters synced`);
-        
+
         return {
             success: true,
             synced: filters.length,

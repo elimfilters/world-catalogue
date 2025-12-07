@@ -1,1 +1,2 @@
 {"timestamp":"2025-12-05T13:43:30.300Z","route":"/api/detect/:code","query":"PH3614","code":"PH3614","relaxed":true,"duty":"LD","family":"OIL","source":"FRAM","sku":"EL83614","lang":"en"}
+{"timestamp":"2025-12-06T20:31:12.389Z","route":"/api/detect/:code","query":"P552100","code":"P552100","relaxed":false,"duty":"HD","family":"OIL","source":"DONALDSON","sku":"EL82100","lang":"en"}
