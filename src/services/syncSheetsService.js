@@ -4344,7 +4344,9 @@ function validateEssentialFields(row) {
         const msg = `Error de Enriquecimiento: Campo esencial [${missing.join(', ')}] vacío para SKU [${sku}]`;
         const err = new Error(msg);
         err.code = 'ESSENTIALS_VALIDATION_FAILED';
-        throw err;
+        // HOTFIX: Relajar validación temporalmente para permitir ventas
+        console.warn(`⚠️ [HOTFIX] Se permite guardar SKU incompleto: ${msg}`);
+        // throw err;
     }
 }
 
