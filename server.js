@@ -16,6 +16,23 @@ try {
     process.exit(1);
 }
 
+// =====================================================
+//  VALIDACIÓN DE PREFIJOS OFICIALES ELIMFILTERS (INMUTABLES)
+// =====================================================
+// Si un prefijo es alterado, EL SERVIDOR NO ARRANCA.
+try {
+    const validatePrefixes = require('./src/config/validatePrefixes');
+    validatePrefixes();
+    console.log("✅ Prefijos oficiales ELIMFILTERS validados correctamente (inmutables).");
+} catch (e) {
+    console.error("❌ ERROR CRÍTICO: Violación de prefijos oficiales ELIMFILTERS.");
+    console.error("   Detalle:", e.message);
+    console.error("   EL SERVIDOR HA SIDO BLOQUEADO PARA PROTEGER LA INTEGRIDAD DEL CATÁLOGO.");
+    process.exit(1);
+}
+// =====================================================
+
+
 // Versioning info
 const { version: pkgVersion } = require('./package.json');
 const APP_VERSION = process.env.APP_VERSION || pkgVersion || 'unknown';
@@ -40,14 +57,12 @@ const vinRoute = require('./src/api/vin');
 const marinosImportRoute = require('./src/api/marinosImport');
 const routesMapRoute = require('./src/api/routes');
 const catalogRoute = require('./src/api/catalog');
-
 const internalValidateRoute = require('./src/api/internalValidate');
 
 // Service imports
-// Sheets health and sync utilities
 const { pingSheets } = require('./src/services/syncSheetsService');
 const { readPolicyText, policyHash } = require('./src/services/skuCreationPolicy');
-// Mongo service (optional; routes guard when MONGODB_URI is unset)
+
 let mongoService;
 try {
     mongoService = require('./src/services/mongoService');
@@ -66,7 +81,7 @@ const app = express();
 // Middleware
 app.set('trust proxy', 1);
 
-// Restrict CORS by ALLOWED_ORIGINS (comma-separated). If absent, allow all.
+// Restrict CORS
 const allowedOriginsEnv = process.env.ALLOWED_ORIGINS || '';
 const allowedOrigins = allowedOriginsEnv
     .split(',')
@@ -82,29 +97,27 @@ const corsOptions = {
     },
     credentials: true
 };
+
 app.use(cors(corsOptions));
 app.use(helmet());
 app.use(compression());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('combined'));
-
-// Request logging
 app.disable('x-powered-by');
 
-// Assign/propagate request ID
+// Assign Request ID
 app.use((req, res, next) => {
     const rid = req.headers['x-request-id'] || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
     res.setHeader('x-request-id', rid);
     res.locals.requestId = rid;
-    console.log(`âž¡ï¸  ${new Date().toISOString()} [${rid}] - ${req.method} ${req.originalUrl}`);
+    console.log(`➡️  ${new Date().toISOString()} [${rid}] - ${req.method} ${req.originalUrl}`);
     next();
 });
 
 // =============================================
 //  API ROUTES
 // =============================================
-// Rate limiting for API routes
 const apiLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 60,
@@ -114,7 +127,6 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter);
 
-// Stricter limit for detection endpoint
 const detectLimiter = rateLimit({
     windowMs: 60 * 1000,
     max: 30,
@@ -128,12 +140,10 @@ app.use('/api/detect', detectRoute);
 app.use('/api/import/marinos', marinosImportRoute);
 app.use('/api/routes', routesMapRoute);
 app.use('/api/catalog', catalogRoute);
-// Mount VIN routes (decode + attribute lookup)
 app.use('/api/vin', vinRoute);
-
 app.use('/api/internal/validate', internalValidateRoute);
 
-// SKU Policy endpoint (immutable instruction)
+// SKU Policy endpoint
 app.get('/policy/sku', (req, res) => {
     try {
         const text = readPolicyText();
@@ -150,7 +160,7 @@ app.get('/policy/sku', (req, res) => {
     }
 });
 
-// Sheets health endpoint
+// Sheets health
 app.get('/health/sheets', async (req, res) => {
     try {
         const result = await pingSheets();
@@ -164,7 +174,7 @@ app.get('/health/sheets', async (req, res) => {
     }
 });
 
-// Mongo health endpoint
+// Mongo health
 app.get('/health/mongo', async (req, res) => {
     try {
         if (!process.env.MONGODB_URI) {
@@ -199,7 +209,7 @@ app.get('/', (req, res) => {
 });
 
 // =============================================
-//  HEALTH CHECK - Required by Railway
+//  HEALTH CHECK
 // =============================================
 app.get('/health', (req, res) => {
     res.status(200).json({
@@ -211,7 +221,9 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Aggregated health endpoint
+// =============================================
+//  OTHER HEALTH
+// =============================================
 app.get('/health/overall', async (req, res) => {
     const version = APP_VERSION;
     const env = process.env.NODE_ENV || 'development';
@@ -234,7 +246,6 @@ app.get('/health/overall', async (req, res) => {
             try { await mongoService.disconnect(); } catch (_) {}
         }
     }
-    // LT validator quick health snapshot
     try {
         const rulesPath = path.join(__dirname, 'src', 'config', 'LT_RULES_MASTER.json');
         const raw = fs.readFileSync(rulesPath, 'utf8');
@@ -270,7 +281,7 @@ app.get('/health/overall', async (req, res) => {
 });
 
 // =============================================
-//  LT VALIDATOR SELF-TEST ENDPOINT
+//  LT SELF-TEST
 // =============================================
 app.get('/validate/self-test', (req, res) => {
     try {
@@ -291,7 +302,7 @@ app.get('/validate/self-test', (req, res) => {
 });
 
 // =============================================
-//  LT VALIDATOR DETAILED HEALTH
+//  LT HEALTH DETAIL
 // =============================================
 app.get('/health/lt', (req, res) => {
     try {
@@ -338,7 +349,7 @@ app.get('/health/lt', (req, res) => {
 //  ERROR HANDLING
 // =============================================
 app.use((err, req, res, next) => {
-    console.error('âŒ Error:', err);
+    console.error('❌ Error:', err);
     res.status(err.status || 500).json({
         error: err.message || 'Internal server error',
         timestamp: new Date().toISOString()
@@ -361,20 +372,19 @@ const PORT = process.env.PORT || 8080;
 
 const server = app.listen(PORT, () => {
     console.log(`
-â•”â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•—
-â•‘   ðŸš€ ELIMFILTERS API v${APP_VERSION}               â•‘
-â•‘   ðŸ“¡ Running on port ${PORT}                  â•‘
-â•‘   ðŸŒ Environment: ${process.env.NODE_ENV || 'development'}         â•‘
-â•šâ•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+────────────────────────────────────────────────────────
+🚀 ELIMFILTERS API v${APP_VERSION}               
+📡 Running on port ${PORT}                  
+🌎 Environment: ${process.env.NODE_ENV || 'development'}         
+────────────────────────────────────────────────────────
     `);
 });
 
-// Tighten server timeouts
-server.setTimeout(30_000); // inactive socket timeout
-server.headersTimeout = 35_000; // header timeout
+server.setTimeout(30_000);
+server.headersTimeout = 35_000;
 
 // =============================================
-//  AUTO SELF-TEST (Webhook) ON STARTUP
+//  AUTO SELF-TEST
 // =============================================
 try {
     const autoTest = String(process.env.AUTO_SELF_TEST_ON_START || '').toLowerCase() === 'true';
@@ -382,24 +392,24 @@ try {
     if (autoTest && hasWebhook) {
         const { main: runDailyReport } = require('./scripts/daily_learning_report');
         const delayMs = Number(process.env.SELF_TEST_START_DELAY_MS || 3000);
-        console.log(`⏱️ Auto‑prueba del webhook programada en ${delayMs} ms...`);
+        console.log(`⏱️ Auto-prueba del webhook programada en ${delayMs} ms...`);
         setTimeout(() => {
             try {
                 if (!process.env.REPORT_HOURS) process.env.REPORT_HOURS = '24';
                 runDailyReport()
                     .then(() => {
-                        console.log('✅ Auto‑prueba ejecutada. Revise el código HTTP en el log del reporte.');
+                        console.log('✅ Auto-prueba ejecutada.');
                     })
                     .catch((e) => {
-                        console.log('⚠️ Auto‑prueba falló:', e.message);
+                        console.log('⚠️ Auto-prueba falló:', e.message);
                     });
             } catch (e) {
-                console.log('⚠️ No se pudo iniciar la auto‑prueba:', e.message);
+                console.log('⚠️ No se pudo iniciar la auto-prueba:', e.message);
             }
         }, delayMs).unref();
     } else {
         if (autoTest && !hasWebhook) {
-            console.log('ℹ️ AUTO_SELF_TEST_ON_START habilitado, pero DAILY_REPORT_WEBHOOK_URL no está definido; se omite auto‑prueba.');
+            console.log('ℹ️ AUTO_SELF_TEST_ON_START habilitado, pero DAILY_REPORT_WEBHOOK_URL no está definido.');
         }
     }
 } catch (_) {}
@@ -415,7 +425,6 @@ function shutdown(signal) {
         console.log('Servidor cerrado correctamente.');
         process.exit(0);
     });
-    // Forzar cierre si tarda demasiado
     setTimeout(() => {
         console.error('Cierre forzado por timeout.');
         process.exit(1);
@@ -424,12 +433,9 @@ function shutdown(signal) {
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-
-// Trap unhandled errors for graceful shutdown
 process.on('unhandledRejection', (reason) => {
     console.error('Unhandled Rejection:', reason);
 });
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
 });
-
