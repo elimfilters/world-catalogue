@@ -1,29 +1,105 @@
 // ============================================================================
-// Internal Validation Service - Batch classification and report generation
-// Consolidated, deterministic logic (offline) for trusted cross-reference
+// Internal Validation Service - Hardened Version (Immutable SKU Contract)
+// Clasificación determinística y segura. NO genera prefijos.
+// Prefijos solo vienen desde:
+//    /src/config/prefixes.js  (inmutable)
+//    /src/sku/generator.js    (inmutable)
 // ============================================================================
 
 const { resolveBrandFamilyDutyByPrefix, normalize } = require('../config/prefixMap');
 const { resolveFamilyDutyByOEMPrefix } = require('../config/oemPrefixRules');
 let OEM_XREF = {};
 try { OEM_XREF = require('../data/oem_xref.json'); } catch (_) { OEM_XREF = {}; }
+
 const { validateDonaldsonCode, findDonaldsonCode } = require('../scrapers/donaldson');
 const { generateSKU } = require('../sku/generator');
 const { extract4Digits } = require('../utils/digitExtractor');
+
+// ============================================================
+// SINÓNIMOS DE FAMILIA PARA NORMALIZAR
+// ============================================================
+
+function normalizeFamily(f) {
+  if (!f) return null;
+  const x = String(f).trim().toUpperCase();
+
+  const MAP = {
+    // Oil
+    "OIL": "OIL",
+    "ENGINE OIL": "OIL",
+    "LUBE": "OIL",
+    "LUB": "OIL",
+
+    // Air
+    "AIR": "AIRE",
+    "AIRE": "AIRE",
+    "PRIMARY AIR": "AIRE",
+    "SECONDARY AIR": "AIRE",
+    "OUTER AIR": "AIRE",
+    "INNER AIR": "AIRE",
+    "AIR CLEANER": "AIRE",
+    "AIR FILTER": "AIRE",
+
+    // Cabin
+    "CABIN": "CABIN",
+    "CABIN AIR": "CABIN",
+    "AC FILTER": "CABIN",
+    "HVAC": "CABIN",
+
+    // Fuel
+    "FUEL": "FUEL",
+    "DIESEL": "FUEL",
+    "GASOLINE": "FUEL",
+    "PRIMARY FUEL": "FUEL",
+    "SECONDARY FUEL": "FUEL",
+
+    // Separador / Water Separator
+    "SEPARATOR": "SEPARATOR",
+    "WATER SEPARATOR": "SEPARATOR",
+    "FUEL WATER SEPARATOR": "SEPARATOR",
+
+    // Hydraulic
+    "HYD": "HYDRAULIC",
+    "HYDRAULIC": "HYDRAULIC",
+
+    // Coolant
+    "COOLANT": "COOLANT",
+    "ANTIFREEZE": "COOLANT",
+
+    // Turbine
+    "TURBINE": "TURBINE",
+
+    // Marine
+    "MARINE": "MARINE",
+    "BOAT": "MARINE"
+  };
+
+  return MAP[x] || null;
+}
+
+// ============================================================
+// CLASIFICADOR PRINCIPAL
+// ============================================================
 
 async function classifyCode(rawCode) {
   const code = String(rawCode || '').trim();
   const ncode = normalize(code);
 
+  // ============================================================
+  // 1) Coincidencia directa OEM_xref.json (la más confiable)
+  // ============================================================
   const oemDirect = OEM_XREF[ncode];
   if (oemDirect) {
     const dutyGuess = 'HD';
     const last4 = extract4Digits(code);
-    const sku = generateSKU(oemDirect.family, dutyGuess, last4);
+
+    const safeFamily = normalizeFamily(oemDirect.family);
+    const sku = generateSKU(safeFamily, dutyGuess, last4);
+
     return {
       input: code,
       brand: oemDirect.brand,
-      family: oemDirect.family,
+      family: safeFamily,
       duty: dutyGuess,
       status: 'FINAL/Homologada',
       sku: typeof sku === 'string' ? sku : null,
@@ -31,20 +107,28 @@ async function classifyCode(rawCode) {
       prefix_collision: null
     };
   }
+
+  // ============================================================
+  // 2) Detección primaria por prefijo OEM
+  // ============================================================
   const byPrefix = resolveBrandFamilyDutyByPrefix(code) || {};
   const brand = byPrefix.brand || null;
-  let family = byPrefix.family || null;
+  let family = normalizeFamily(byPrefix.family);
   const duty = byPrefix.duty || null;
 
-  // Fallback universal: OEM prefix → family/duty (CAT 1R*, JD RE*, Toyota 90915, MANN WK*)
+  // ============================================================
+  // 3) OEM Fallback universal (CAT, JD, Toyota, MANN WK, etc.)
+  // ============================================================
   if (!family) {
     const oemResolved = resolveFamilyDutyByOEMPrefix(code, duty);
     if (oemResolved && oemResolved.family) {
-      family = oemResolved.family;
+      family = normalizeFamily(oemResolved.family);
     }
   }
 
-  // Additional hooks for Donaldson P55/P60 if not resolved by prefixMap
+  // ============================================================
+  // 4) Donaldson extended P55 / P60 fallback
+  // ============================================================
   if (brand === 'DONALDSON' && /^P/.test(code) && !family) {
     const n = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (/^P55\d{3,}/.test(n)) family = 'OIL';
@@ -55,13 +139,20 @@ async function classifyCode(rawCode) {
   let finalSku = null;
   let don = null;
 
-  const looksNumeric = /\d/.test(code) && !/[A-Z]{2,}/.test(code.replace(/\d/g, ''));
+  const looksNumeric =
+    /\d/.test(code) &&
+    !/[A-Z]{2,}/.test(code.replace(/\d/g, ''));
+
   const tryDonaldson = brand === 'DONALDSON' || looksNumeric || !brand;
 
+  // ============================================================
+  // 5) Validación Donaldson
+  // ============================================================
   if (tryDonaldson) {
     don = await validateDonaldsonCode(code);
+
     if (don && don.valid) {
-      family = family || don.family || null;
+      family = normalizeFamily(family || don.family || null);
       oemBridge = {
         source: 'DONALDSON',
         code: don.code,
@@ -69,6 +160,7 @@ async function classifyCode(rawCode) {
         applications: don.applications || [],
         cross: don.cross || []
       };
+
       const last4 = don.last4 || extract4Digits(don.code);
       const sku = generateSKU(family || 'OIL', duty || 'HD', last4);
       if (typeof sku === 'string') finalSku = sku;
@@ -96,6 +188,10 @@ async function classifyCode(rawCode) {
     prefix_collision: byPrefix.collision || null
   };
 }
+
+// ============================================================
+// PROCESAMIENTO POR LOTES
+// ============================================================
 
 async function validateBatch(codes = []) {
   const results = [];
