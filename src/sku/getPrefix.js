@@ -1,163 +1,200 @@
 /**
- * ================================================================
- * WARNING — IMMUTABLE CONTRACT
- * ------------------------------------------------
- * This file does NOT generate ELIMFILTERS prefixes.
+ * =============================================================================
+ * ELIMFILTERS — PREFIX RESOLVER (INMUTABLE)
+ * -----------------------------------------------------------------------------
+ * ADVERTENCIA:
+ * Este archivo NO genera prefijos ELIMFILTERS.
  *
- * Prefix generation is 100% controlled ONLY by:
- *   /src/config/prefixes.js        (immutable)
- *   /src/sku/generator.js          (immutable)
+ * Los prefijos oficiales provienen EXCLUSIVAMENTE de:
+ *   /src/config/prefixes.js
  *
- * Any attempt to derive EA1 / EL8 / EF9 / EC1 / EK3 / EK5 / EM9 / ET9
- * from brand detection MUST be blocked permanently.
+ * Este archivo únicamente:
+ *   1. Normaliza sinónimos de family (AIRE, FUEL, OIL, CABIN, MARINE, etc)
+ *   2. Empareja family + duty (LD/HD) → prefijo oficial
  *
- * This module ONLY detects OEM brand/family/duty and NOTHING ELSE.
- * ================================================================
+ * NUNCA debe deducir prefijos a partir de códigos OEM.
+ * NUNCA debe generar EL8 / EA1 / EF9 / EC1 / EK3 / EK5 / EM9 / ET9.
+ * =============================================================================
  */
 
-const PREFIXES = require('../config/prefixes');
+const PREFIXES = require("../config/prefixes");
 
-/**
- * Normalización de textos OEM.
- */
-function normalize(code) {
-  return String(code || '')
+// Normaliza texto
+function clean(text) {
+  return String(text || "")
+    .trim()
     .toUpperCase()
-    .replace(/\s+/g, '')
-    .replace(/[-_]/g, '');
+    .replace(/\s+/g, "_");
 }
 
 /**
- * Detección primaria de prefijo OEM (NO ELIMFILTERS).
+ * =============================================================================
+ * SINÓNIMOS OFICIALES DE FAMILIAS
+ * -----------------------------------------------------------------------------
+ * Todos mapean a una de las familias corporativas:
+ *  - OIL
+ *  - FUEL
+ *  - AIRE
+ *  - CABIN
+ *  - HYDRAULIC
+ *  - COOLANT
+ *  - TURBINE
+ *  - HOUSING
+ *  - MARINE
+ * =============================================================================
  */
-function getPrefixOEM(code) {
-  const c = normalize(code);
-  if (c.startsWith('BOSCH')) return 'BOSCH';
 
-  const mLetters = c.match(/^([A-Z]{1,4})/);
-  if (mLetters) return mLetters[1];
+const FAMILY_SYNONYMS = Object.freeze({
+  // ---------------------
+  // OIL FILTER
+  // ---------------------
+  OIL: "OIL",
+  ENGINE_OIL: "OIL",
+  LUBE: "OIL",
+  LUBE_FILTER: "OIL",
+  FULL_FLOW: "OIL",
+  PRIMARY_OIL: "OIL",
+  SECONDARY_OIL: "OIL",
 
-  const mDigits = c.match(/^(\d{2,3})/);
-  if (mDigits) return mDigits[1];
+  // ---------------------
+  // FUEL FILTER
+  // ---------------------
+  FUEL: "FUEL",
+  DIESEL: "FUEL",
+  FUEL_FILTER: "FUEL",
+  PRIMARY_FUEL: "FUEL",
+  SECONDARY_FUEL: "FUEL",
+  FUEL_WATER_SEPARATOR: "SEPARATOR",
+  WATER_SEPARATOR: "SEPARATOR",
+  SEPARATOR: "SEPARATOR",
 
-  return null;
+  // ---------------------
+  // AIR FILTER (AIRE)
+  // ---------------------
+  AIRE: "AIRE",
+  AIR: "AIRE",
+  AIR_FILTER: "AIRE",
+  PRIMARY_AIR: "AIRE",
+  SECONDARY_AIR: "AIRE",
+  PANEL: "AIRE",
+  ROUND: "AIRE",
+  RADIALSEAL: "AIRE",
+  SAFETY: "AIRE",
+
+  // ---------------------
+  // CABIN FILTER
+  // ---------------------
+  CABIN: "CABIN",
+  CABINA: "CABIN",
+  AC: "CABIN",
+  AIRCABIN: "CABIN",
+  AIRCONDITIONER: "CABIN",
+  HVAC: "CABIN",
+
+  // ---------------------
+  // HYDRAULIC FILTER
+  // ---------------------
+  HYDRAULIC: "HYDRAULIC",
+  HYDRAULICS: "HYDRAULIC",
+  HYDRO: "HYDRAULIC",
+  HYDRO_FILTER: "HYDRAULIC",
+
+  // ---------------------
+  // COOLANT FILTER
+  // ---------------------
+  COOLANT: "COOLANT",
+  ELC: "COOLANT",
+  EXTENDED_LIFE: "COOLANT",
+
+  // ---------------------
+  // TURBINE (HD)
+  // ---------------------
+  TURBINE: "TURBINE",
+  RACOR: "TURBINE",
+  PARKER: "TURBINE",
+  TURBINA: "TURBINE",
+
+  // ---------------------
+  // MARINO
+  // ---------------------
+  MARINE: "MARINE",
+  MARINO: "MARINE",
+  BOAT: "MARINE",
+  OUTBOARD: "MARINE",
+  MERCRUISER: "MARINE",
+
+  // ---------------------
+  // HOUSING (Carcasa de Aire)
+  // ---------------------
+  HOUSING: "HOUSING",
+  AIR_HOUSING: "HOUSING",
+  AIRBOX: "HOUSING",
+  ASSEMBLY: "HOUSING",
+  AIR_ASSEMBLY: "HOUSING",
+});
+
+/**
+ * Normaliza la familia usando sinónimos corporativos
+ */
+function normalizeFamily(family) {
+  const key = clean(family);
+  return FAMILY_SYNONYMS[key] || null;
 }
 
 /**
- * ================================================================
- * PREFIX MAP — SOLO OEM → FAMILY/DUTY (NO ELIMFILTERS)
- * ================================================================
+ * =============================================================================
+ * MAPA OFICIAL family|duty → prefijo inmutable
+ * =============================================================================
  */
 
-const BRAND_BY_PREFIX = {
-  CA: 'FRAM', CF: 'FRAM', CH: 'FRAM', PH: 'FRAM', TG: 'FRAM', XG: 'FRAM', HM: 'FRAM', G: 'FRAM',
-  XC: 'ECOGARD', XA: 'ECOGARD',
-  PG: 'PREMIUM GUARD',
-  P: 'DONALDSON', DBL: 'DONALDSON', DBA: 'DONALDSON', ELF: 'DONALDSON',
-  HFA: 'DONALDSON', HFP: 'DONALDSON', EAF: 'DONALDSON', X: 'DONALDSON',
+function getPrefix(family, duty) {
+  const fam = normalizeFamily(family);
+  const dt = String(duty || "").toUpperCase();
 
-  LF: 'FLEETGUARD', FF: 'FLEETGUARD', HF: 'FLEETGUARD', AF: 'FLEETGUARD',
+  if (!fam || !dt) {
+    console.error(`❌ Missing family/duty: family='${family}' duty='${duty}'`);
+    return null;
+  }
 
-  B: 'BALDWIN', BF: 'BALDWIN',
+  const KEY = `${fam}|${dt}`;
 
-  WK: 'MANN', C: 'MANN', HU: 'MANN', CU: 'MANN', CUK: 'MANN',
+  const map = {
+    // LD & HD compartidos
+    "OIL|LD": PREFIXES.OIL_LD,
+    "OIL|HD": PREFIXES.OIL_HD,
 
-  51: 'WIX', 33: 'WIX', 46: 'WIX',
+    "FUEL|LD": PREFIXES.FUEL_LD,
+    "FUEL|HD": PREFIXES.FUEL_HD,
 
-  L: 'LUBERFINER', LFP: 'LUBERFINER',
-  S: 'SAKURA',
+    "AIRE|LD": PREFIXES.AIRE_LD,
+    "AIRE|HD": PREFIXES.AIRE_HD,
 
-  OC: 'MAHLE', LX: 'MAHLE', LA: 'MAHLE', KC: 'MAHLE', KL: 'MAHLE', OX: 'MAHLE',
+    "CABIN|LD": PREFIXES.CABIN_LD,
+    "CABIN|HD": PREFIXES.CABIN_HD,
 
-  E: 'HENGST', H: 'HENGST',
+    // Especializados HD
+    "TURBINE|HD": PREFIXES.TURBINE_HD,
+    "HYDRAULIC|HD": PREFIXES.HYDRAULIC_HD,
+    "SEPARATOR|HD": PREFIXES.SEPARATOR_HD,
+    "COOLANT|HD": PREFIXES.COOLANT_HD,
 
-  Z: 'RYCO', A: 'RYCO', R: 'RYCO',
+    // Air Housings
+    "HOUSING|LD": PREFIXES.AIR_HOUSING_LD,
+    "HOUSING|HD": PREFIXES.AIR_HOUSING_HD,
 
-  OP: 'FILTRON', AP: 'FILTRON', PP: 'FILTRON', K: 'FILTRON',
+    // Marino
+    "MARINE|LD": PREFIXES.MARINE_ANY,
+    "MARINE|HD": PREFIXES.MARINE_ANY,
+  };
 
-  PL: 'PUROLATOR',
-  PS: 'K&N',
-  PF: 'ACDELCO',
+  const result = map[KEY];
 
-  BOSCH: 'BOSCH',
-  UFI: 'UFI',
-  HA: 'HASTINGS',
-  RO: 'ROKI', TR: 'TOKYOROKI'
-};
+  if (!result) {
+    console.error(`❌ No prefix for combination: ${KEY}`);
+    return null;
+  }
 
-const FAMILY_BY_PREFIX = {
-  CA: 'AIRE', CF: 'CABIN', CH: 'CABIN', PH: 'OIL', TG: 'OIL', XG: 'OIL', HM: 'OIL', G: 'FUEL',
-  XC: 'CABIN', XA: 'AIRE',
-  PG: 'OIL',
-  P: null, DBL: 'OIL', DBA: 'AIRE', ELF: 'OIL', HFA: 'AIRE', HFP: 'FUEL', EAF: 'AIRE',
-  LF: 'OIL', FF: 'FUEL', HF: 'HYDRAULIC',
-  AF: 'AIRE',
-  BF: 'FUEL',
-  WK: 'FUEL', C: 'AIRE', HU: 'OIL', CU: 'CABIN', CUK: 'CABIN',
-  51: 'OIL', 33: 'AIRE', 46: 'FUEL',
-  L: 'OIL', S: 'OIL', LFP: 'OIL',
-  OC: 'OIL', LX: 'AIRE', LA: 'CABIN', KC: 'FUEL', KL: 'FUEL', OX: 'OIL',
-  E: 'AIRE', H: 'OIL',
-  Z: 'OIL', A: 'AIRE', R: 'FUEL',
-  OP: 'OIL', AP: 'AIRE', PP: 'FUEL', K: 'CABIN',
-  PL: 'OIL',
-  HP: 'OIL',
-  PF: 'OIL'
-};
-
-const DUTY_BY_BRAND = {
-  FRAM: 'LD',
-  ECOGARD: 'LD',
-  BOSCH: 'LD',
-  'PREMIUM GUARD': 'LD',
-
-  DONALDSON: 'HD',
-  FLEETGUARD: 'HD',
-  BALDWIN: 'HD',
-  MANN: 'HD',
-  WIX: 'HD',
-  LUBERFINER: 'HD',
-  SAKURA: 'HD',
-  MAHLE: 'HD',
-  HENGST: 'HD',
-  RYCO: 'HD',
-  FILTRON: 'HD',
-  PUROLATOR: 'HD',
-  'K&N': 'HD',
-  ACDELCO: 'HD',
-  UFI: 'HD',
-  HASTINGS: 'HD',
-  ROKI: 'HD',
-  TOKYOROKI: 'HD',
-  PARKER: 'HD'
-};
-
-/**
- * ================================================================
- * MASTER OEM RESOLUTION
- * ================================================================
- */
-function resolveBrandFamilyDutyByPrefix(code) {
-  const p = getPrefixOEM(code);
-  if (!p) return null;
-
-  const brand = BRAND_BY_PREFIX[p] || null;
-  const family = FAMILY_BY_PREFIX[p] || null;
-  const duty = brand ? DUTY_BY_BRAND[brand] || null : null;
-
-  return { brand, family, duty, prefix: p };
+  return result;
 }
 
-/**
- * ================================================================
- * EXPORTACIONES (NO GENERAN PREFIJOS ELIMFILTERS)
- * ================================================================
- */
-module.exports = {
-  normalize,
-  getPrefix: getPrefixOEM,
-  BRAND_BY_PREFIX,
-  FAMILY_BY_PREFIX,
-  DUTY_BY_BRAND,
-  resolveBrandFamilyDutyByPrefix
-};
+module.exports = { getPrefix, normalizeFamily };
