@@ -1,0 +1,5 @@
+# SOLO EL CEO PUEDE MODIFICAR LOS ARCHIVOS DE PREFIJOS OFICIALES
+
+/src/config/prefixes.js @elimfilters-ceo
+/src/config/validatePrefixes.js @elimfilters-ceo
+/OFFICIAL_PREFIXES.md @elimfilters-ceo
