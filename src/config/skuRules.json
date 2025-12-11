@@ -1,71 +1,50 @@
 {
-  "//": "===============================================================================",
-  "//": " ELIMFILTERS — SKU RULES (INMUTABLE)",
-  "//": " Este archivo no genera prefijos. Solo define el mapa corporativo oficial.",
-  "//": " Prefijos definidos únicamente en /src/config/prefixes.js",
-  "//": "===============================================================================",
-
   "version": "7.0.0",
 
   "decisionTable": {
-
-    // -----------------------------------------------------------
-    // LIGHT DUTY (LD)
-    // -----------------------------------------------------------
     "OIL|LD": "EL8",
     "FUEL|LD": "EF9",
     "AIRE|LD": "EA1",
     "CABIN|LD": "EC1",
     "HOUSING|LD": "EA2",
 
-    // -----------------------------------------------------------
-    // HEAVY DUTY (HD)
-    // -----------------------------------------------------------
     "OIL|HD": "EL8",
     "FUEL|HD": "EF9",
     "AIRE|HD": "EA1",
     "CABIN|HD": "EC1",
     "HOUSING|HD": "EA2",
 
-    // Especializados HD
     "HYDRAULIC|HD": "EH6",
     "SEPARATOR|HD": "ES9",
     "COOLANT|HD": "EW7",
     "TURBINE|HD": "ET9",
 
-    // -----------------------------------------------------------
-    // MARINO
-    // -----------------------------------------------------------
     "MARINE|LD": "EM9",
     "MARINE|HD": "EM9"
   },
 
-  // ===========================================================================
-  //  RUTAS ESPECIALES (EM9 / ET9)
-  // ===========================================================================
-  "marine": {
-    "subtypes": {
-      "FUEL": "EM9-F",
-      "OIL": "EM9-O",
-      "AIRE": "EM9-A",
-      "SEPARATOR": "EM9-S"
+  "subtypes": {
+    "marine": {
+      "subtypes": {
+        "FUEL": "EM9-F",
+        "OIL": "EM9-O",
+        "AIRE": "EM9-A",
+        "SEPARATOR": "EM9-S"
+      },
+      "allowAlphanumericLast4": true
     },
-    "allowAlphanumericLast4": true
-  },
 
-  "turbine": {
-    "systemPrefix": "ET9",
-    "elementPrefix": "ET9-F",
-    "elementSuffixRules": {
-      "T": "T",
-      "P": "P",
-      "S": "S"
+    "turbine": {
+      "systemPrefix": "ET9",
+      "elementPrefix": "ET9-F",
+      "elementSuffixRules": {
+        "T": "T",
+        "P": "P",
+        "S": "S"
+      }
     }
   },
 
-  // ===========================================================================
-  //  VALIDACIONES
-  // ===========================================================================
   "validation": {
     "require4Digits": true,
     "allowOnlyDecisionTableFamilies": true,
