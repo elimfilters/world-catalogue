@@ -1,5 +1,13 @@
 {
   "version": "7.0.0",
-  "skuOverrides": {
+  "skuOverrides": {},
+  "decisionTable": {
+    "OIL|HD": {
+      "sku_prefix": "ET9",
+      "family": "OIL",
+      "duty": "HD",
+      "media": "STD",
+      "subtype": "SPINON"
+    }
   }
 }
