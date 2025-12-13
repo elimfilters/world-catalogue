@@ -43,6 +43,11 @@ function classifyInputCode(code) {
   return /^[A-Z]{1,4}\d{3,}/.test(up) ? 'CROSS_REF' : 'UNKNOWN';
 }
 
+// 🔧 Reemplazo de uso incorrecto de prefixMap.normalize por normalize.code
+// Esta línea es el reemplazo directo del error en línea 523
+// const hint = prefixMap.normalize(codeUpper) || {}; // ❌ INCORRECTO
+const hint = prefixMap.resolveBrandFamilyDutyByPrefix(normalize.code(codeUpper)) || {}; // ✅ CORRECTO
+
 // ... (resto del archivo sin cambios)
 
 module.exports = {
