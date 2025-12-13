@@ -1,20 +1,19 @@
-"decisionTable": {
-  "OIL|HD": "EL8",
-  "OIL|LD": "EL8",
-  "FUEL|HD": "EF9",
-  "FUEL|LD": "EF9",
-  "AIR|HD": "EA1",
-  "AIR|LD": "EA1",
-  "CABIN|HD": "EC1",
-  "CABIN|LD": "EC1",
-  "HYDRAULIC|HD": "E6H",
-  "FUEL FILTER SEPARATOR|HD": "ES9",
-  "AIR DRYER|HD": "ED4",
-  "COOLANT|HD": "EW7",
-  "COOLANT|LD": "EW7",
-  "MARINE|HD": "EM9",
-  "TURBINE|HD": "ET9",
-  "AIR HOUSING|HD": "EA2",
-  "KIT|HD": "EK5",
-  "KIT|LD": "EK3"
+{
+  "version": "7.0.0",
+  "decisionTable": {
+    "OIL|HD": "EL8",
+    "FUEL|HD": "EF9",
+    "AIR|HD": "EA1",
+    "CABIN|HD": "EC1",
+    "HYDRAULIC|HD": "E6H",
+    "FUEL FILTER SEPARATOR|HD": "ES9",
+    "AIR DRYER|HD": "ED4",
+    "COOLANT|HD": "EW7",
+    "MARINE|HD": "EM9",
+    "TURBINE|HD": "ET9",
+    "AIR HOUSING|HD": "EA2",
+    "KITS|HD": "EK5",
+    "KITS|LD": "EK3"
+  },
+  "skuOverrides": {}
 }
