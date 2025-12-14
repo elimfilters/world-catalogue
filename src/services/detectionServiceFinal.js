@@ -45,7 +45,7 @@ function classifyInputCode(code) {
 async function detectFilter(code, opts = {}) {
   const codeNorm = normalize.code(code);
   const codeUpper = codeNorm.toUpperCase();
-  const hint = prefixMap.resolveBrandFamilyDutyByPrefix(codeNorm) || {};
+ const hint = {}; // TODO: implementar resolveBrandFamilyDutyByPrefix
 
   const sourceType = classifyInputCode(codeNorm);
   const raw = await scraperBridge(codeNorm, { ...opts, sourceType });
