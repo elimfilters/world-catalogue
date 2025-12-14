@@ -389,7 +389,7 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
         console.log(`🔍 Step 1: Validating code via scrapers...`);
         
         const codeUpper = normalize.code(query);
-        const hint = prefixMap.resolveBrandFamilyDutyByPrefix(codeUpper) || {};
+        const hint = {};
         let duty = null;
         console.log(`ℹ️ Duty init: null. Hint brand=${hint.brand || 'N/A'}`);
 
@@ -900,3 +900,4 @@ async function detectFilter(rawInput, lang = 'en', options = {}) {
 module.exports = {
     detectFilter
 };
+
