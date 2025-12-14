@@ -10,17 +10,19 @@
     "CABIN|HD": "EC1",
     "CABIN|LD": "EC1",
     "HYDRAULIC|HD": "E6H",
-    "FUEL FILTER SEPARATOR|HD": "ES9",
+    "FUEL SEPARATOR|HD": "ES9",
+    "FUEL SEPARATOR|LD": "ES9",
     "AIR DRYER|HD": "ED4",
     "COOLANT|HD": "EW7",
     "COOLANT|LD": "EW7",
-    "MARINE|HD": "EM9",
-    "MARINE|LD": "EM9",
-    "TURBINE|HD": "ET9",
-    "TURBINE|LD": "ET9",
-    "AIR HOUSING|HD": "EA2",
-    "AIR HOUSING|LD": "EA2",
+    "MARINO|HD": "EM9",
+    "MARINO|LD": "EM9",
+    "TURBINA|HD": "ET9",
+    "TURBINA|LD": "ET9",
+    "CARCASA|HD": "EA2",
+    "CARCASA|LD": "EA2",
     "KITS|HD": "EK5",
     "KITS|LD": "EK3"
-  }
+  },
+  "skuOverrides": {}
 }
