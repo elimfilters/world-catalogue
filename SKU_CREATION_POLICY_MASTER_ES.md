@@ -1,69 +1,16 @@
-# Política Oficial de Creación de SKU ELIMFILTERS
-
----
-
-## LD (Light Duty)
-
-* **Fuente Oficial:** FRAM
-* **Validación de Homologación:**
-  No se confía en el prefijo del código de entrada para determinar la familia o deber (duty).
-  En su lugar, se utiliza el **tipo de filtro oficial devuelto por FRAM**, validado mediante **coincidencia exacta** y verificado contra el **Cross Reference** del código de entrada.
-* **Coincidencia Obligatoria:** Exact Match — No se aceptan búsquedas difusas o coincidencias parciales.
-* **Decisión:**
-  Si el código es homologado por FRAM (es decir, aparece como resultado oficial en el sitio y coincide exactamente con el código de entrada), entonces se permite generar un **SKU oficial** con prefijo **LD** según la tabla de decisión.
-
----
-
-## HD (Heavy Duty)
-
-* **Fuente Oficial:** Donaldson
-* **Validación de Homologación:**
-  No se confía en el prefijo del código de entrada para determinar la familia o deber (duty).
-  En su lugar, se utiliza el **tipo de filtro oficial devuelto por Donaldson**, validado mediante **coincidencia exacta** y verificado contra el **Cross Reference** del código de entrada.
-* **Coincidencia Obligatoria:** Exact Match — No se aceptan búsquedas difusas o coincidencias parciales.
-* **Decisión:**
-  Si el código es homologado por Donaldson (es decir, aparece como resultado oficial en el sitio y coincide exactamente con el código de entrada), entonces se permite generar un **SKU oficial** con prefijo **HD** según la tabla de decisión.
-
----
-
-## Filtros Marinos
-
-* **Fuente Oficial:** Racor / Parker (Marine Series), Sierra Filters, Mercruiser y Mercury Marine
-* **Validación de Homologación:**
-  Se requiere coincidencia exacta del código contra el **Cross Reference** oficial proporcionado por las fuentes indicadas.
-* **Coincidencia Obligatoria:** Exact Match
-* **Decisión:**
-  Si el código es homologado por alguna de las fuentes oficiales marinas, se permite generar un **SKU oficial** con prefijo **EM9**.
-
----
-
-## Turbinas
-
-* **Fuente Oficial:** Racor / Parker (Marine Series)
-* **Validación de Homologación:**
-  Se requiere coincidencia exacta del código contra el **Cross Reference** oficial de Racor / Parker, sin incluir Donaldson.
-* **Coincidencia Obligatoria:** Exact Match
-* **Decisión:**
-  Si el código coincide exactamente con una referencia oficial de turbinas Racor / Parker, se permite generar un **SKU oficial** con prefijo **ET9**.
-
----
-
-## Carcasas (Air Housings)
-
-* **Fuente Oficial:** ELIMFILTERS Engineering
-* **Validación de Homologación:**
-  Coincidencia exacta con referencia documentada por ingeniería interna.
-* **Coincidencia Obligatoria:** Exact Match
-* **Decisión:**
-  Si el código ha sido validado por el equipo de ingeniería, se permite generar un **SKU oficial** con prefijo **EA2**.
-
----
-
-## Kits
-
-* **Fuente Oficial:** ELIMFILTERS Engineering, Fleetguard
-* **Validación de Homologación:**
-  Validación del contenido del kit y referencias principales. Se requiere verificación manual por el equipo de ingeniería.
-* **Coincidencia Obligatoria:** Exact Match de todos los componentes críticos.
-* **Decisión:**
-  Si el kit ha sido revisado por ingeniería y cumple con los estándares internos, se permite generar un **SKU oficial** con prefijo **EK3** (LD) o **EK5** (HD).
+CREACION DEL SKU elimfilters:
+Paso 1  codigo de entrada valido
+Paso 2 identificar si el código valido de entrada es HD o LD
+Paso 3 a) si es HD: se hace el cross reference con las paginas oficiales de Donaldson ejemplo https://shop.donaldson.com/store/es-us/home,, catálogos de Donaldson y Distribuidores Autorizados.
+      a.1. se hace el scrapper (Donaldson) y se obtiene toda la información necesaria para el llenado de las columnas del Google Sheet Master ubicado con este ID 1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U, los valores se encuentran en nuestro servidor railway catalogo-production-7cef.up.railway.app.
+      a.2.  una vez cruzado el código de entrada con Donaldson se crea el SKU de la siguiente manera: se asigna el prefijo establecido + 4 ultimos del código Donaldson que se homologo con el código de entrada, todo se hace con las instrucciones precisas que están en el servidor.
+      a.3. una vez creado el SKU con la información completa obtenida del scraper, se procede a llenar la línea en el gogle sheet Master.
+      a.4. esta información es la que se va a mostrar en la salida hacia la pagina WEB.
+Paso 3 b) si es LD: se hace el cross reference con las páginas oficiales de FRAM ejemplo https://www.fram.com/parts-search , catálogos de FRAM y Distribuidores Autorizados.
+      b.1. se hace el scrapper (FRAM) y se obtiene toda la información necesaria para el llenado de las columnas del Google Sheet Master ubicado con este ID 1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U, los valores se encuentran en nuestro servidor railway catalogo-production-7cef.up.railway.app.
+      b.2.  una vez cruzado el código de entrada con FRAMse crea el SKU de la siguiente manera: se asigna el prefijo establecido + 4 ultimos del código FRAM que se homologo con el código de entrada, todo se hace con las instrucciones precisas que están en el servidor.
+      b.3. una vez creado el SKU con la información completa obtenida del scraper, se procede a llenar la línea en el gogle sheet Master.
+      b.4. esta información es la que se va a mostrar en la salida hacia la pagina WEB.
+      
+Paso 4 b) si es HD o LD pero Donaldson o FRAM no lo fabrican: el código de entrada se le ubica su OEM ( si el mismo código de entrada es un OEM  se usa el código de entrada como OEM), se le asigna el prefijo según el tipo de filtro + 4 ultimos números del OEM homologado.
+Especificación Técnica FINAL: Carga y Normalización del Catálogo de Filtros (elimfilters)
