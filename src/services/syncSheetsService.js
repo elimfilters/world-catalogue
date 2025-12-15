@@ -3,8 +3,23 @@
 // Google Sheet Master: 1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U
 // ============================================================================
 
-const { GoogleSpreadsheet } = require('google-spreadsheet');
-const { JWT } = require('google-auth-library');
+// Optional Google Sheets integration: lazy-load modules to avoid hard dependency at boot
+function loadGoogleSpreadsheet() {
+    try {
+        const mod = require('google-spreadsheet');
+        return mod.GoogleSpreadsheet || mod;
+    } catch (_) {
+        return null;
+    }
+}
+function loadGoogleAuthLibrary() {
+    try {
+        const mod = require('google-auth-library');
+        return mod;
+    } catch (_) {
+        return null;
+    }
+}
 // Load env locally; attempt parent resolution if needed
 try { require('dotenv').config(); } catch (_) { }
 const path = require('path');
@@ -17,6 +32,9 @@ if (!process.env.GOOGLE_CREDENTIALS && !process.env.GOOGLE_PRIVATE_KEY) {
         }
     } catch (_) { }
 }
+
+// Feature flag to enable/disable Google Sheets usage
+const SHEETS_FEATURE_ENABLED = String(process.env.ENABLE_SHEETS_SYNC || '').toLowerCase() === 'true';
 
 // ============================================================================
 // CONFIGURATION
@@ -203,6 +221,15 @@ const { resolveSubtype } = require('../utils/subtypeResolver');
 
 async function initSheet() {
     try {
+        if (!SHEETS_FEATURE_ENABLED) {
+            throw new Error('Sheets feature disabled via ENABLE_SHEETS_SYNC');
+        }
+
+        const GoogleSpreadsheet = loadGoogleSpreadsheet();
+        if (!GoogleSpreadsheet) {
+            throw new Error("'google-spreadsheet' module not installed");
+        }
+
         const doc = new GoogleSpreadsheet(SHEET_ID);
 
         // Prefer JSON credentials if provided
@@ -4641,6 +4668,9 @@ function tryParseJSON(str) {
 
 async function pingSheets() {
     try {
+        if (!SHEETS_FEATURE_ENABLED) {
+            return { ok: false, error: 'Sheets feature disabled via ENABLE_SHEETS_SYNC' };
+        }
         const doc = await initSheet();
         const sheetsCount = (doc.sheetsByIndex || []).length;
         const title = doc.title || 'Unknown';
