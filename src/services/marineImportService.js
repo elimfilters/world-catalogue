@@ -1,4 +1,13 @@
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// Optional Sheets integration (lazy-loaded)
+function loadGoogleSpreadsheet() {
+  try {
+    const mod = require('google-spreadsheet');
+    return mod.GoogleSpreadsheet || mod;
+  } catch (_) {
+    return null;
+  }
+}
+const SHEETS_FEATURE_ENABLED = String(process.env.ENABLE_SHEETS_SYNC || '').toLowerCase() === 'true';
 const prefixMap = require('../config/prefixMap');
 const { scraperBridge } = require('../scrapers/scraperBridge');
 const { generateSKU, generateEM9SubtypeSKU, generateEM9SSeparatorSKU, generateET9SystemSKU, generateET9FElementSKU } = require('../sku/generator');
@@ -19,6 +28,13 @@ function toArray(value) {
 }
 
 async function initSheet() {
+  if (!SHEETS_FEATURE_ENABLED) {
+    throw new Error('Sheets feature disabled via ENABLE_SHEETS_SYNC');
+  }
+  const GoogleSpreadsheet = loadGoogleSpreadsheet();
+  if (!GoogleSpreadsheet) {
+    throw new Error("'google-spreadsheet' module not installed");
+  }
   const doc = new GoogleSpreadsheet(SHEET_ID);
   const credsRaw = process.env.GOOGLE_CREDENTIALS;
   if (credsRaw) {

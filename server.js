@@ -163,6 +163,9 @@ app.get('/policy/sku', (req, res) => {
 // Sheets health
 app.get('/health/sheets', async (req, res) => {
     try {
+        if (String(process.env.ENABLE_SHEETS_SYNC || '').toLowerCase() !== 'true') {
+            return res.status(200).json({ status: 'DISABLED', reason: 'ENABLE_SHEETS_SYNC not set to true' });
+        }
         const result = await pingSheets();
         if (result.ok) {
             res.status(200).json({ status: 'OK', sheet_title: result.title, sheets: result.sheetsCount });
