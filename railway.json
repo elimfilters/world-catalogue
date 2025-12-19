@@ -46,7 +46,7 @@
         "API_TOKEN": "",
         "LOG_LEVEL": "info"
         ,
-        "ENABLE_SHEETS_SYNC": "false"
+        "ENABLE_SHEETS_SYNC": "true"
       }
     }
   }
