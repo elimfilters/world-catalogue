@@ -6,7 +6,7 @@
 import prefixMap from '../config/prefixMap.js';
 
 // ─────────────────────────────────────────────────────────────────────────
-// IMPORTAR SCRAPERS
+// IMPORTAR SCRAPERS - FILTROS ESTÁNDAR
 // ─────────────────────────────────────────────────────────────────────────
 
 import fleetguardScraper from './fleetguardScraper.js';
@@ -21,13 +21,24 @@ import mahleScraper from './mahleScraper.js';
 import sakuraScraper from './sakuraScraper.js';
 import hengstScraper from './hengstScraper.js';
 
+// ─────────────────────────────────────────────────────────────────────────
+// IMPORTAR SCRAPERS - RACOR/PARKER (Filtros Marinos + Turbinas)
+// ─────────────────────────────────────────────────────────────────────────
+
+import racorScraper from './racorScraper.js';
+import parkerScraper from './parkerScraper.js';
+import separ2000Scraper from './separ2000Scraper.js';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // MAPA DE SCRAPERS POR MARCA
 // ═══════════════════════════════════════════════════════════════════════════
 
 const SCRAPERS = {
-  'Fleetguard': fleetguardScraper,
-  'Donaldson': donaldsonScraper,
+  // ─────────────────────────────────────────────────────────────────────────
+  // FILTROS ESTÁNDAR (incluyen Housings y Maintenance Kits)
+  // ─────────────────────────────────────────────────────────────────────────
+  'Fleetguard': fleetguardScraper,        // Incluye Maintenance Kits
+  'Donaldson': donaldsonScraper,          // Incluye Housings y Maintenance Kits
   'Baldwin': baldwinScraper,
   'WIX': wixScraper,
   'FRAM': framScraper,
@@ -37,6 +48,13 @@ const SCRAPERS = {
   'MAHLE': mahleScraper,
   'Sakura': sakuraScraper,
   'Hengst': hengstScraper,
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RACOR/PARKER (Filtros Marinos + Turbinas)
+  // ─────────────────────────────────────────────────────────────────────────
+  'Racor': racorScraper,                  // Incluye Filtros Marinos y Turbinas
+  'Parker': parkerScraper,                // Incluye Filtros Marinos y Turbinas
+  'Separ2000': separ2000Scraper,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
