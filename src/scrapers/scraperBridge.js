@@ -4,27 +4,33 @@ const mongoDBScraper = require('./mongoDBScraper');
 
 /**
  * ScraperBridge - Puente unificado para todos los scrapers
- * Coordina la búsqueda de datos entre MongoDB, Google Sheets y otros scrapers
- * 
- * ESTRATEGIA HÍBRIDA:
- * 1. Buscar primero en MongoDB (cache rápido)
- * 2. Si no encuentra, buscar en Google Sheets
- * 3. Si encuentra en Sheets, guardar en MongoDB para futuras búsquedas
+ * Soporta búsqueda universal de filtros para cualquier tipo de equipo con motor
  */
 class ScraperBridge {
   constructor() {
-    // Orden de prioridad: MongoDB primero (más rápido), luego Google Sheets
     this.scrapers = [
       mongoDBScraper,
       googleSheetsScraper
     ];
     
-    // Configuración
     this.config = {
-      enableCache: process.env.ENABLE_MONGODB_CACHE !== 'false', // true por defecto
-      cacheToMongoDB: process.env.CACHE_TO_MONGODB !== 'false',  // true por defecto
+      enableCache: process.env.ENABLE_MONGODB_CACHE !== 'false',
+      cacheToMongoDB: process.env.CACHE_TO_MONGODB !== 'false',
       maxRetries: 3,
-      retryDelay: 1000 // ms
+      retryDelay: 1000
+    };
+
+    // Categorías de equipos soportadas
+    this.equipmentCategories = {
+      'heavy_machinery': ['excavator', 'bulldozer', 'loader', 'backhoe', 'grader', 'crane', 'forklift'],
+      'diesel_vehicles': ['truck', 'bus', 'pickup', 'van', 'semi', 'trailer', 'lorry'],
+      'gasoline_vehicles': ['car', 'suv', 'sedan', 'coupe', 'hatchback', 'minivan', 'wagon'],
+      'marine': ['outboard', 'inboard', 'boat', 'yacht', 'jetski', 'watercraft', 'marine'],
+      'generators': ['generator', 'genset', 'power unit', 'standby'],
+      'agricultural': ['tractor', 'harvester', 'combine', 'planter', 'sprayer', 'baler'],
+      'industrial': ['compressor', 'pump', 'engine', 'motor', 'turbine', 'blower'],
+      'recreational': ['atv', 'utv', 'motorcycle', 'dirt bike', 'quad', 'side-by-side'],
+      'aircraft': ['airplane', 'helicopter', 'aircraft', 'aviation', 'cessna', 'piper']
     };
 
     console.log('[ScraperBridge] Inicializado con', this.scrapers.length, 'scrapers');
@@ -33,9 +39,9 @@ class ScraperBridge {
 
   /**
    * Busca datos de un filtro por SKU
-   * @param {string} sku - SKU del filtro (ej: "PALL-HC8314")
+   * @param {string} sku - SKU del filtro
    * @param {Object} options - Opciones de búsqueda
-   * @returns {Promise<Object|null>} Datos del filtro o null
+   * @returns {Promise<Object|null>}
    */
   async findBySKU(sku, options = {}) {
     if (!sku || typeof sku !== 'string') {
@@ -50,7 +56,7 @@ class ScraperBridge {
     let result = null;
     let foundInScraper = null;
 
-    // ESTRATEGIA 1: Buscar en MongoDB primero (si está habilitado)
+    // Buscar en MongoDB primero (cache)
     if (this.config.enableCache && !options.skipCache) {
       try {
         console.log('[ScraperBridge] 📦 Buscando en MongoDB cache...');
@@ -66,13 +72,11 @@ class ScraperBridge {
         console.log('[ScraperBridge] ⚠️ SKU no encontrado en MongoDB, buscando en otras fuentes...');
       } catch (error) {
         console.error('[ScraperBridge] ❌ Error en MongoDB cache:', error.message);
-        // Continuar con otros scrapers si MongoDB falla
       }
     }
 
-    // ESTRATEGIA 2: Buscar en otros scrapers (Google Sheets, etc.)
+    // Buscar en otros scrapers
     for (const scraper of this.scrapers) {
-      // Saltar MongoDB si ya lo intentamos
       if (scraper === mongoDBScraper && this.config.enableCache) {
         continue;
       }
@@ -90,7 +94,7 @@ class ScraperBridge {
           const elapsed = Date.now() - startTime;
           console.log(`[ScraperBridge] ✅ SKU encontrado en ${foundInScraper} (${elapsed}ms)`);
           
-          // ESTRATEGIA 3: Guardar en MongoDB para futuras búsquedas
+          // Guardar en cache
           if (this.config.cacheToMongoDB && scraper !== mongoDBScraper) {
             this._cacheToMongoDB(result, normalizedSKU).catch(err => {
               console.error('[ScraperBridge] ⚠️ Error guardando en cache:', err.message);
@@ -101,13 +105,12 @@ class ScraperBridge {
         }
       } catch (error) {
         console.error(`[ScraperBridge] ❌ Error en ${scraper.name || 'scraper'}:`, error.message);
-        // Continuar con el siguiente scraper
       }
     }
 
     if (!result) {
       const elapsed = Date.now() - startTime;
-      console.log(`[ScraperBridge] ❌ SKU no encontrado en ninguna fuente: ${normalizedSKU} (${elapsed}ms)`);
+      console.log(`[ScraperBridge] ❌ SKU no encontrado: ${normalizedSKU} (${elapsed}ms)`);
       return null;
     }
 
@@ -116,9 +119,9 @@ class ScraperBridge {
 
   /**
    * Busca datos por prefix del SKU
-   * @param {string} prefix - Prefijo del SKU (ej: "PALL", "DONL")
+   * @param {string} prefix - Prefijo del SKU
    * @param {Object} options - Opciones de búsqueda
-   * @returns {Promise<Array>} Lista de filtros con ese prefijo
+   * @returns {Promise<Array>}
    */
   async findByPrefix(prefix, options = {}) {
     if (!prefix || typeof prefix !== 'string') {
@@ -130,7 +133,6 @@ class ScraperBridge {
     const startTime = Date.now();
     console.log(`[ScraperBridge] 🔍 Buscando por prefix: ${normalizedPrefix}`);
 
-    // Resolver información del prefix usando prefixMap
     const prefixMap = require('../config/prefixMap');
     const prefixInfo = prefixMap.resolveBrandFamilyDutyByPrefix(normalizedPrefix);
     
@@ -143,7 +145,6 @@ class ScraperBridge {
     const allResults = [];
     const limit = options.limit || 100;
 
-    // Buscar en todos los scrapers
     for (const scraper of this.scrapers) {
       try {
         if (typeof scraper.findByPrefix === 'function') {
@@ -157,7 +158,6 @@ class ScraperBridge {
           if (Array.isArray(scraperResults) && scraperResults.length > 0) {
             console.log(`[ScraperBridge] ✅ Encontrados ${scraperResults.length} resultados en ${scraper.name}`);
             
-            // Enriquecer y agregar resultados
             const enrichedResults = scraperResults.map(r => 
               this._enrichData(r, null, prefixInfo, scraper.name)
             );
@@ -170,43 +170,52 @@ class ScraperBridge {
       }
     }
 
-    // Eliminar duplicados por SKU
     const uniqueResults = this._removeDuplicates(allResults, 'sku');
-    
-    // Aplicar límite
     const limitedResults = uniqueResults.slice(0, limit);
 
     const elapsed = Date.now() - startTime;
-    console.log(`[ScraperBridge] ✅ Total: ${limitedResults.length} resultados únicos para prefix ${normalizedPrefix} (${elapsed}ms)`);
+    console.log(`[ScraperBridge] ✅ Total: ${limitedResults.length} resultados únicos (${elapsed}ms)`);
     
     return limitedResults;
   }
 
   /**
-   * Busca filtros por equipo
-   * @param {string} equipmentBrand - Marca del equipo
-   * @param {string} equipmentModel - Modelo del equipo
+   * BÚSQUEDA UNIVERSAL: Encuentra filtros para cualquier tipo de equipo
+   * Soporta: Maquinaria, Vehículos Diesel/Gasolina, Marinos, Generadores, etc.
+   * 
+   * @param {Object} params - Parámetros de búsqueda
+   * @param {string} params.brand - Marca del equipo (ej: "Caterpillar", "Ford", "Yamaha")
+   * @param {string} params.model - Modelo del equipo (ej: "320D", "F-150", "F250")
+   * @param {string} params.year - Año del equipo (opcional)
+   * @param {string} params.engineModel - Modelo del motor (opcional, ej: "3126", "Cummins ISX")
+   * @param {string} params.fuelType - Tipo de combustible (opcional: "diesel", "gasoline", "gas")
+   * @param {string} params.category - Categoría (opcional: "heavy_machinery", "marine", etc.)
+   * @param {string} params.filterType - Tipo de filtro (opcional: "oil", "fuel", "air", "hydraulic")
    * @returns {Promise<Array>} Lista de filtros compatibles
    */
-  async findByEquipment(equipmentBrand, equipmentModel) {
-    if (!equipmentBrand || !equipmentModel) {
-      console.warn('[ScraperBridge] Parámetros de equipo inválidos');
+  async findByEquipment(params) {
+    // Normalizar parámetros
+    const searchParams = this._normalizeEquipmentParams(params);
+    
+    if (!searchParams.brand && !searchParams.model && !searchParams.engineModel) {
+      console.warn('[ScraperBridge] ⚠️ Se requiere al menos brand, model o engineModel');
       return [];
     }
 
     const startTime = Date.now();
-    console.log(`[ScraperBridge] 🔍 Buscando filtros para: ${equipmentBrand} ${equipmentModel}`);
+    console.log('[ScraperBridge] 🔍 BÚSQUEDA UNIVERSAL DE FILTROS');
+    console.log('[ScraperBridge] Parámetros:', searchParams);
 
     const allResults = [];
 
-    // Buscar en scrapers que soporten búsqueda por equipo
+    // Buscar en todos los scrapers
     for (const scraper of this.scrapers) {
       try {
         if (typeof scraper.findByEquipment === 'function') {
           console.log(`[ScraperBridge] 🔍 Buscando en ${scraper.name}...`);
           
           const scraperResults = await this._retryOperation(
-            () => scraper.findByEquipment(equipmentBrand, equipmentModel),
+            () => scraper.findByEquipment(searchParams),
             this.config.maxRetries
           );
 
@@ -216,17 +225,190 @@ class ScraperBridge {
           }
         }
       } catch (error) {
-        console.error(`[ScraperBridge] ❌ Error buscando por equipo en ${scraper.name}:`, error.message);
+        console.error(`[ScraperBridge] ❌ Error en ${scraper.name}:`, error.message);
       }
     }
 
-    // Eliminar duplicados
+    // Eliminar duplicados y ordenar por relevancia
     const uniqueResults = this._removeDuplicates(allResults, 'sku');
+    const sortedResults = this._sortByRelevance(uniqueResults, searchParams);
 
     const elapsed = Date.now() - startTime;
-    console.log(`[ScraperBridge] ✅ Total: ${uniqueResults.length} filtros compatibles (${elapsed}ms)`);
+    console.log(`[ScraperBridge] ✅ Total: ${sortedResults.length} filtros compatibles (${elapsed}ms)`);
     
-    return uniqueResults;
+    return sortedResults;
+  }
+
+  /**
+   * Búsqueda simplificada por marca y modelo (backward compatibility)
+   * @param {string} equipmentBrand - Marca del equipo
+   * @param {string} equipmentModel - Modelo del equipo
+   * @returns {Promise<Array>}
+   */
+  async findByEquipmentSimple(equipmentBrand, equipmentModel) {
+    return this.findByEquipment({
+      brand: equipmentBrand,
+      model: equipmentModel
+    });
+  }
+
+  /**
+   * Búsqueda por tipo de motor
+   * @param {string} engineModel - Modelo del motor (ej: "Cummins ISX", "Detroit DD15")
+   * @param {string} fuelType - Tipo de combustible (opcional)
+   * @returns {Promise<Array>}
+   */
+  async findByEngine(engineModel, fuelType = null) {
+    return this.findByEquipment({
+      engineModel,
+      fuelType
+    });
+  }
+
+  /**
+   * Búsqueda por tipo de combustible
+   * @param {string} fuelType - "diesel", "gasoline", "gas", "electric"
+   * @param {Object} additionalParams - Parámetros adicionales
+   * @returns {Promise<Array>}
+   */
+  async findByFuelType(fuelType, additionalParams = {}) {
+    return this.findByEquipment({
+      fuelType,
+      ...additionalParams
+    });
+  }
+
+  /**
+   * Búsqueda por categoría de equipo
+   * @param {string} category - Categoría (ej: "marine", "heavy_machinery")
+   * @param {Object} additionalParams - Parámetros adicionales
+   * @returns {Promise<Array>}
+   */
+  async findByCategory(category, additionalParams = {}) {
+    return this.findByEquipment({
+      category,
+      ...additionalParams
+    });
+  }
+
+  /**
+   * Normaliza los parámetros de búsqueda de equipos
+   * @private
+   */
+  _normalizeEquipmentParams(params) {
+    const normalized = {};
+
+    // Normalizar strings
+    if (params.brand) normalized.brand = params.brand.trim();
+    if (params.model) normalized.model = params.model.trim();
+    if (params.year) normalized.year = params.year.toString().trim();
+    if (params.engineModel) normalized.engineModel = params.engineModel.trim();
+    if (params.filterType) normalized.filterType = params.filterType.toLowerCase().trim();
+    
+    // Normalizar fuel type
+    if (params.fuelType) {
+      const fuelType = params.fuelType.toLowerCase().trim();
+      normalized.fuelType = this._normalizeFuelType(fuelType);
+    }
+
+    // Detectar categoría automáticamente si no se proporciona
+    if (!params.category && params.brand) {
+      normalized.category = this._detectCategory(params.brand, params.model);
+    } else if (params.category) {
+      normalized.category = params.category.toLowerCase().trim();
+    }
+
+    return normalized;
+  }
+
+  /**
+   * Normaliza el tipo de combustible
+   * @private
+   */
+  _normalizeFuelType(fuelType) {
+    const fuelMap = {
+      'diesel': 'diesel',
+      'gasoil': 'diesel',
+      'gasoleo': 'diesel',
+      'gasoline': 'gasoline',
+      'gasolina': 'gasoline',
+      'petrol': 'gasoline',
+      'gas': 'gas',
+      'natural gas': 'gas',
+      'lng': 'gas',
+      'electric': 'electric',
+      'hybrid': 'hybrid'
+    };
+
+    return fuelMap[fuelType] || fuelType;
+  }
+
+  /**
+   * Detecta la categoría del equipo basándose en la marca/modelo
+   * @private
+   */
+  _detectCategory(brand, model = '') {
+    const brandLower = brand.toLowerCase();
+    const modelLower = model.toLowerCase();
+    const combined = `${brandLower} ${modelLower}`;
+
+    // Buscar en cada categoría
+    for (const [category, keywords] of Object.entries(this.equipmentCategories)) {
+      for (const keyword of keywords) {
+        if (combined.includes(keyword)) {
+          console.log(`[ScraperBridge] 🎯 Categoría detectada: ${category}`);
+          return category;
+        }
+      }
+    }
+
+    // Marcas específicas
+    const marinebrands = ['yamaha', 'mercury', 'honda marine', 'suzuki marine', 'evinrude', 'johnson'];
+    const heavyMachineryBrands = ['caterpillar', 'cat', 'komatsu', 'hitachi', 'volvo ce', 'john deere', 'case', 'jcb'];
+    const automotiveBrands = ['ford', 'chevrolet', 'dodge', 'ram', 'gmc', 'toyota', 'nissan', 'honda'];
+
+    if (marinebrands.includes(brandLower)) return 'marine';
+    if (heavyMachineryBrands.includes(brandLower)) return 'heavy_machinery';
+    if (automotiveBrands.includes(brandLower)) return 'diesel_vehicles';
+
+    return 'unknown';
+  }
+
+  /**
+   * Ordena resultados por relevancia
+   * @private
+   */
+  _sortByRelevance(results, searchParams) {
+    return results.sort((a, b) => {
+      let scoreA = 0;
+      let scoreB = 0;
+
+      // Puntos por coincidencia exacta de marca
+      if (searchParams.brand) {
+        if (a.equipment_brand?.toLowerCase() === searchParams.brand.toLowerCase()) scoreA += 10;
+        if (b.equipment_brand?.toLowerCase() === searchParams.brand.toLowerCase()) scoreB += 10;
+      }
+
+      // Puntos por coincidencia exacta de modelo
+      if (searchParams.model) {
+        if (a.equipment_model?.toLowerCase() === searchParams.model.toLowerCase()) scoreA += 10;
+        if (b.equipment_model?.toLowerCase() === searchParams.model.toLowerCase()) scoreB += 10;
+      }
+
+      // Puntos por año
+      if (searchParams.year) {
+        if (a.equipment_year === searchParams.year) scoreA += 5;
+        if (b.equipment_year === searchParams.year) scoreB += 5;
+      }
+
+      // Puntos por tipo de filtro
+      if (searchParams.filterType) {
+        if (a.filter_type?.toLowerCase() === searchParams.filterType) scoreA += 3;
+        if (b.filter_type?.toLowerCase() === searchParams.filterType) scoreB += 3;
+      }
+
+      return scoreB - scoreA;
+    });
   }
 
   /**
@@ -238,21 +420,18 @@ class ScraperBridge {
 
     const enriched = { ...data };
 
-    // Agregar metadata
     enriched.retrieved_at = new Date().toISOString();
     
     if (source) {
       enriched.data_source = source;
     }
 
-    // Agregar información del prefix si está disponible
     if (prefixInfo && typeof prefixInfo === 'object') {
       if (prefixInfo.brand) enriched.brand = prefixInfo.brand;
       if (prefixInfo.family) enriched.family = prefixInfo.family;
       if (prefixInfo.duty) enriched.duty_type = prefixInfo.duty;
     }
 
-    // Si tenemos SKU, extraer prefix y enriquecer
     if (sku && !prefixInfo) {
       const prefix = sku.split('-')[0];
       const prefixMap = require('../config/prefixMap');
@@ -265,12 +444,10 @@ class ScraperBridge {
       }
     }
 
-    // Normalizar campos comunes
     if (enriched.sku) {
       enriched.sku = enriched.sku.trim().toUpperCase();
     }
 
-    // Extraer prefix del SKU si no existe
     if (enriched.sku && !enriched.prefix) {
       enriched.prefix = enriched.sku.split('-')[0];
     }
@@ -279,25 +456,22 @@ class ScraperBridge {
   }
 
   /**
-   * Guarda datos en MongoDB cache (async, no bloquea)
+   * Guarda datos en MongoDB cache
    * @private
    */
   async _cacheToMongoDB(data, sku) {
     try {
       console.log(`[ScraperBridge] 💾 Guardando en MongoDB cache: ${sku}`);
-      
       const enrichedData = this._enrichData(data, sku);
       await mongoDBScraper.upsertFilter(enrichedData);
-      
       console.log(`[ScraperBridge] ✅ Guardado en cache: ${sku}`);
     } catch (error) {
       console.error('[ScraperBridge] ❌ Error guardando en cache:', error.message);
-      // No lanzar error, solo registrar
     }
   }
 
   /**
-   * Reintenta una operación en caso de fallo
+   * Reintenta una operación
    * @private
    */
   async _retryOperation(operation, maxRetries = 3) {
@@ -320,7 +494,7 @@ class ScraperBridge {
   }
 
   /**
-   * Elimina duplicados de un array basado en una clave
+   * Elimina duplicados
    * @private
    */
   _removeDuplicates(array, key) {
@@ -344,13 +518,14 @@ class ScraperBridge {
   }
 
   /**
-   * Obtiene estadísticas de todos los scrapers
-   * @returns {Promise<Object>} Estadísticas consolidadas
+   * Obtiene estadísticas
+   * @returns {Promise<Object>}
    */
   async getStats() {
     const stats = {
       total_scrapers: this.scrapers.length,
       cache_enabled: this.config.enableCache,
+      supported_categories: Object.keys(this.equipmentCategories),
       scrapers: []
     };
 
@@ -364,7 +539,7 @@ class ScraperBridge {
           });
         }
       } catch (error) {
-        console.error(`[ScraperBridge] ❌ Error obteniendo stats de ${scraper.name}:`, error.message);
+        console.error(`[ScraperBridge] ❌ Error obteniendo stats:`, error.message);
         stats.scrapers.push({
           name: scraper.name || 'unknown',
           error: error.message
@@ -376,11 +551,11 @@ class ScraperBridge {
   }
 
   /**
-   * Refresca los datos de todos los scrapers
-   * @returns {Promise<Object>} Resultado del refresh
+   * Refresca los datos
+   * @returns {Promise<Object>}
    */
   async refresh() {
-    console.log('[ScraperBridge] 🔄 Iniciando refresh de todos los scrapers...');
+    console.log('[ScraperBridge] 🔄 Iniciando refresh...');
     const startTime = Date.now();
     
     const results = {
@@ -402,12 +577,12 @@ class ScraperBridge {
           scraper: scraper.name || 'unknown',
           error: error.message
         });
-        console.error(`[ScraperBridge] ❌ Error en refresh de ${scraper.name}:`, error.message);
+        console.error(`[ScraperBridge] ❌ Error en refresh:`, error.message);
       }
     }
 
     const elapsed = Date.now() - startTime;
-    console.log(`[ScraperBridge] ✅ Refresh completado: ${results.success.length} exitosos, ${results.failed.length} fallidos (${elapsed}ms)`);
+    console.log(`[ScraperBridge] ✅ Refresh completado (${elapsed}ms)`);
     
     results.elapsed_ms = elapsed;
     return results;
@@ -415,18 +590,17 @@ class ScraperBridge {
 
   /**
    * Sincroniza Google Sheets → MongoDB
-   * @returns {Promise<Object>} Resultado de la sincronización
+   * @returns {Promise<Object>}
    */
   async syncSheetsToMongoDB() {
     console.log('[ScraperBridge] 🔄 Iniciando sincronización Google Sheets → MongoDB...');
     const startTime = Date.now();
 
     try {
-      // Obtener todos los datos de Google Sheets
       const sheetsData = await googleSheetsScraper.getAllFilters();
       
       if (!Array.isArray(sheetsData) || sheetsData.length === 0) {
-        console.warn('[ScraperBridge] ⚠️ No hay datos en Google Sheets para sincronizar');
+        console.warn('[ScraperBridge] ⚠️ No hay datos para sincronizar');
         return {
           success: false,
           message: 'No data in Google Sheets',
@@ -439,7 +613,6 @@ class ScraperBridge {
       let synced = 0;
       let errors = 0;
 
-      // Insertar/actualizar cada filtro en MongoDB
       for (const filter of sheetsData) {
         try {
           await mongoDBScraper.upsertFilter(filter);
@@ -474,7 +647,7 @@ class ScraperBridge {
   }
 
   /**
-   * Cierra todas las conexiones
+   * Cierra conexiones
    */
   async close() {
     console.log('[ScraperBridge] 🔌 Cerrando conexiones...');
@@ -485,11 +658,11 @@ class ScraperBridge {
           await scraper.close();
         }
       } catch (error) {
-        console.error(`[ScraperBridge] ❌ Error cerrando ${scraper.name}:`, error.message);
+        console.error(`[ScraperBridge] ❌ Error cerrando:`, error.message);
       }
     }
     
-    console.log('[ScraperBridge] ✅ Todas las conexiones cerradas');
+    console.log('[ScraperBridge] ✅ Conexiones cerradas');
   }
 }
 
