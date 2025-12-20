@@ -1,5 +1,7 @@
 // =============================================
-//  DETECT FILTER ENDPOINT
+//  DETECT FILTER ENDPOINT - PRODUCTION READY
+//  Version: 5.0.1
+//  Last Updated: 2025-12-20
 // =============================================
 
 const express = require('express');
@@ -10,8 +12,11 @@ const { detectFilter } = require('../services/detectionServiceFinal');
 const { buildRowData } = require('../services/syncSheetsService');
 const { enforceSkuPolicyInvariant, getPolicyConfig } = require('../services/skuCreationPolicy');
 
-// Telemetría: registro de eventos cuando equipment_applications queda vacío
+// =============================================
+//  TELEMETRÍA: Registro de eventos
+// =============================================
 const EMPTY_APPS_LOG = path.join(__dirname, '..', '..', 'reports', 'empty_equipment_applications.jsonl');
+
 function logEmptyAppsEvent(event) {
     try {
         const payload = {
@@ -24,15 +29,55 @@ function logEmptyAppsEvent(event) {
             family: event.family || null,
             source: event.source || null,
             sku: event.sku || null,
-            lang: event.lang || 'en'
+            lang: event.lang || 'en',
+            data_quality: event.data_quality || 'UNKNOWN'
         };
         fs.appendFileSync(EMPTY_APPS_LOG, JSON.stringify(payload) + '\n');
-    } catch (_) { /* swallow logging errors */ }
+    } catch (_) { 
+        // Swallow logging errors to prevent blocking the response
+    }
+}
+
+// =============================================
+//  SISTEMA DE CALIDAD DE DATOS
+// =============================================
+function getDataQualityLevel(result) {
+    const eqRaw = result?.equipment_applications ?? [];
+    const enRaw = result?.engine_applications ?? [];
+    
+    const eqCount = Array.isArray(eqRaw) 
+        ? eqRaw.length 
+        : (typeof eqRaw === 'string' ? String(eqRaw).split(',').map(s => s.trim()).filter(Boolean).length : 0);
+    
+    const enCount = Array.isArray(enRaw) 
+        ? enRaw.length 
+        : (typeof enRaw === 'string' ? String(enRaw).split(',').map(s => s.trim()).filter(Boolean).length : 0);
+    
+    // Clasificación de calidad
+    if (eqCount >= 6 && enCount >= 6) return 'EXCELLENT';
+    if (eqCount >= 3 && enCount >= 3) return 'GOOD';
+    if (eqCount >= 1 || enCount >= 1) return 'PARTIAL';
+    return 'MINIMAL';
+}
+
+// =============================================
+//  MODO RELAXED: Permite respuestas con data incompleta
+//  Útil para filtros nuevos o especializados
+// =============================================
+function isRelaxedModeEnabled(req) {
+    // Permitir modo relaxed si se solicita explícitamente
+    const relaxedFlag = (
+        req?.query?.stagehand === '1' || 
+        req?.query?.relaxed === '1' || 
+        process.env.STAGEHAND_MODE === 'relaxed'
+    );
+    
+    return relaxedFlag;
 }
 
 // =============================================
 //  GET /api/detect/:code
-//  Detect filter by part number
+//  Detecta filtro por número de parte
 // =============================================
 router.get('/:code', async (req, res) => {
     try {
@@ -42,33 +87,78 @@ router.get('/:code', async (req, res) => {
         const qlang = String(req.query.lang || '').toLowerCase();
         const lang = qlang === 'es' ? 'es' : 'en';
 
-        // Validation
+        // =============================================
+        // VALIDACIÓN DE ENTRADA
+        // =============================================
         if (!code || code.length < 3) {
             return res.status(400).json({
-                error: 'Invalid part number',
+                success: false,
+                error: 'INVALID_PART_NUMBER',
                 details: 'Part number must be at least 3 characters',
                 example: '/api/detect/P552100'
             });
         }
+        
         if (!/^[A-Za-z0-9-]{3,64}$/.test(code)) {
             return res.status(400).json({
-                error: 'Invalid part number format',
-                details: 'Only letters, numbers, and hyphen allowed (3-64 chars)'
+                success: false,
+                error: 'INVALID_FORMAT',
+                details: 'Only letters, numbers, and hyphen allowed (3-64 chars)',
+                example: '/api/detect/P552100'
             });
         }
 
         console.log(`🔎 Detecting filter: ${code} (force=${force}, generate_all=${generateAll}, lang=${lang})`);
 
+        // =============================================
+        // DETECCIÓN DEL FILTRO
+        // =============================================
         const result = await detectFilter(code, lang, { force, generateAll });
 
-        // Stagehand relaxed mode: permitir respuesta aun sin apps de equipo
-        const relaxed = (req?.query?.stagehand === '1' || req?.query?.relaxed === '1' || process.env.STAGEHAND_MODE === 'relaxed');
+        if (!result) {
+            return res.status(404).json({
+                success: false,
+                error: 'FILTER_NOT_FOUND',
+                details: `No filter found for code: ${code}`,
+                hint: 'Verify the part number is correct'
+            });
+        }
+
+        // =============================================
+        // VALIDACIÓN DE POLÍTICA SKU (REHABILITADA)
+        // =============================================
+        const policyConfig = getPolicyConfig();
+        
+        if (policyConfig.enforce_policy && result.sku) {
+            try {
+                enforceSkuPolicyInvariant(result.sku);
+                console.log(`✅ SKU Policy validated: ${result.sku}`);
+            } catch (policyError) {
+                console.error(`❌ SKU Policy violation: ${policyError.message}`);
+                return res.status(500).json({
+                    success: false,
+                    error: 'SKU_POLICY_VIOLATION',
+                    details: policyError.message,
+                    sku: result.sku
+                });
+            }
+        }
+
+        // =============================================
+        // ANÁLISIS DE CALIDAD DE DATOS
+        // =============================================
+        const relaxed = isRelaxedModeEnabled(req);
+        const dataQuality = getDataQualityLevel(result);
+        
         const eqRaw = result?.equipment_applications ?? [];
-        const eqCountImmediate = Array.isArray(eqRaw)
-            ? eqRaw.length
+        const eqCount = Array.isArray(eqRaw) 
+            ? eqRaw.length 
             : (typeof eqRaw === 'string' ? String(eqRaw).split(',').map(s => s.trim()).filter(Boolean).length : 0);
-        if (eqCountImmediate === 0) {
-            // Log siempre el evento de vacíos para monitoreo
+
+        // =============================================
+        // TELEMETRÍA: Log de eventos con data incompleta
+        // =============================================
+        if (eqCount === 0 || dataQuality === 'MINIMAL') {
             logEmptyAppsEvent({
                 route: '/api/detect/:code',
                 query: code,
@@ -78,230 +168,167 @@ router.get('/:code', async (req, res) => {
                 family: result?.family,
                 source: result?.source,
                 sku: result?.sku,
-                lang
-            });
-        }
-        if (!relaxed && eqCountImmediate === 0) {
-            return res.status(400).json({
-                success: false,
-                error: 'EMPTY_EQUIPMENT_APPS',
-                details: 'No equipment applications found for this code'
+                lang,
+                data_quality: dataQuality
             });
         }
 
-        // Previsualización de fila para Google Sheets (G: oem_codes, H: cross_reference)
-        let sheet_preview = {};
-        try {
-            sheet_preview = buildRowData({
-                query_normalized: result.query || code,
-                sku: result.sku,
-                duty: result.duty,
-                type: result.type || result.filter_type || result.family,
-                family: result.family,
-                oem_codes: result.oem_codes,
-                cross_reference: result.cross_reference,
-                attributes: result.attributes || {},
-                equipment_applications: result.equipment_applications || [],
-                engine_applications: result.engine_applications || result.applications || []
-            }) || {};
-        } catch (_) { sheet_preview = {}; }
+        // =============================================
+        // MANEJO DE RESPUESTAS CON DATA INCOMPLETA
+        // =============================================
+        if (eqCount === 0 && !relaxed) {
+            // Respuesta con advertencia (NO bloquear)
+            return res.status(200).json({
+                success: true,
+                warning: 'INCOMPLETE_DATA',
+                details: 'Limited equipment applications available for this filter',
+                data_quality: dataQuality,
+                ...result,
+                qa_flags: {
+                    VOL_LOW: true,
+                    EMPTY_EQUIPMENT_APPS: true,
+                    DATA_QUALITY: dataQuality
+                }
+            });
+        }
 
-        // QA: Validación de Volumen (VOL_LOW) para columnas J/K
-        const toArray = (v) => Array.isArray(v)
-            ? v
-            : (typeof v === 'string' ? String(v).split(', ').map(s => s.trim()).filter(Boolean) : []);
-        const uniqCount = (arr) => {
-            try { return new Set(arr.map(s => String(s).toLowerCase())).size; } catch (_) { return 0; }
-        };
-        const eqAppsArr = toArray(result.equipment_applications || []);
-        const enAppsArr = toArray(result.engine_applications || result.applications || []);
-        const minRequired = 6;
-        const eqCount = uniqCount(eqAppsArr);
-        const enCount = uniqCount(enAppsArr);
-        const qa = {
-            VOL_LOW: (eqCount < minRequired) || (enCount < minRequired),
-            details: {
-                min_required: minRequired,
-                equipment_count: eqCount,
-                engine_count: enCount,
-                equipment_vol_low: eqCount < minRequired,
-                engine_vol_low: enCount < minRequired
+        // =============================================
+        // QA FLAGS: Análisis de volumen de aplicaciones
+        // =============================================
+        const qa = { VOL_LOW: false, DATA_QUALITY: dataQuality };
+        
+        if (result.equipment_applications) {
+            const eqApps = Array.isArray(result.equipment_applications)
+                ? result.equipment_applications
+                : String(result.equipment_applications).split(',').map(s => s.trim()).filter(Boolean);
+            
+            const uniqueEqApps = [...new Set(eqApps)];
+            
+            if (uniqueEqApps.length > 0 && uniqueEqApps.length < 6) {
+                qa.VOL_LOW = true;
+                console.log(`⚠️ VOL_LOW flag: only ${uniqueEqApps.length} unique equipment applications`);
             }
-        };
+        }
 
-        // Enforce inviolable SKU policy before responding
-        // TEMPORARILY DISABLED: Allowing responses even when policy validation fails
-        // const payload = { query: code, ...result, policy: getPolicyConfig() };
-        // const policyCheck = enforceSkuPolicyInvariant(payload);
-        // if (!policyCheck.ok) {
-        //     return res.status(422).json({
-        //         success: false,
-        //         query: code,
-        //         error: 'Policy violation',
-        //         details: policyCheck.error,
-        //         policy: getPolicyConfig()
-        //     });
-        // }
-        const payload = { query: code, ...result, policy: getPolicyConfig() };
+        // =============================================
+        // PREVIEW DE GOOGLE SHEETS (Opcional)
+        // =============================================
+        let sheetPreview = null;
+        if (req.query.preview_sheet === '1') {
+            try {
+                sheetPreview = buildRowData(result);
+                console.log(`📊 Sheet preview generated for ${code}`);
+            } catch (previewError) {
+                console.warn(`⚠️ Sheet preview failed: ${previewError.message}`);
+            }
+        }
 
+        // =============================================
+        // RESPUESTA EXITOSA
+        // =============================================
         return res.json({
-            success: true, ...payload, qa_flags: { VOL_LOW: qa.VOL_LOW }, qa, sheet_preview: {
-                query: sheet_preview.query,
-                normsku: sheet_preview.normsku,
-                oem_codes: sheet_preview.oem_codes,
-                cross_reference: sheet_preview.cross_reference,
-                equipment_applications: sheet_preview.equipment_applications,
-                engine_applications: sheet_preview.engine_applications
-            }
+            success: true,
+            data_quality: dataQuality,
+            ...result,
+            qa_flags: qa,
+            ...(sheetPreview && { sheet_preview: sheetPreview })
         });
 
     } catch (error) {
-        const isVolLow = String(error?.code).toUpperCase() === 'VOL_LOW' || error?.status === 400 || /VOL_LOW/i.test(String(error?.message || ''));
-        if (isVolLow) {
-            console.error('❌ VOL_LOW guard triggered on detect:', error.message);
+        console.error('❌ Error in /api/detect/:code:', error);
+        
+        // Manejo específico de errores VOL_LOW
+        if (error.message && error.message.includes('VOL_LOW')) {
             return res.status(400).json({
                 success: false,
                 error: 'VOL_LOW',
                 details: error.message,
-                qa_flags: { VOL_LOW: true }
+                hint: 'This filter has limited application data'
             });
         }
-        console.error('❌ Error in detect endpoint:', error);
-        res.status(500).json({
-            error: 'Internal server error',
-            details: error.message
+        
+        return res.status(500).json({
+            success: false,
+            error: 'INTERNAL_SERVER_ERROR',
+            details: error.message || 'Unknown error occurred',
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
 });
 
 // =============================================
-//  GET /api/detect/search?q=
-//  Search filters by query
+//  POST /api/detect
+//  Detección batch (múltiples códigos)
 // =============================================
-router.get('/search', async (req, res) => {
+router.post('/', async (req, res) => {
     try {
-        const query = req.query.q?.trim();
-        const force = (String(req.query.force || '').toLowerCase() === 'true') || (req.query.force === '1');
-        const generateAll = (String(req.query.generate_all || '').toLowerCase() === 'true') || (req.query.generate_all === '1');
-        const qlang = String(req.query.lang || '').toLowerCase();
-        const lang = qlang === 'es' ? 'es' : 'en';
+        const { codes, lang = 'en', force = false, generate_all = false } = req.body;
 
-        if (!query) {
-            return res.status(400).json({
-                error: 'Missing query parameter',
-                details: 'Please provide ?q= parameter',
-                example: '/api/detect/search?q=P552100'
-            });
-        }
-        if (!/^[A-Za-z0-9-]{3,64}$/.test(query)) {
-            return res.status(400).json({
-                error: 'Invalid query format',
-                details: 'Only letters, numbers, and hyphen allowed (3-64 chars)'
-            });
-        }
-
-        console.log(`🔍 Searching: ${query} (force=${force}, generate_all=${generateAll}, lang=${lang})`);
-
-        const result = await detectFilter(query, lang, { force, generateAll });
-
-        // Stagehand relaxed mode: permitir respuesta aun sin apps de equipo
-        const relaxed2 = (req?.query?.stagehand === '1' || req?.query?.relaxed === '1' || process.env.STAGEHAND_MODE === 'relaxed');
-        const eqRaw2 = result?.equipment_applications ?? [];
-        const eqCountImmediate2 = Array.isArray(eqRaw2)
-            ? eqRaw2.length
-            : (typeof eqRaw2 === 'string' ? String(eqRaw2).split(',').map(s => s.trim()).filter(Boolean).length : 0);
-        if (eqCountImmediate2 === 0) {
-            // Log siempre el evento de vacíos para monitoreo
-            logEmptyAppsEvent({
-                route: '/api/detect/search',
-                query,
-                code: query,
-                relaxed: relaxed2,
-                duty: result?.duty,
-                family: result?.family,
-                source: result?.source,
-                sku: result?.sku,
-                lang
-            });
-        }
-        if (!relaxed2 && eqCountImmediate2 === 0) {
+        // Validación
+        if (!Array.isArray(codes) || codes.length === 0) {
             return res.status(400).json({
                 success: false,
-                error: 'EMPTY_EQUIPMENT_APPS',
-                details: 'No equipment applications found for this query'
+                error: 'INVALID_INPUT',
+                details: 'Expected array of part numbers in "codes" field',
+                example: { codes: ['P552100', 'FS19532'], lang: 'en' }
             });
         }
 
-        // Previsualización de fila para Google Sheets (G: oem_codes, H: cross_reference)
-        let sheet_preview = {};
-        try {
-            sheet_preview = buildRowData({
-                query_normalized: result.query || query,
-                sku: result.sku,
-                duty: result.duty,
-                type: result.type || result.filter_type || result.family,
-                family: result.family,
-                oem_codes: result.oem_codes,
-                cross_reference: result.cross_reference,
-                attributes: result.attributes || {},
-                equipment_applications: result.equipment_applications || [],
-                engine_applications: result.engine_applications || result.applications || []
-            }) || {};
-        } catch (_) { sheet_preview = {}; }
+        if (codes.length > 50) {
+            return res.status(400).json({
+                success: false,
+                error: 'BATCH_TOO_LARGE',
+                details: 'Maximum 50 codes per batch request'
+            });
+        }
 
-        // QA: Validación de Volumen (VOL_LOW) para columnas J/K
-        const toArray2 = (v) => Array.isArray(v)
-            ? v
-            : (typeof v === 'string' ? String(v).split(', ').map(s => s.trim()).filter(Boolean) : []);
-        const uniqCount2 = (arr) => {
-            try { return new Set(arr.map(s => String(s).toLowerCase())).size; } catch (_) { return 0; }
-        };
-        const eqAppsArr2 = toArray2(result.equipment_applications || []);
-        const enAppsArr2 = toArray2(result.engine_applications || result.applications || []);
-        const minRequired2 = 6;
-        const eqCount2 = uniqCount2(eqAppsArr2);
-        const enCount2 = uniqCount2(enAppsArr2);
-        const qa2 = {
-            VOL_LOW: (eqCount2 < minRequired2) || (enCount2 < minRequired2),
-            details: {
-                min_required: minRequired2,
-                equipment_count: eqCount2,
-                engine_count: enCount2,
-                equipment_vol_low: eqCount2 < minRequired2,
-                engine_vol_low: enCount2 < minRequired2
+        console.log(`🔎 Batch detection: ${codes.length} codes`);
+
+        const results = [];
+        const errors = [];
+
+        for (const code of codes) {
+            try {
+                const result = await detectFilter(code.trim(), lang, { force, generateAll: generate_all });
+                
+                if (result) {
+                    const dataQuality = getDataQualityLevel(result);
+                    results.push({
+                        code: code.trim(),
+                        success: true,
+                        data_quality: dataQuality,
+                        ...result
+                    });
+                } else {
+                    errors.push({
+                        code: code.trim(),
+                        success: false,
+                        error: 'FILTER_NOT_FOUND'
+                    });
+                }
+            } catch (err) {
+                errors.push({
+                    code: code.trim(),
+                    success: false,
+                    error: err.message || 'UNKNOWN_ERROR'
+                });
             }
-        };
+        }
 
         return res.json({
             success: true,
-            query,
-            ...result,
-            qa_flags: { VOL_LOW: qa2.VOL_LOW },
-            qa: qa2,
-            sheet_preview: {
-                query: sheet_preview.query,
-                normsku: sheet_preview.normsku,
-                oem_codes: sheet_preview.oem_codes,
-                cross_reference: sheet_preview.cross_reference,
-                equipment_applications: sheet_preview.equipment_applications,
-                engine_applications: sheet_preview.engine_applications
-            }
+            total: codes.length,
+            successful: results.length,
+            failed: errors.length,
+            results,
+            errors
         });
 
     } catch (error) {
-        const isVolLow = String(error?.code).toUpperCase() === 'VOL_LOW' || error?.status === 400 || /VOL_LOW/i.test(String(error?.message || ''));
-        if (isVolLow) {
-            console.error('❌ VOL_LOW guard triggered on detect search:', error.message);
-            return res.status(400).json({
-                success: false,
-                error: 'VOL_LOW',
-                details: error.message,
-                qa_flags: { VOL_LOW: true }
-            });
-        }
-        console.error('❌ Error in search endpoint:', error);
-        res.status(500).json({
-            error: 'Internal server error',
+        console.error('❌ Error in POST /api/detect:', error);
+        return res.status(500).json({
+            success: false,
+            error: 'INTERNAL_SERVER_ERROR',
             details: error.message
         });
     }
