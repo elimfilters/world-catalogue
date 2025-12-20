@@ -1,33 +1,66 @@
-// ============================================================================
-// DETECTION SERVICE FINAL - v5.3.4 SELF-CONTAINED
-// ============================================================================
-
 const scraperBridge = require('../scrapers/scraperBridge');
-const { detectDuty } = require('../utils/dutyDetector');
-const { detectFamilyHD, detectFamilyLD } = require('../utils/familyDetector');
-const { generateSKU } = require('../sku/generator');
-const { extract4Digits, extract4Alnum } = require('../utils/digitExtractor');
-const { noEquivalentFound } = require('../utils/messages');
-const { saveToCache } = require('./mongoService');
 
-// Normalize function inline para evitar problemas de import
-function normalizeCode(rawCode) {
-  if (!rawCode) return '';
-  return String(rawCode).toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+/**
+ * Detect and retrieve part number data
+ * @param {string} partNumber - The part number to detect
+ * @returns {Promise<Object>} - Detection result
+ */
+async function detectPartNumber(partNumber) {
+  if (!partNumber || typeof partNumber !== 'string') {
+    throw new Error('Invalid part number: must be a non-empty string');
+  }
+
+  const cleanPartNumber = partNumber.trim();
+  
+  if (cleanPartNumber.length === 0) {
+    throw new Error('Part number cannot be empty');
+  }
+
+  console.log(`🔎 [DETECTION] Starting detection for: ${cleanPartNumber}`);
+
+  try {
+    // Llamar al scraper bridge
+    const result = await scraperBridge.scrapeByPartNumber(cleanPartNumber);
+    
+    if (!result || !result.sku) {
+      throw new Error('No data found for this part number');
+    }
+
+    // Validar calidad de datos
+    const dataQuality = assessDataQuality(result);
+    
+    console.log(`✅ [DETECTION] Found data for ${cleanPartNumber} (Quality: ${dataQuality})`);
+    
+    return {
+      ...result,
+      dataQuality: dataQuality,
+      detectedAt: new Date().toISOString()
+    };
+    
+  } catch (error) {
+    console.error(`❌ [DETECTION] Failed for ${cleanPartNumber}:`, error.message);
+    throw error;
+  }
 }
 
-async function detectFilter(code, opts = {}) {
-  const codeNorm = normalizeCode(code);
-  const raw = await scraperBridge(codeNorm, opts);
-  if (!raw) throw noEquivalentFound(codeNorm);
-  const duty = detectDuty(raw);
-  const family = duty === 'HD' ? detectFamilyHD(raw) : detectFamilyLD(raw);
-  if (!duty || !family) throw new Error('Unable to determine duty or family');
-  const digits = extract4Digits(codeNorm) || extract4Alnum(codeNorm) || '0000';
-  const sku = generateSKU(family, duty, digits);
-  const result = { sku, family, duty, source: duty === 'LD' ? 'FRAM' : 'DONALDSON', original_code: code };
-  await saveToCache(result);
-  return result;
+/**
+ * Assess data quality
+ * @param {Object} data - The data to assess
+ * @returns {string} - Quality level
+ */
+function assessDataQuality(data) {
+  if (!data) return 'NONE';
+  
+  const hasBasicInfo = data.sku && data.brand;
+  const hasSpecs = data.specifications && Object.keys(data.specifications).length > 0;
+  const hasDescription = data.description && data.description.length > 0;
+  
+  if (hasBasicInfo && hasSpecs && hasDescription) return 'EXCELLENT';
+  if (hasBasicInfo && hasSpecs) return 'GOOD';
+  if (hasBasicInfo) return 'PARTIAL';
+  return 'MINIMAL';
 }
 
-module.exports = { detectFilter };
+module.exports = { 
+  detectPartNumber 
+};
