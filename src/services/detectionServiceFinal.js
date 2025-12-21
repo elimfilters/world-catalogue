@@ -1,68 +1,70 @@
 // ============================================================================
-// ELIMFILTERS — DETECTION SERVICE FINAL (HARDENED)
-// Autoridad técnica + generación SKU + hardening MARINE
+// DETECTION SERVICE — FINAL (v5.0.0)
+// - Orquesta el flujo completo de detección
+// - NO scrapea directamente
+// - NO genera SKU fuera de reglas oficiales
 // ============================================================================
 
-const { normalizeResponse } = require('./responseNormalizer');
-const prefixMap = require('../config/prefixMap');
 const { scraperBridge } = require('../scrapers/scraperBridge');
-const mongoDB = require('../scrapers/mongoDBScraper');
-const { generateSKU, generateEM9SubtypeSKU } = require('../sku/generator');
+const mongoScraper = require('../scrapers/mongoDBScraper');
+const { normalizeResponse } = require('./responseNormalizer');
+
+const prefixMap = require('../config/prefixMap');
+const PREFIXES = require('../config/prefixes');
+
+const { buildEM9SkuFromAuthority } = require('../resolvers/marineResolver');
 
 // ============================================================================
-// HARDENING MARINE — VALIDACIÓN EN RUNTIME (NO INFIERA)
+// UTILIDADES
 // ============================================================================
 
-function validateMarineRuntime({ source, family, duty, sku }) {
-  if (duty !== 'MARINE') return;
+function normalize(code = '') {
+  return String(code).trim().toUpperCase();
+}
 
-  const allowedSources = ['RACOR', 'SIERRA'];
-  if (!allowedSources.includes(source)) {
-    throw new Error(`MARINE_INVALID_SOURCE:${source}`);
-  }
-
-  if (!sku || !sku.startsWith('EM9')) {
-    throw new Error('MARINE_INVALID_SKU');
-  }
-
-  const allowedFamilies = ['FUEL', 'OIL', 'AIR'];
-  if (!allowedFamilies.includes(family)) {
-    throw new Error(`MARINE_INVALID_FAMILY:${family}`);
-  }
+/**
+ * Detecta si el código YA ES un SKU ELIMFILTERS
+ * Basado EXCLUSIVAMENTE en prefijos de creación
+ */
+function isElimfiltersSKU(code) {
+  const normalized = normalize(code);
+  return Object.values(PREFIXES).some(prefix =>
+    normalized.startsWith(prefix)
+  );
 }
 
 // ============================================================================
-// DETECTOR PRINCIPAL
+// SERVICIO PRINCIPAL
 // ============================================================================
 
 async function detectPartNumber(rawCode) {
-  const normalized = prefixMap.normalize(rawCode);
+  const normalizedCode = normalize(rawCode);
 
-  // --------------------------------------------------------------------------
-  // 1. VALIDACIÓN DE FORMA (NO DECIDE PRODUCTO)
-  // --------------------------------------------------------------------------
-  const validation = prefixMap.validate(normalized);
+  // ------------------------------------------------------------
+  // 1. Validación de forma (prefixMap)
+  // ------------------------------------------------------------
+  const validation = prefixMap.validate(normalizedCode);
   if (!validation.valid) {
     return normalizeResponse({
       status: 'REJECTED',
-      source: 'INPUT',
-      normalized_query: normalized,
+      source: null,
+      normalized_query: normalizedCode,
       reason: 'INVALID_CODE_FORMAT'
     });
   }
 
-  // --------------------------------------------------------------------------
-  // 2. SI ES SKU ELIMFILTERS → SOLO MONGODB
-  // --------------------------------------------------------------------------
-  if (isElimfiltersSKU(normalized)) {
-    const found = await mongoDB.findBySKU(normalized);
+  // ------------------------------------------------------------
+  // 2. SKU ELIMFILTERS → MongoDB ONLY
+  // ------------------------------------------------------------
+  if (isElimfiltersSKU(normalizedCode)) {
+    const record = await mongoScraper.findBySKU(normalizedCode);
 
-    if (!found) {
+    if (!record) {
       return normalizeResponse({
         status: 'NOT_FOUND',
         source: 'ELIMFILTERS',
-        sku: normalized,
-        normalized_query: normalized,
+        sku: normalizedCode,
+        normalized_query: normalizedCode,
         reason: 'SKU_ELIMFILTERS_NOT_FOUND'
       });
     }
@@ -70,85 +72,76 @@ async function detectPartNumber(rawCode) {
     return normalizeResponse({
       status: 'OK',
       source: 'ELIMFILTERS',
-      sku: found.sku,
-      family: found.family,
-      duty: found.duty,
-      attributes: found.attributes || {},
-      cross: found.cross || [],
-      applications: found.applications || [],
-      normalized_query: normalized
+      sku: record.sku,
+      family: record.family,
+      duty: record.duty,
+      attributes: record.attributes || {},
+      cross: record.cross || [],
+      applications: record.applications || [],
+      normalized_query: normalizedCode
     });
   }
 
-  // --------------------------------------------------------------------------
-  // 3. AUTORIDAD TÉCNICA (SCRAPERS)
-  // --------------------------------------------------------------------------
-  const authority = await scraperBridge(normalized);
+  // ------------------------------------------------------------
+  // 3. Autoridad técnica (scraperBridge)
+  // ------------------------------------------------------------
+  const authorityResult = await scraperBridge(normalizedCode);
 
-  if (!authority) {
+  if (!authorityResult || authorityResult.confirmed !== true) {
     return normalizeResponse({
       status: 'NOT_FOUND',
-      source: 'UNKNOWN',
-      normalized_query: normalized,
-      reason: 'NO_AUTHORITY_MATCH'
+      source: null,
+      normalized_query: normalizedCode,
+      reason: 'NO_AUTHORITY_CONFIRMED'
     });
   }
 
-  const { source, facts } = authority;
-  const { family, duty, last4, attributes = {}, cross = [], applications = [] } = facts;
+  const { source, facts } = authorityResult;
 
-  // --------------------------------------------------------------------------
-  // 4. GENERACIÓN SKU
-  // --------------------------------------------------------------------------
-  let sku = null;
-
-  if (duty === 'MARINE') {
-    sku = generateEM9SubtypeSKU(family, last4);
-  } else {
-    sku = generateSKU(family, duty, last4, { rawCode: normalized });
-  }
-
-  if (sku?.error) {
-    return normalizeResponse({
-      status: 'ERROR',
+  // ------------------------------------------------------------
+  // 4. MARINE → Resolver EM9 (FUERA del bridge)
+  // ------------------------------------------------------------
+  if (source === 'RACOR' || source === 'SIERRA') {
+    const sku = buildEM9SkuFromAuthority({
       source,
-      normalized_query: normalized,
-      reason: sku.error
+      code: facts.code || normalizedCode
+    });
+
+    if (!sku) {
+      return normalizeResponse({
+        status: 'REJECTED',
+        source,
+        normalized_query: normalizedCode,
+        reason: 'EM9_RESOLUTION_FAILED'
+      });
+    }
+
+    return normalizeResponse({
+      status: 'OK',
+      source,
+      sku,
+      family: 'MARINE',
+      duty: 'MARINE',
+      attributes: facts.attributes || {},
+      cross: facts.cross || [],
+      applications: facts.applications || [],
+      normalized_query: normalizedCode
     });
   }
 
-  // --------------------------------------------------------------------------
-  // 5. HARDENING MARINE (CRÍTICO)
-  // --------------------------------------------------------------------------
-  validateMarineRuntime({
-    source,
-    family,
-    duty,
-    sku
-  });
-
-  // --------------------------------------------------------------------------
-  // 6. RESPUESTA FINAL NORMALIZADA
-  // --------------------------------------------------------------------------
+  // ------------------------------------------------------------
+  // 5. OEM / Cross Reference confirmado (NO MARINE)
+  // ------------------------------------------------------------
   return normalizeResponse({
     status: 'OK',
     source,
-    sku,
-    family,
-    duty,
-    attributes,
-    cross,
-    applications,
-    normalized_query: normalized
+    family: facts.family || null,
+    duty: facts.duty || null,
+    attributes: facts.attributes || {},
+    cross: facts.cross || [],
+    applications: facts.applications || [],
+    normalized_query: normalizedCode
   });
-}
-
-// ============================================================================
-// HELPERS
-// ============================================================================
-
-function isElimfiltersSKU(code) {
-  return /^EL8|^EF9|^EA1|^EC1|^EH6|^ES9|^EW7|^EA2|^EK3|^EK5|^EM9|^ET9/.test(code);
 }
 
 // ============================================================================
