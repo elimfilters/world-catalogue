@@ -3,6 +3,7 @@
 // - Orquesta el flujo completo de detección
 // - NO scrapea directamente
 // - NO genera SKU fuera de reglas oficiales
+// - EM9 se persiste UNA SOLA VEZ
 // ============================================================================
 
 const { scraperBridge } = require('../scrapers/scraperBridge');
@@ -99,7 +100,7 @@ async function detectPartNumber(rawCode) {
   const { source, facts } = authorityResult;
 
   // ------------------------------------------------------------
-  // 4. MARINE → Resolver EM9 (FUERA del bridge)
+  // 4. MARINE → Resolver EM9 + PERSISTENCIA
   // ------------------------------------------------------------
   if (source === 'RACOR' || source === 'SIERRA') {
     const sku = buildEM9SkuFromAuthority({
@@ -116,15 +117,37 @@ async function detectPartNumber(rawCode) {
       });
     }
 
+    // 🔒 MongoDB FIRST (persistencia EM9)
+    let record = await mongoScraper.findBySKU(sku);
+
+    if (!record) {
+      await mongoScraper.upsertFilter({
+        sku,
+        prefix: 'EM9',
+        family: 'FUEL',          // MARINE actual = FUEL (RACOR/SIERRA)
+        duty: 'MARINE',
+        authority: source,
+        authority_code: facts.code || normalizedCode,
+        equivalents: {
+          [source]: [facts.code || normalizedCode]
+        },
+        attributes: facts.attributes || {},
+        cross: facts.cross || [],
+        applications: facts.applications || []
+      });
+
+      record = await mongoScraper.findBySKU(sku);
+    }
+
     return normalizeResponse({
       status: 'OK',
       source,
-      sku,
-      family: 'MARINE',
-      duty: 'MARINE',
-      attributes: facts.attributes || {},
-      cross: facts.cross || [],
-      applications: facts.applications || [],
+      sku: record.sku,
+      family: record.family,
+      duty: record.duty,
+      attributes: record.attributes || {},
+      cross: record.cross || [],
+      applications: record.applications || [],
       normalized_query: normalizedCode
     });
   }
