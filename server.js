@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const detectRouter = require('./src/api/detect');
 const metricsMarineRouter = require('./src/api/metricsMarine');
+const { checkMarineAlerts } = require('./src/services/marineAlerts');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -74,6 +75,20 @@ app.use((err, req, res, next) => {
     message: err.message
   });
 });
+
+// ================================
+// MARINE ALERTS (AUTOMÁTICAS)
+// ================================
+setInterval(() => {
+  try {
+    const alerts = checkMarineAlerts();
+    if (alerts.length > 0) {
+      console.warn('🚨 MARINE ALERTS:', alerts);
+    }
+  } catch (e) {
+    console.error('❌ Error in MARINE alerts:', e.message);
+  }
+}, 60000); // cada 60 segundos
 
 // ================================
 // Start server
