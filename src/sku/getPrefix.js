@@ -1,25 +1,17 @@
 /**
  * =============================================================================
- * ELIMFILTERS — PREFIX RESOLVER (INMUTABLE)
+ * ELIMFILTERS — PREFIX RESOLVER (SKU CREATION)
  * -----------------------------------------------------------------------------
- * ADVERTENCIA:
- * Este archivo NO genera prefijos ELIMFILTERS.
- *
- * Los prefijos oficiales provienen EXCLUSIVAMENTE de:
- *   /src/config/prefixes.js
- *
- * Este archivo únicamente:
- *   1. Normaliza sinónimos de family (AIR, FUEL, OIL, CABIN, MARINE, etc)
- *   2. Empareja family + duty (LD/HD) → prefijo oficial
- *
- * NUNCA debe deducir prefijos a partir de códigos OEM.
- * NUNCA debe generar EL8 / EA1 / EF9 / EC1 / EK3 / EK5 / EM9 / ET9.
+ * Usa EXCLUSIVAMENTE prefijos oficiales de creación de SKU.
+ * No infiere, no inventa, no hace fallback.
  * =============================================================================
  */
 
 const PREFIXES = require("../config/prefixes");
 
-// Normaliza texto
+// -----------------------------------------------------------------------------
+// Normalización
+// -----------------------------------------------------------------------------
 function clean(text) {
   return String(text || "")
     .trim()
@@ -27,139 +19,79 @@ function clean(text) {
     .replace(/\s+/g, "_");
 }
 
-/**
- * =============================================================================
- * SINÓNIMOS OFICIALES DE FAMILIAS
- * -----------------------------------------------------------------------------
- * Todos mapean a una de las familias corporativas:
- *  - OIL
- *  - FUEL
- *  - AIR
- *  - CABIN
- *  - HYDRAULIC
- *  - COOLANT
- *  - TURBINE
- *  - HOUSING
- *  - MARINE
- * =============================================================================
- */
-
+// -----------------------------------------------------------------------------
+// SINÓNIMOS OFICIALES DE FAMILIA (CORPORATIVOS)
+// -----------------------------------------------------------------------------
 const FAMILY_SYNONYMS = Object.freeze({
-  // ---------------------
-  // OIL FILTER
-  // ---------------------
+  // OIL
   OIL: "OIL",
-  ENGINE_OIL: "OIL",
   LUBE: "OIL",
-  LUBE_FILTER: "OIL",
-  FULL_FLOW: "OIL",
-  PRIMARY_OIL: "OIL",
-  SECONDARY_OIL: "OIL",
+  ENGINE_OIL: "OIL",
 
-  // ---------------------
-  // FUEL FILTER
-  // ---------------------
+  // FUEL
   FUEL: "FUEL",
   DIESEL: "FUEL",
-  FUEL_FILTER: "FUEL",
-  PRIMARY_FUEL: "FUEL",
-  SECONDARY_FUEL: "FUEL",
-  FUEL_WATER_SEPARATOR: "SEPARATOR",
-  WATER_SEPARATOR: "SEPARATOR",
-  SEPARATOR: "SEPARATOR",
 
-  // ---------------------
-  // AIR FILTER (AIR)
-  // ---------------------
-  AIR: "AIR",
+  // AIR
   AIR: "AIR",
   AIR_FILTER: "AIR",
-  PRIMARY_AIR: "AIR",
-  SECONDARY_AIR: "AIR",
-  PANEL: "AIR",
-  ROUND: "AIR",
-  RADIALSEAL: "AIR",
-  SAFETY: "AIR",
 
-  // ---------------------
-  // CABIN FILTER
-  // ---------------------
+  // CABIN
   CABIN: "CABIN",
-  CABIN: "CABIN",
-  AC: "CABIN",
-  AIRCABIN: "CABIN",
-  AIRCONDITIONER: "CABIN",
   HVAC: "CABIN",
 
-  // ---------------------
-  // HYDRAULIC FILTER
-  // ---------------------
+  // HYDRAULIC
   HYDRAULIC: "HYDRAULIC",
-  HYDRAULICS: "HYDRAULIC",
-  HYDRO: "HYDRAULIC",
-  HYDRO_FILTER: "HYDRAULIC",
 
-  // ---------------------
-  // COOLANT FILTER
-  // ---------------------
+  // COOLANT
   COOLANT: "COOLANT",
-  ELC: "COOLANT",
-  EXTENDED_LIFE: "COOLANT",
 
-  // ---------------------
-  // TURBINE (HD)
-  // ---------------------
-  TURBINE: "TURBINE",
-  RACOR: "TURBINE",
-  PARKER: "TURBINE",
+  // SEPARATOR
+  SEPARATOR: "SEPARATOR",
+  FUEL_WATER: "SEPARATOR",
+
+  // TURBINE
   TURBINE: "TURBINE",
 
-  // ---------------------
-  // MARINE
-  // ---------------------
-  MARINE: "MARINE",
-  MARINE: "MARINE",
-  BOAT: "MARINE",
-  OUTBOARD: "MARINE",
-  MERCRUISER: "MARINE",
-
-  // ---------------------
-  // HOUSING (AIR HOUSING de AIR)
-  // ---------------------
+  // HOUSING (carcasas de aire)
   HOUSING: "HOUSING",
   AIR_HOUSING: "HOUSING",
-  AIRBOX: "HOUSING",
-  ASSEMBLY: "HOUSING",
-  AIR_ASSEMBLY: "HOUSING",
+
+  // KIT
+  KIT: "KIT",
+  SERVICE_KIT: "KIT",
+  MAINTENANCE_KIT: "KIT",
+
+  // MARINE
+  MARINE: "MARINE",
+  BOAT: "MARINE"
 });
 
-/**
- * Normaliza la familia usando sinónimos corporativos
- */
+// -----------------------------------------------------------------------------
+// Normaliza familia
+// -----------------------------------------------------------------------------
 function normalizeFamily(family) {
   const key = clean(family);
   return FAMILY_SYNONYMS[key] || null;
 }
 
-/**
- * =============================================================================
- * MAPA OFICIAL family|duty → prefijo inmutable
- * =============================================================================
- */
-
+// -----------------------------------------------------------------------------
+// MAPA FINAL family | duty → PREFIJO SKU (INMUTABLE)
+// -----------------------------------------------------------------------------
 function getPrefix(family, duty) {
   const fam = normalizeFamily(family);
   const dt = String(duty || "").toUpperCase();
 
   if (!fam || !dt) {
-    console.error(`❌ Missing family/duty: family='${family}' duty='${duty}'`);
     return null;
   }
 
   const KEY = `${fam}|${dt}`;
 
-  const map = {
-    // LD & HD compartidos
+  const MAP = {
+    // =========================
+    // CATÁLOGO GENERAL
+    // =========================
     "OIL|LD": PREFIXES.OIL_LD,
     "OIL|HD": PREFIXES.OIL_HD,
 
@@ -172,28 +104,36 @@ function getPrefix(family, duty) {
     "CABIN|LD": PREFIXES.CABIN_LD,
     "CABIN|HD": PREFIXES.CABIN_HD,
 
-    // Especializados HD
-    "TURBINE|HD": PREFIXES.TURBINE_HD,
+    // =========================
+    // SOLO HD
+    // =========================
     "HYDRAULIC|HD": PREFIXES.HYDRAULIC_HD,
-    "SEPARATOR|HD": PREFIXES.SEPARATOR_HD,
     "COOLANT|HD": PREFIXES.COOLANT_HD,
+    "SEPARATOR|HD": PREFIXES.SEPARATOR_HD,
+    "TURBINE|HD": PREFIXES.TURBINE_HD,
 
-    // Air Housings
-    "HOUSING|HD": PREFIXES.AIR_HOUSING_HD,
+    // =========================
+    // CARCASAS (NO LD)
+    // =========================
+    "HOUSING|HD": PREFIXES.EA2,
 
+    // =========================
+    // KITS
+    // =========================
+    "KIT|LD": PREFIXES.EK3,
+    "KIT|HD": PREFIXES.EK5,
+
+    // =========================
     // MARINE
+    // =========================
     "MARINE|LD": PREFIXES.MARINE_ANY,
-    "MARINE|HD": PREFIXES.MARINE_ANY,
+    "MARINE|HD": PREFIXES.MARINE_ANY
   };
 
-  const result = map[KEY];
-
-  if (!result) {
-    console.error(`❌ No prefix for combination: ${KEY}`);
-    return null;
-  }
-
-  return result;
+  return MAP[KEY] || null;
 }
 
-module.exports = { getPrefix, normalizeFamily };
+module.exports = {
+  getPrefix,
+  normalizeFamily
+};
