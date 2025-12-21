@@ -1,6 +1,18 @@
+// ============================================================================
+// RESPONSE NORMALIZER — ELIMFILTERS API v5.0.0 (INMUTABLE)
+// Contrato único y estable de salida para TODOS los endpoints
+//
+// Reglas:
+//  - No infiere
+//  - No valida
+//  - No crea datos
+//  - No transforma lógica
+//  - Solo normaliza la respuesta final
+// ============================================================================
+
 function normalizeResponse({
-  status,
-  source,
+  status = 'UNKNOWN',
+  source = null,
   sku = null,
   family = null,
   duty = null,
@@ -20,8 +32,13 @@ function normalizeResponse({
     attributes,
     cross,
     applications,
-    meta: { normalized_query, reason }
+    meta: {
+      normalized_query,
+      reason
+    }
   };
 }
 
-module.exports = { normalizeResponse };
+module.exports = {
+  normalizeResponse
+};
