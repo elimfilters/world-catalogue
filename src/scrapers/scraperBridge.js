@@ -1,10 +1,12 @@
 // src/scrapers/scraperBridge.js
 // ============================================================================
 // SCRAPER BRIDGE — AUTORIDAD TÉCNICA
-// - No crea SKU
-// - No infiere familia
-// - No asume equivalencias
-// - Solo confirma si una AUTORIDAD responde
+// -----------------------------------------------------------------------------
+// Reglas inmutables:
+// - NO crea SKU
+// - NO infiere familia
+// - NO asume equivalencias
+// - SOLO confirma si una AUTORIDAD responde
 // ============================================================================
 
 const { scrapeDonaldson } = require('./donaldsonScraper'); // HD
@@ -18,7 +20,7 @@ const { scrapeSierra } = require('./sierraScraper');       // MARINE (secundaria
  * 3. SIERRA (MARINE)
  *
  * ⚠️ NO existe genericScraper
- * ⚠️ No se permiten fallbacks inventados
+ * ⚠️ NO se permiten fallbacks inventados
  */
 async function scraperBridge(normalizedCode) {
   const scrapers = [
@@ -44,7 +46,7 @@ async function scraperBridge(normalizedCode) {
           facts: result.facts
         };
       }
-    } catch (err) {
+    } catch (_) {
       // Fallo silencioso → intenta siguiente autoridad
       continue;
     }
