@@ -179,7 +179,6 @@ function getPrefix(family, duty) {
     "COOLANT|HD": PREFIXES.COOLANT_HD,
 
     // Air Housings
-    "HOUSING|LD": PREFIXES.AIR_HOUSING_LD,
     "HOUSING|HD": PREFIXES.AIR_HOUSING_HD,
 
     // MARINE
