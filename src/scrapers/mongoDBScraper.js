@@ -1,5 +1,19 @@
-// src/scrapers/mongoDBScraper.js
-const { MongoClient } = require('mongodb');
+// ============================================================================
+// MongoDB Scraper — ELIMFILTERS (SAFE VERSION)
+// Rol:
+// - Lectura de SKUs ELIMFILTERS
+// - Persistencia controlada
+// - NUNCA inventa datos
+// - FALLA DE FORMA CONTROLADA si MongoDB no está disponible
+// ============================================================================
+
+let MongoClient;
+try {
+  ({ MongoClient } = require('mongodb'));
+} catch (err) {
+  console.error('❌ MongoDB dependency not installed. MongoDBScraper disabled.');
+  MongoClient = null;
+}
 
 class MongoDBScraper {
   constructor() {
@@ -8,205 +22,142 @@ class MongoDBScraper {
     this.db = null;
     this.collection = null;
     this.isConnected = false;
+    this.disabled = MongoClient === null;
   }
 
-  /**
-   * Conectar a MongoDB
-   */
+  // --------------------------------------------------------------------------
+  // Conectar a MongoDB
+  // --------------------------------------------------------------------------
   async connect() {
+    if (this.disabled) {
+      throw new Error('MongoDB dependency not available');
+    }
+
     if (this.isConnected) return;
 
-    try {
-      const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-      const dbName = process.env.MONGODB_DB || 'elimfilters';
-      
-      this.client = new MongoClient(uri);
-      await this.client.connect();
-      
-      this.db = this.client.db(dbName);
-      this.collection = this.db.collection('filters');
-      
-      // Crear índices para búsquedas rápidas
-      await this.collection.createIndex({ sku: 1 }, { unique: true });
-      await this.collection.createIndex({ prefix: 1 });
-      await this.collection.createIndex({ brand: 1 });
-      await this.collection.createIndex({ family: 1 });
-      await this.collection.createIndex({ 'equipment_applications.equipment_brand': 1 });
-      
-      this.isConnected = true;
-      console.log('[MongoDB Scraper] ✅ Conectado exitosamente');
-    } catch (error) {
-      console.error('[MongoDB Scraper] ❌ Error de conexión:', error.message);
-      throw error;
-    }
+    const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017';
+    const dbName = process.env.MONGODB_DB || 'elimfilters';
+
+    this.client = new MongoClient(uri);
+    await this.client.connect();
+
+    this.db = this.client.db(dbName);
+    this.collection = this.db.collection('filters');
+
+    // Índices
+    await this.collection.createIndex({ sku: 1 }, { unique: true });
+    await this.collection.createIndex({ prefix: 1 });
+    await this.collection.createIndex({ brand: 1 });
+    await this.collection.createIndex({ family: 1 });
+    await this.collection.createIndex({ 'equipment_applications.equipment_brand': 1 });
+
+    this.isConnected = true;
+    console.log('[MongoDBScraper] ✅ Connected');
   }
 
-  /**
-   * Buscar filtro por SKU
-   * @param {string} sku - SKU del filtro
-   * @returns {Promise<Object|null>}
-   */
+  // --------------------------------------------------------------------------
+  // Buscar por SKU ELIMFILTERS
+  // --------------------------------------------------------------------------
   async findBySKU(sku) {
+    if (this.disabled) return null;
+
     await this.connect();
-    
-    try {
-      const normalizedSKU = sku.trim().toUpperCase();
-      console.log(`[MongoDB Scraper] Buscando SKU: ${normalizedSKU}`);
-      
-      const filter = await this.collection.findOne({ 
-        sku: normalizedSKU,
-        status: 'active'
-      });
-      
-      if (filter) {
-        console.log(`[MongoDB Scraper] ✅ SKU encontrado: ${normalizedSKU}`);
-        return this._formatDocument(filter);
-      }
-      
-      console.log(`[MongoDB Scraper] ❌ SKU no encontrado: ${normalizedSKU}`);
-      return null;
-    } catch (error) {
-      console.error('[MongoDB Scraper] Error en findBySKU:', error.message);
-      return null;
-    }
+
+    const normalizedSKU = String(sku).trim().toUpperCase();
+    const doc = await this.collection.findOne({
+      sku: normalizedSKU,
+      status: 'active'
+    });
+
+    return doc ? this._format(doc) : null;
   }
 
-  /**
-   * Buscar filtros por prefix
-   * @param {string} prefix - Prefijo del SKU
-   * @returns {Promise<Array>}
-   */
+  // --------------------------------------------------------------------------
+  // Buscar por prefijo ELIMFILTERS
+  // --------------------------------------------------------------------------
   async findByPrefix(prefix) {
+    if (this.disabled) return [];
+
     await this.connect();
-    
-    try {
-      const normalizedPrefix = prefix.trim().toUpperCase();
-      console.log(`[MongoDB Scraper] Buscando prefix: ${normalizedPrefix}`);
-      
-      const filters = await this.collection
-        .find({ 
-          prefix: normalizedPrefix,
-          status: 'active'
-        })
-        .limit(100)
-        .toArray();
-      
-      console.log(`[MongoDB Scraper] ✅ Encontrados ${filters.length} filtros`);
-      return filters.map(f => this._formatDocument(f));
-    } catch (error) {
-      console.error('[MongoDB Scraper] Error en findByPrefix:', error.message);
-      return [];
-    }
+
+    const normalized = String(prefix).trim().toUpperCase();
+    const docs = await this.collection
+      .find({ prefix: normalized, status: 'active' })
+      .limit(100)
+      .toArray();
+
+    return docs.map(d => this._format(d));
   }
 
-  /**
-   * Buscar filtros por equipo
-   * @param {string} equipmentBrand - Marca del equipo
-   * @param {string} equipmentModel - Modelo del equipo
-   * @returns {Promise<Array>}
-   */
-  async findByEquipment(equipmentBrand, equipmentModel) {
+  // --------------------------------------------------------------------------
+  // Buscar por equipo
+  // --------------------------------------------------------------------------
+  async findByEquipment(brand, model) {
+    if (this.disabled) return [];
+
     await this.connect();
-    
-    try {
-      console.log(`[MongoDB Scraper] Buscando equipo: ${equipmentBrand} ${equipmentModel}`);
-      
-      const filters = await this.collection
-        .find({
-          'equipment_applications.equipment_brand': new RegExp(equipmentBrand, 'i'),
-          'equipment_applications.equipment_model': new RegExp(equipmentModel, 'i'),
-          status: 'active'
-        })
-        .limit(50)
-        .toArray();
-      
-      console.log(`[MongoDB Scraper] ✅ Encontrados ${filters.length} filtros compatibles`);
-      return filters.map(f => this._formatDocument(f));
-    } catch (error) {
-      console.error('[MongoDB Scraper] Error en findByEquipment:', error.message);
-      return [];
-    }
+
+    const docs = await this.collection.find({
+      'equipment_applications.equipment_brand': new RegExp(brand, 'i'),
+      'equipment_applications.equipment_model': new RegExp(model, 'i'),
+      status: 'active'
+    }).limit(50).toArray();
+
+    return docs.map(d => this._format(d));
   }
 
-  /**
-   * Insertar o actualizar filtro
-   * @param {Object} filterData - Datos del filtro
-   * @returns {Promise<Object>}
-   */
+  // --------------------------------------------------------------------------
+  // Upsert controlado
+  // --------------------------------------------------------------------------
   async upsertFilter(filterData) {
-    await this.connect();
-    
-    try {
-      const sku = filterData.sku.trim().toUpperCase();
-      
-      const result = await this.collection.updateOne(
-        { sku },
-        {
-          $set: {
-            ...filterData,
-            sku,
-            updated_at: new Date()
-          },
-          $setOnInsert: {
-            created_at: new Date(),
-            status: 'active'
-          }
-        },
-        { upsert: true }
-      );
-      
-      console.log(`[MongoDB Scraper] ✅ Filtro ${result.upsertedCount ? 'insertado' : 'actualizado'}: ${sku}`);
-      return result;
-    } catch (error) {
-      console.error('[MongoDB Scraper] Error en upsertFilter:', error.message);
-      throw error;
+    if (this.disabled) {
+      throw new Error('MongoDB not available');
     }
+
+    await this.connect();
+
+    const sku = filterData.sku.trim().toUpperCase();
+
+    return this.collection.updateOne(
+      { sku },
+      {
+        $set: { ...filterData, sku, updated_at: new Date() },
+        $setOnInsert: { created_at: new Date(), status: 'active' }
+      },
+      { upsert: true }
+    );
   }
 
-  /**
-   * Obtener estadísticas
-   * @returns {Promise<Object>}
-   */
+  // --------------------------------------------------------------------------
+  // Stats
+  // --------------------------------------------------------------------------
   async getStats() {
-    await this.connect();
-    
-    try {
-      const totalFilters = await this.collection.countDocuments({ status: 'active' });
-      const totalBrands = await this.collection.distinct('brand');
-      const totalPrefixes = await this.collection.distinct('prefix');
-      
-      return {
-        total_filters: totalFilters,
-        total_brands: totalBrands.length,
-        total_prefixes: totalPrefixes.length,
-        last_updated: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('[MongoDB Scraper] Error en getStats:', error.message);
-      return {};
+    if (this.disabled) {
+      return { enabled: false };
     }
+
+    await this.connect();
+
+    return {
+      total_filters: await this.collection.countDocuments({ status: 'active' }),
+      total_brands: (await this.collection.distinct('brand')).length,
+      total_prefixes: (await this.collection.distinct('prefix')).length,
+      last_updated: new Date().toISOString()
+    };
   }
 
-  /**
-   * Formatear documento de MongoDB
-   * @private
-   */
-  _formatDocument(doc) {
-    if (!doc) return null;
-    
-    // Remover _id de MongoDB para la respuesta
-    const { _id, ...filter } = doc;
-    return filter;
+  // --------------------------------------------------------------------------
+  // Helpers
+  // --------------------------------------------------------------------------
+  _format(doc) {
+    const { _id, ...clean } = doc;
+    return clean;
   }
 
-  /**
-   * Cerrar conexión
-   */
   async close() {
     if (this.client) {
       await this.client.close();
       this.isConnected = false;
-      console.log('[MongoDB Scraper] Conexión cerrada');
     }
   }
 }
