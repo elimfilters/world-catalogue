@@ -4,42 +4,22 @@
 
 const { scrapeDonaldson } = require("./donaldsonScraper");
 const { scrapeFram } = require("./framScraper");
-const { scrapeGeneric } = require("./genericScraper");
 
 async function scraperBridge(normalizedCode) {
-  // Orden de intento NO implica prioridad comercial
-  // Solo es orden técnico de consulta
   const scrapers = [
     scrapeDonaldson,
-    scrapeFram,
-    scrapeGeneric
+    scrapeFram
   ];
 
   for (const scrape of scrapers) {
     try {
       const result = await scrape(normalizedCode);
-
-      if (
-        result &&
-        result.confirmed === true &&
-        result.source &&
-        result.facts &&
-        typeof result.facts === "object"
-      ) {
-        return {
-          confirmed: true,
-          source: String(result.source).toUpperCase(),
-          facts: result.facts
-        };
+      if (result && result.found === true) {
+        return result;
       }
-    } catch (e) {
-      // Fallos de scraper NO rompen el flujo
-      // Simplemente se intenta el siguiente
-      continue;
-    }
+    } catch (_) {}
   }
 
-  // Ninguna autoridad confirmó el código
   return null;
 }
 
