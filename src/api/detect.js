@@ -1,3 +1,4 @@
+const { normalizeResponse } = require('../services/responseNormalizer');
 const express = require('express');
 const router = express.Router();
 const detectionService = require('../services/detectionServiceFinal');
