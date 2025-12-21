@@ -1,7 +1,8 @@
-const { normalizeResponse } = require('../services/responseNormalizer');
 const express = require('express');
 const router = express.Router();
+
 const detectionService = require('../services/detectionServiceFinal');
+const normalizeResponse = require('../services/responseNormalizer');
 
 /**
  * POST /search?mode=partag
@@ -16,38 +17,46 @@ router.post('/search', async (req, res) => {
   // Validación de entrada
   if (!partNumber || typeof partNumber !== 'string' || partNumber.trim() === '') {
     console.warn('⚠️ [API] Invalid request: missing or empty partNumber');
-    return res.status(400).json({
-      success: false,
-      error: 'Missing or invalid partNumber in request body',
-      hint: 'Expected format: { "partNumber": "PH3614" }'
-    });
+
+    return res.status(400).json(
+      normalizeResponse({
+        success: false,
+        code: 'INVALID_INPUT',
+        error: 'Missing or invalid partNumber in request body',
+        hint: 'Expected format: { "partNumber": "PH3614" }',
+        source: 'detect'
+      })
+    );
   }
 
   try {
-    // Llamar al servicio de detección
     const result = await detectionService.detectPartNumber(partNumber.trim());
-    
+
     console.log(`✅ [API] Success for ${partNumber}`);
-    
-    return res.status(200).json({
-      success: true,
-      data: result,
-      mode: mode,
-      timestamp: new Date().toISOString()
-    });
-    
+
+    return res.status(200).json(
+      normalizeResponse({
+        success: true,
+        payload: result,
+        source: 'detect',
+        mode
+      })
+    );
+
   } catch (error) {
     console.error(`❌ [API] Error for ${partNumber}:`, error.message);
-    
-    // Determinar código de error apropiado
-    const statusCode = error.message.includes('Invalid') ? 400 : 500;
-    
-    return res.status(statusCode).json({
-      success: false,
-      error: error.message || 'Detection failed',
-      partNumber: partNumber,
-      timestamp: new Date().toISOString()
-    });
+
+    const statusCode = error.message?.includes('Invalid') ? 400 : 500;
+
+    return res.status(statusCode).json(
+      normalizeResponse({
+        success: false,
+        code: 'DETECTION_ERROR',
+        error: error.message || 'Detection failed',
+        source: 'detect',
+        partNumber
+      })
+    );
   }
 });
 
@@ -56,12 +65,17 @@ router.post('/search', async (req, res) => {
  * Health check endpoint
  */
 router.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    service: 'ELIMFILTERS Detection API',
-    version: '5.0.0',
-    timestamp: new Date().toISOString()
-  });
+  return res.status(200).json(
+    normalizeResponse({
+      success: true,
+      payload: {
+        status: 'healthy',
+        service: 'ELIMFILTERS Detection API',
+        version: '5.0.0'
+      },
+      source: 'health'
+    })
+  );
 });
 
 module.exports = router;
