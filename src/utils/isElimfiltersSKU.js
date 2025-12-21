@@ -1,28 +1,34 @@
 // ============================================================================
-// ELIMFILTERS SKU DETECTOR (INMUTABLE)
-// Detecta únicamente SKUs ELIMFILTERS oficiales
+//  ELIMFILTERS SKU DETECTOR (INMUTABLE)
+//  Rol: detectar SI un código pertenece a ELIMFILTERS
+//  - SOLO usa prefijos oficiales de creación de SKU
+//  - NO regex OEM
+//  - NO heurísticas
+//  - NO lógica comercial
 // ============================================================================
 
 const PREFIXES = require('../config/prefixes');
 
-const CREATION_PREFIXES = Object.freeze(
-  Array.from(new Set(Object.values(PREFIXES)))
+// ---------------------------------------------------------------------------
+// Prefijos oficiales de CREACIÓN (fuente única)
+// ---------------------------------------------------------------------------
+const ELIMFILTERS_PREFIXES = Object.freeze(
+  Object.values(PREFIXES)
 );
 
-/**
- * Determina si un código es un SKU ELIMFILTERS válido
- * @param {string} code
- * @returns {boolean}
- */
-function isElimfiltersSKU(code = '') {
+// ---------------------------------------------------------------------------
+// Detector
+// ---------------------------------------------------------------------------
+function isElimfiltersSKU(code) {
+  if (!code) return false;
+
   const normalized = String(code).trim().toUpperCase();
 
-  return CREATION_PREFIXES.some(prefix =>
+  return ELIMFILTERS_PREFIXES.some(prefix =>
     normalized.startsWith(prefix)
   );
 }
 
 module.exports = {
-  isElimfiltersSKU,
-  CREATION_PREFIXES
+  isElimfiltersSKU
 };
