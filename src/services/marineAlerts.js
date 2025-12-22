@@ -1,10 +1,12 @@
 // ============================================================================
-// MARINE ALERTS — HARDENING
+// MARINE ALERTS — SAFE MODE (STUB)
+// - No ejecuta lógica
+// - No rompe el servidor
+// - Placeholder para hardening futuro
 // ============================================================================
-function alert(type, payload = {}) {
-  console.error(`🚨 [MARINE ALERT] ${type}`, {
-    ...payload,
-    timestamp: new Date().toISOString()
-  });
+
+function checkMarineAlerts() {
+  return null;
 }
-module.exports = { alert };
+
+module.exports = { checkMarineAlerts };
