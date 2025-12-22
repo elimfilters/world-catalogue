@@ -1,3 +1,10 @@
+// ============================================================================
+// API — DETECT (v5.0.0)
+// - Punto de entrada único
+// - No contiene lógica de negocio
+// - Normaliza TODAS las respuestas
+// ============================================================================
+
 const express = require('express');
 const router = express.Router();
 
@@ -6,63 +13,43 @@ const { normalizeResponse } = require('../services/responseNormalizer');
 
 /**
  * POST /search?mode=partag
- * Search for part number data
+ * Body: { partNumber: "XXXX" }
  */
 router.post('/search', async (req, res) => {
   const mode = req.query.mode || 'partag';
-  const { partNumber } = req.body;
+  const { partNumber } = req.body || {};
 
-  console.log(`🔍 [API] Incoming request - Mode: ${mode}, Part: ${partNumber}`);
+  console.log(`🔍 [API] Mode=${mode} | Part=${partNumber}`);
 
-  // ================================
-  // Validación de entrada
-  // ================================
-  if (!partNumber || typeof partNumber !== 'string' || partNumber.trim() === '') {
-    console.warn('⚠️ [API] Invalid request: missing or empty partNumber');
-
+  // ------------------------------------------------------------
+  // Validación mínima de entrada
+  // ------------------------------------------------------------
+  if (!partNumber || typeof partNumber !== 'string' || !partNumber.trim()) {
     return res.status(400).json(
       normalizeResponse({
-        status: 'error',
-        source: 'api',
-        reason: 'INVALID_INPUT',
-        normalized_query: partNumber || null
+        status: 'REJECTED',
+        source: 'API',
+        normalized_query: null,
+        reason: 'INVALID_INPUT'
       })
     );
   }
 
   try {
-    // ================================
-    // Detección principal
-    // ================================
     const result = await detectionService.detectPartNumber(partNumber.trim());
 
-    console.log(`✅ [API] Success for ${partNumber}`);
+    // detectionService YA devuelve respuesta normalizada
+    return res.status(200).json(result);
 
-    return res.status(200).json(
+  } catch (err) {
+    console.error('❌ [API] Fatal error:', err);
+
+    return res.status(500).json(
       normalizeResponse({
-        status: 'ok',
-        source: result?.source || 'unknown',
-        sku: result?.sku || null,
-        family: result?.family || null,
-        duty: result?.duty || null,
-        attributes: result?.attributes || {},
-        cross: result?.cross || [],
-        applications: result?.applications || [],
-        normalized_query: partNumber.trim()
-      })
-    );
-
-  } catch (error) {
-    console.error(`❌ [API] Error for ${partNumber}:`, error.message);
-
-    const statusCode = error.message?.includes('Invalid') ? 400 : 500;
-
-    return res.status(statusCode).json(
-      normalizeResponse({
-        status: 'error',
-        source: 'api',
-        reason: error.message || 'DETECTION_ERROR',
-        normalized_query: partNumber
+        status: 'REJECTED',
+        source: 'API',
+        normalized_query: partNumber.trim().toUpperCase(),
+        reason: 'INTERNAL_SERVER_ERROR'
       })
     );
   }
@@ -70,13 +57,14 @@ router.post('/search', async (req, res) => {
 
 /**
  * GET /health
- * Health check endpoint
  */
 router.get('/health', (req, res) => {
   return res.status(200).json(
     normalizeResponse({
-      status: 'ok',
-      source: 'health',
+      status: 'OK',
+      source: 'HEALTH',
+      normalized_query: null,
+      reason: null,
       attributes: {
         service: 'ELIMFILTERS Detection API',
         version: '5.0.0'
