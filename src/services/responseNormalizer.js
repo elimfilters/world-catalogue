@@ -1,17 +1,13 @@
 // ============================================================================
-// RESPONSE NORMALIZER — ELIMFILTERS API v5.0.0 (INMUTABLE)
-// Contrato único y estable de salida para TODOS los endpoints
-//
-// Reglas:
-//  - No infiere
-//  - No valida
-//  - No crea datos
-//  - No transforma lógica
-//  - Solo normaliza la respuesta final
+// RESPONSE NORMALIZER — ELIMFILTERS API (v5.0.0)
+// - Estructura ÚNICA de respuesta
+// - No decide lógica
+// - No infiere datos
+// - Solo normaliza la salida del sistema
 // ============================================================================
 
 function normalizeResponse({
-  status = 'UNKNOWN',
+  status,
   source = null,
   sku = null,
   family = null,
@@ -23,18 +19,18 @@ function normalizeResponse({
   reason = null
 }) {
   return {
-    api_version: "5.0.0",
-    status,
-    source,
-    sku,
-    family,
-    duty,
-    attributes,
-    cross,
-    applications,
+    api_version: '5.0.0',
+    status,                 // OK | NOT_FOUND | REJECTED
+    source,                 // ELIMFILTERS | DONALDSON | FRAM | RACOR | SIERRA | null
+    sku,                    // SKU ELIMFILTERS si aplica
+    family,                 // OIL | FUEL | AIR | MARINE | etc
+    duty,                   // LD | HD | MARINE
+    attributes,             // Datos técnicos
+    cross,                  // Cross references confirmados
+    applications,           // Aplicaciones confirmadas
     meta: {
-      normalized_query,
-      reason
+      normalized_query,     // Código normalizado de entrada
+      reason                // Motivo en NOT_FOUND / REJECTED
     }
   };
 }
