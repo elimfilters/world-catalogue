@@ -1,22 +1,23 @@
 // ============================================================================
-// MARINE ALERTS — ELIMFILTERS (SAFE / HARDENED)
+// MARINE ALERTS — SAFE MODE
 // - Nunca rompe el servidor
-// - Nunca lanza excepciones
-// - Puede estar activo o inactivo sin efectos colaterales
+// - Solo analiza datos válidos
 // ============================================================================
 
-function checkMarineAlerts(payload = {}) {
+function checkMarineAlerts(records) {
   try {
-    // 🔒 Guard clause
-    if (!payload || typeof payload !== 'object') return null;
+    if (!Array.isArray(records) || records.length === 0) {
+      return null; // Nada que evaluar
+    }
 
-    // Ejemplo de futuras reglas (NO activas aún)
-    // if (payload.source === 'RACOR' && !payload.sku) { ... }
+    // Ejemplo de alertas futuras
+    if (records.length > 1000) {
+      console.warn('⚠️ MARINE alert: high volume detected');
+    }
 
-    return null;
+    return true;
   } catch (err) {
-    // ⚠️ JAMÁS lanzar error
-    console.warn('⚠️ MARINE alerts suppressed:', err.message);
+    console.error('❌ Error in MARINE alerts:', err.message);
     return null;
   }
 }
