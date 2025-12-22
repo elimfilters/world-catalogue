@@ -1,9 +1,9 @@
 // ============================================================================
 // DETECTION SERVICE — FINAL (v5.0.0)
-// - Orquesta el flujo completo de detección
+// Orquesta el flujo completo de detección
 // - NO scrapea directamente
 // - NO genera SKU fuera de reglas oficiales
-// - EM9 se persiste UNA SOLA VEZ
+// - EM9 (MARINE) se resuelve FUERA del bridge
 // ============================================================================
 
 const { scraperBridge } = require('../scrapers/scraperBridge');
@@ -25,7 +25,7 @@ function normalize(code = '') {
 
 /**
  * Detecta si el código YA ES un SKU ELIMFILTERS
- * Basado EXCLUSIVAMENTE en prefijos de creación
+ * Regla: basado EXCLUSIVAMENTE en prefijos oficiales de creación
  */
 function isElimfiltersSKU(code) {
   const normalized = normalize(code);
@@ -42,7 +42,7 @@ async function detectPartNumber(rawCode) {
   const normalizedCode = normalize(rawCode);
 
   // ------------------------------------------------------------
-  // 1. Validación de forma (prefixMap)
+  // 1. Validación de forma (NO semántica)
   // ------------------------------------------------------------
   const validation = prefixMap.validate(normalizedCode);
   if (!validation.valid) {
@@ -55,7 +55,7 @@ async function detectPartNumber(rawCode) {
   }
 
   // ------------------------------------------------------------
-  // 2. SKU ELIMFILTERS → MongoDB ONLY
+  // 2. SKU ELIMFILTERS → MongoDB ONLY (no scrapers)
   // ------------------------------------------------------------
   if (isElimfiltersSKU(normalizedCode)) {
     const record = await mongoScraper.findBySKU(normalizedCode);
@@ -84,7 +84,7 @@ async function detectPartNumber(rawCode) {
   }
 
   // ------------------------------------------------------------
-  // 3. Autoridad técnica (scraperBridge)
+  // 3. Autoridad técnica (OEM / Cross Reference)
   // ------------------------------------------------------------
   const authorityResult = await scraperBridge(normalizedCode);
 
@@ -100,7 +100,7 @@ async function detectPartNumber(rawCode) {
   const { source, facts } = authorityResult;
 
   // ------------------------------------------------------------
-  // 4. MARINE → Resolver EM9 + PERSISTENCIA
+  // 4. MARINE → Resolver EM9 (RACOR / SIERRA)
   // ------------------------------------------------------------
   if (source === 'RACOR' || source === 'SIERRA') {
     const sku = buildEM9SkuFromAuthority({
@@ -117,37 +117,15 @@ async function detectPartNumber(rawCode) {
       });
     }
 
-    // 🔒 MongoDB FIRST (persistencia EM9)
-    let record = await mongoScraper.findBySKU(sku);
-
-    if (!record) {
-      await mongoScraper.upsertFilter({
-        sku,
-        prefix: 'EM9',
-        family: 'FUEL',          // MARINE actual = FUEL (RACOR/SIERRA)
-        duty: 'MARINE',
-        authority: source,
-        authority_code: facts.code || normalizedCode,
-        equivalents: {
-          [source]: [facts.code || normalizedCode]
-        },
-        attributes: facts.attributes || {},
-        cross: facts.cross || [],
-        applications: facts.applications || []
-      });
-
-      record = await mongoScraper.findBySKU(sku);
-    }
-
     return normalizeResponse({
       status: 'OK',
       source,
-      sku: record.sku,
-      family: record.family,
-      duty: record.duty,
-      attributes: record.attributes || {},
-      cross: record.cross || [],
-      applications: record.applications || [],
+      sku,
+      family: 'MARINE',
+      duty: 'MARINE',
+      attributes: facts.attributes || {},
+      cross: facts.cross || [],
+      applications: facts.applications || [],
       normalized_query: normalizedCode
     });
   }
