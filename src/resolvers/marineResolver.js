@@ -1,24 +1,16 @@
 // ============================================================================
 // MARINE RESOLVER — EM9
-// Autoridades: RACOR / SIERRA
-// Regla: EM9 + base numérica del código
 // ============================================================================
 
-function extractNumericBase(code) {
-  const numeric = String(code || '').replace(/\D/g, '');
-  return numeric || null;
-}
-
 function buildEM9SkuFromAuthority({ source, code }) {
-  if (!source || !code) return null;
+  if (!code) return null;
 
-  const authority = String(source).toUpperCase();
-  if (authority !== 'RACOR' && authority !== 'SIERRA') return null;
+  // RACOR / SIERRA → extraer base numérica
+  const numeric = String(code).replace(/\D/g, '');
 
-  const base = extractNumericBase(code);
-  if (!base) return null;
+  if (!numeric || numeric.length < 3) return null;
 
-  return `EM9${base}`;
+  return `EM9${numeric}`;
 }
 
 module.exports = {
