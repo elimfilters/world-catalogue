@@ -1,16 +1,16 @@
-const { snapshot } = require('./metricsMarine');
+const { snapshot } = require('./marineMetrics');
 
 function checkMarineAlerts() {
   const s = snapshot();
   const alerts = [];
 
-  if (s.avgLatency > 1500) {
-    alerts.push({ type: 'LATENCY_HIGH_MARINE', value: s.avgLatency });
-  }
+  const rejectRate = s.requests ? (s.rejected / s.requests) * 100 : 0;
+  if (rejectRate > 5) alerts.push('HIGH_REJECT_RATE');
 
-  const rejectRate = s.requests ? s.rejected / s.requests : 0;
-  if (rejectRate > 0.05) {
-    alerts.push({ type: 'REJECT_RATE_HIGH_MARINE', value: rejectRate });
+  if (s.avgLatency > 1500) alerts.push('HIGH_LATENCY');
+
+  if (s.bySource.RACOR + s.bySource.SIERRA > 0 && s.bySource.SIERRA === 0) {
+    alerts.push('SIERRA_SILENT');
   }
 
   return alerts;
