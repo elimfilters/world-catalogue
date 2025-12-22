@@ -1,15 +1,13 @@
-function mergeMarineEquivalents(record, source, code) {
-  const equivalents = record.equivalents || {};
-  const list = equivalents[source] || [];
-
-  if (!list.includes(code)) {
-    list.push(code);
+// ============================================================================
+// MARINE EQUIVALENCE MAP — CANÓNICO
+// ============================================================================
+module.exports = Object.freeze({
+  R45P10: {
+    EM9: 'EM90910',
+    SIERRA: ['18-7844']
+  },
+  '18-7844': {
+    EM9: 'EM90910',
+    RACOR: ['R45P10']
   }
-
-  return {
-    ...equivalents,
-    [source]: list
-  };
-}
-
-module.exports = { mergeMarineEquivalents };
+});
