@@ -1,9 +1,5 @@
 // ============================================================================
 // DETECTION SERVICE — FINAL (v5.0.0)
-// Orquesta el flujo completo de detección
-// - NO scrapea directamente
-// - NO genera SKU fuera de reglas oficiales
-// - EM9 (MARINE) se resuelve FUERA del bridge
 // ============================================================================
 
 const { scraperBridge } = require('../scrapers/scraperBridge');
@@ -12,51 +8,37 @@ const { normalizeResponse } = require('./responseNormalizer');
 
 const prefixMap = require('../config/prefixMap');
 const PREFIXES = require('../config/prefixes');
-
 const { buildEM9SkuFromAuthority } = require('../resolvers/marineResolver');
 
-// ============================================================================
-// UTILIDADES
-// ============================================================================
-
+// ---------------------------------------------------------------------------
+// Utils
+// ---------------------------------------------------------------------------
 function normalize(code = '') {
   return String(code).trim().toUpperCase();
 }
 
-/**
- * Detecta si el código YA ES un SKU ELIMFILTERS
- * Regla: basado EXCLUSIVAMENTE en prefijos oficiales de creación
- */
 function isElimfiltersSKU(code) {
   const normalized = normalize(code);
-  return Object.values(PREFIXES).some(prefix =>
-    normalized.startsWith(prefix)
-  );
+  return Object.values(PREFIXES).some(p => normalized.startsWith(p));
 }
 
-// ============================================================================
-// SERVICIO PRINCIPAL
-// ============================================================================
-
+// ---------------------------------------------------------------------------
+// Main service
+// ---------------------------------------------------------------------------
 async function detectPartNumber(rawCode) {
   const normalizedCode = normalize(rawCode);
 
-  // ------------------------------------------------------------
-  // 1. Validación de forma (NO semántica)
-  // ------------------------------------------------------------
+  // 1. Forma válida
   const validation = prefixMap.validate(normalizedCode);
   if (!validation.valid) {
     return normalizeResponse({
       status: 'REJECTED',
-      source: null,
       normalized_query: normalizedCode,
       reason: 'INVALID_CODE_FORMAT'
     });
   }
 
-  // ------------------------------------------------------------
-  // 2. SKU ELIMFILTERS → MongoDB ONLY (no scrapers)
-  // ------------------------------------------------------------
+  // 2. SKU ELIMFILTERS → MongoDB ONLY
   if (isElimfiltersSKU(normalizedCode)) {
     const record = await mongoScraper.findBySKU(normalizedCode);
 
@@ -83,25 +65,20 @@ async function detectPartNumber(rawCode) {
     });
   }
 
-  // ------------------------------------------------------------
-  // 3. Autoridad técnica (OEM / Cross Reference)
-  // ------------------------------------------------------------
-  const authorityResult = await scraperBridge(normalizedCode);
+  // 3. Autoridad técnica
+  const authority = await scraperBridge(normalizedCode);
 
-  if (!authorityResult || authorityResult.confirmed !== true) {
+  if (!authority || authority.confirmed !== true) {
     return normalizeResponse({
       status: 'NOT_FOUND',
-      source: null,
       normalized_query: normalizedCode,
       reason: 'NO_AUTHORITY_CONFIRMED'
     });
   }
 
-  const { source, facts } = authorityResult;
+  const { source, facts } = authority;
 
-  // ------------------------------------------------------------
-  // 4. MARINE → Resolver EM9 (RACOR / SIERRA)
-  // ------------------------------------------------------------
+  // 4. MARINE → EM9 (FUERA del bridge)
   if (source === 'RACOR' || source === 'SIERRA') {
     const sku = buildEM9SkuFromAuthority({
       source,
@@ -117,6 +94,17 @@ async function detectPartNumber(rawCode) {
       });
     }
 
+    // 🔒 Persistencia EM9
+    await mongoScraper.upsertFilter({
+      sku,
+      family: 'MARINE',
+      duty: 'MARINE',
+      source,
+      cross: facts.cross || [],
+      applications: facts.applications || [],
+      attributes: facts.attributes || {}
+    });
+
     return normalizeResponse({
       status: 'OK',
       source,
@@ -130,9 +118,7 @@ async function detectPartNumber(rawCode) {
     });
   }
 
-  // ------------------------------------------------------------
-  // 5. OEM / Cross Reference confirmado (NO MARINE)
-  // ------------------------------------------------------------
+  // 5. OEM / Cross reference NO MARINE
   return normalizeResponse({
     status: 'OK',
     source,
@@ -145,10 +131,4 @@ async function detectPartNumber(rawCode) {
   });
 }
 
-// ============================================================================
-// EXPORT
-// ============================================================================
-
-module.exports = {
-  detectPartNumber
-};
+module.exports = { detectPartNumber };
