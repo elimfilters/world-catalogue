@@ -3,9 +3,39 @@ const router = express.Router();
 const { isElimfiltersSKU } = require('../utils/isElimfiltersSKU');
 const mongo = require('../scrapers/mongoDBScraper');
 const { scraperBridge } = require('../scrapers/scraperBridge');
-const { upsertBySku } = require('../services/syncSheetsService');
 
 console.log('🟢 detect.js cargado correctamente');
+
+// Lazy load para evitar dependencia circular
+let sheetsService;
+const getSheets = () => {
+  if (!sheetsService) {
+    sheetsService = require('../services/syncSheetsService');
+  }
+  return sheetsService;
+};
+
+// Helper para guardar en Sheets
+async function saveToSheets(result, code) {
+  try {
+    const { upsertBySku } = getSheets();
+    await upsertBySku({
+      sku: result.normsku || code,
+      query_normalized: code,
+      duty: result.duty_type,
+      type: result.filter_type || result.type,
+      family: result.family,
+      attributes: result.attributes || {},
+      oem_codes: result.oem_codes,
+      cross_reference: result.cross_reference,
+      description: result.description,
+      source: result.source
+    });
+    console.log(`✅ Guardado en Sheets: ${result.normsku || code}`);
+  } catch (err) {
+    console.error('⚠️ Error guardando en Sheets:', err.message);
+  }
+}
 
 // ==========================================
 // GET /search?partNumber=XXX (WordPress)
@@ -39,25 +69,7 @@ router.get('/', async (req, res) => {
 
     const result = await scraperBridge(code);
     if (result) {
-      // Guardar en Sheets
-      try {
-        await upsertBySku({
-          sku: result.normsku || code,
-          query_normalized: code,
-          duty: result.duty_type,
-          type: result.filter_type || result.type,
-          family: result.family,
-          attributes: result.attributes || {},
-          oem_codes: result.oem_codes,
-          cross_reference: result.cross_reference,
-          description: result.description,
-          source: result.source
-        });
-        console.log(`✅ Guardado en Sheets: ${result.normsku || code}`);
-      } catch (err) {
-        console.error('⚠️ Error guardando en Sheets:', err.message);
-      }
-
+      await saveToSheets(result, code);
       return res.json({ success: true, data: result });
     }
     
@@ -112,25 +124,7 @@ router.post('/', async (req, res) => {
 
     const result = await scraperBridge(code);
     if (result) {
-      // Guardar en Sheets
-      try {
-        await upsertBySku({
-          sku: result.normsku || code,
-          query_normalized: code,
-          duty: result.duty_type,
-          type: result.filter_type || result.type,
-          family: result.family,
-          attributes: result.attributes || {},
-          oem_codes: result.oem_codes,
-          cross_reference: result.cross_reference,
-          description: result.description,
-          source: result.source
-        });
-        console.log(`✅ Guardado en Sheets: ${result.normsku || code}`);
-      } catch (err) {
-        console.error('⚠️ Error guardando en Sheets:', err.message);
-      }
-
+      await saveToSheets(result, code);
       return res.json({ 
         success: true, 
         data: result
@@ -169,25 +163,7 @@ router.get('/:code', async (req, res) => {
   
   const result = await scraperBridge(code);
   if (result) {
-    // Guardar en Sheets
-    try {
-      await upsertBySku({
-        sku: result.normsku || code,
-        query_normalized: code,
-        duty: result.duty_type,
-        type: result.filter_type || result.type,
-        family: result.family,
-        attributes: result.attributes || {},
-        oem_codes: result.oem_codes,
-        cross_reference: result.cross_reference,
-        description: result.description,
-        source: result.source
-      });
-      console.log(`✅ Guardado en Sheets: ${result.normsku || code}`);
-    } catch (err) {
-      console.error('⚠️ Error guardando en Sheets:', err.message);
-    }
-
+    await saveToSheets(result, code);
     return res.json({ success: true, data: result });
   }
   
