@@ -3,6 +3,7 @@ const router = express.Router();
 const { isElimfiltersSKU } = require('../utils/isElimfiltersSKU');
 const mongo = require('../scrapers/mongoDBScraper');
 const { scraperBridge } = require('../scrapers/scraperBridge');
+const { upsertBySku } = require('../services/syncSheetsService');
 
 console.log('🟢 detect.js cargado correctamente');
 
@@ -38,6 +39,25 @@ router.get('/', async (req, res) => {
 
     const result = await scraperBridge(code);
     if (result) {
+      // Guardar en Sheets
+      try {
+        await upsertBySku({
+          sku: result.normsku || code,
+          query_normalized: code,
+          duty: result.duty_type,
+          type: result.filter_type || result.type,
+          family: result.family,
+          attributes: result.attributes || {},
+          oem_codes: result.oem_codes,
+          cross_reference: result.cross_reference,
+          description: result.description,
+          source: result.source
+        });
+        console.log(`✅ Guardado en Sheets: ${result.normsku || code}`);
+      } catch (err) {
+        console.error('⚠️ Error guardando en Sheets:', err.message);
+      }
+
       return res.json({ success: true, data: result });
     }
     
@@ -92,6 +112,25 @@ router.post('/', async (req, res) => {
 
     const result = await scraperBridge(code);
     if (result) {
+      // Guardar en Sheets
+      try {
+        await upsertBySku({
+          sku: result.normsku || code,
+          query_normalized: code,
+          duty: result.duty_type,
+          type: result.filter_type || result.type,
+          family: result.family,
+          attributes: result.attributes || {},
+          oem_codes: result.oem_codes,
+          cross_reference: result.cross_reference,
+          description: result.description,
+          source: result.source
+        });
+        console.log(`✅ Guardado en Sheets: ${result.normsku || code}`);
+      } catch (err) {
+        console.error('⚠️ Error guardando en Sheets:', err.message);
+      }
+
       return res.json({ 
         success: true, 
         data: result
@@ -130,6 +169,25 @@ router.get('/:code', async (req, res) => {
   
   const result = await scraperBridge(code);
   if (result) {
+    // Guardar en Sheets
+    try {
+      await upsertBySku({
+        sku: result.normsku || code,
+        query_normalized: code,
+        duty: result.duty_type,
+        type: result.filter_type || result.type,
+        family: result.family,
+        attributes: result.attributes || {},
+        oem_codes: result.oem_codes,
+        cross_reference: result.cross_reference,
+        description: result.description,
+        source: result.source
+      });
+      console.log(`✅ Guardado en Sheets: ${result.normsku || code}`);
+    } catch (err) {
+      console.error('⚠️ Error guardando en Sheets:', err.message);
+    }
+
     return res.json({ success: true, data: result });
   }
   
