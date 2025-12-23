@@ -1,27 +1,53 @@
-const counters = {
-  requests: 0,
+// ============================================================================
+// MARINE METRICS + ALERTS — HARDENED (NO CRASH)
+// ============================================================================
+
+const express = require('express');
+const router = express.Router();
+
+const ENABLE_ALERTS = process.env.ENABLE_MARINE_ALERTS === 'true';
+
+// Estado interno seguro
+const state = {
+  total: 0,
   ok: 0,
-  rejected: 0,
-  bySource: { RACOR: 0, SIERRA: 0 },
-  byFamily: { FUEL: 0, OIL: 0, AIR: 0 },
-  latencyMs: []
+  rejected: 0
 };
 
-function markRequest() { counters.requests++; }
-function markOk(source, family, ms) {
-  counters.ok++;
-  if (counters.bySource[source] !== undefined) counters.bySource[source]++;
-  if (counters.byFamily[family] !== undefined) counters.byFamily[family]++;
-  counters.latencyMs.push(ms);
-}
-function markRejected() { counters.rejected++; }
+// ---------------------------------------------------------------------------
+// MÉTRICAS (READ ONLY)
+// ---------------------------------------------------------------------------
+router.get('/', (_req, res) => {
+  return res.json({
+    marine: {
+      enabled: true,
+      alerts_enabled: ENABLE_ALERTS,
+      counters: state
+    }
+  });
+});
 
-function snapshot() {
-  const avgLatency =
-    counters.latencyMs.length
-      ? Math.round(counters.latencyMs.reduce((a,b)=>a+b,0)/counters.latencyMs.length)
-      : 0;
-  return { ...counters, avgLatency };
+// ---------------------------------------------------------------------------
+// ALERTS — SAFE MODE
+// ---------------------------------------------------------------------------
+function safeArray(v) {
+  return Array.isArray(v) ? v : [];
 }
 
-module.exports = { markRequest, markOk, markRejected, snapshot };
+function checkMarineAlerts(payload) {
+  if (!ENABLE_ALERTS) return;
+  if (!payload || typeof payload !== 'object') return;
+
+  const applications = safeArray(payload.applications);
+  const cross = safeArray(payload.cross);
+
+  if (applications.length === 0 && cross.length === 0) {
+    console.warn('[MARINE ALERT] Empty applications and cross references');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EXPORTS (IMPORTANTE)
+// ---------------------------------------------------------------------------
+module.exports = router;
+module.exports.checkMarineAlerts = checkMarineAlerts;
