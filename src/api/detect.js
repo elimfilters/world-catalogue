@@ -3,6 +3,8 @@ const router = express.Router();
 const { isElimfiltersSKU } = require('../utils/isElimfiltersSKU');
 const mongo = require('../scrapers/mongoDBScraper');
 const { scraperBridge } = require('../scrapers/scraperBridge');
+const { generateSKU } = require('../sku/generator');
+const { extract4Digits } = require('../utils/digitExtractor');
 
 console.log('🟢 detect.js cargado correctamente');
 
@@ -37,6 +39,61 @@ async function saveToSheets(result, code) {
   }
 }
 
+// Helper para generar SKU cuando no se encuentra en scrapers
+async function generateAndSaveNewSKU(code) {
+  try {
+    console.log(`🔧 Generando nuevo SKU para: ${code}`);
+    
+    // Extraer últimos 4 dígitos
+    const last4 = extract4Digits(code);
+    if (!last4) {
+      console.log(`❌ No se pudieron extraer 4 dígitos de: ${code}`);
+      return null;
+    }
+    
+    // Por defecto, asumimos AIR/LD si no tenemos más info
+    // Puedes ajustar esta lógica según tus reglas de negocio
+    const family = 'AIR';
+    const duty = 'LD';
+    
+    const skuResult = generateSKU(family, duty, last4, { rawCode: code });
+    
+    if (skuResult.error) {
+      console.log(`❌ Error generando SKU: ${skuResult.error}`);
+      return null;
+    }
+    
+    const newSKU = skuResult;
+    console.log(`✅ SKU generado: ${newSKU}`);
+    
+    // Crear objeto de resultado
+    const result = {
+      normsku: newSKU,
+      query_normalized: code,
+      duty_type: duty,
+      filter_type: family,
+      family: family,
+      attributes: {},
+      oem_codes: [code],
+      cross_reference: [code],
+      description: `Auto-generated SKU for ${code}`,
+      source: 'AUTO_GENERATED'
+    };
+    
+    // Guardar en Sheets
+    await saveToSheets(result, code);
+    
+    // Opcionalmente, guardar en MongoDB también
+    // await mongo.insertOne(result);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('❌ Error en generateAndSaveNewSKU:', error);
+    return null;
+  }
+}
+
 // ==========================================
 // GET /search?partNumber=XXX (WordPress)
 // ==========================================
@@ -56,6 +113,7 @@ router.get('/', async (req, res) => {
   const code = partNumber.trim().toUpperCase();
 
   try {
+    // 1. Si es SKU ELIMFILTERS, buscar en MongoDB
     if (isElimfiltersSKU(code)) {
       const found = await mongo.findBySKU(code);
       if (found) {
@@ -67,13 +125,28 @@ router.get('/', async (req, res) => {
       });
     }
 
+    // 2. Buscar en scrapers externos
     const result = await scraperBridge(code);
     if (result) {
       await saveToSheets(result, code);
       return res.json({ success: true, data: result });
     }
     
+    // 3. SI NO ENCUENTRA: Generar nuevo SKU
+    console.log(`⚠️ No encontrado en scrapers, generando SKU para: ${code}`);
+    const newResult = await generateAndSaveNewSKU(code);
+    
+    if (newResult) {
+      return res.json({ 
+        success: true, 
+        generated: true,
+        data: newResult 
+      });
+    }
+    
+    // 4. Si todo falla, devolver NOT_FOUND
     return res.status(404).json({ success: false, error: 'NOT_FOUND' });
+    
   } catch (error) {
     console.error('Error en GET /search:', error);
     return res.status(500).json({
@@ -107,6 +180,7 @@ router.post('/', async (req, res) => {
   console.log('✅ Buscando:', code);
 
   try {
+    // 1. Si es SKU ELIMFILTERS, buscar en MongoDB
     if (isElimfiltersSKU(code)) {
       const found = await mongo.findBySKU(code);
       if (found) {
@@ -122,6 +196,7 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // 2. Buscar en scrapers externos
     const result = await scraperBridge(code);
     if (result) {
       await saveToSheets(result, code);
@@ -131,7 +206,21 @@ router.post('/', async (req, res) => {
       });
     }
     
+    // 3. SI NO ENCUENTRA: Generar nuevo SKU
+    console.log(`⚠️ No encontrado en scrapers, generando SKU para: ${code}`);
+    const newResult = await generateAndSaveNewSKU(code);
+    
+    if (newResult) {
+      return res.json({ 
+        success: true, 
+        generated: true,
+        data: newResult 
+      });
+    }
+    
+    // 4. Si todo falla, devolver NOT_FOUND
     return res.status(404).json({ success: false, error: 'NOT_FOUND' });
+    
   } catch (error) {
     console.error('Error en POST /search:', error);
     return res.status(500).json({
@@ -150,6 +239,7 @@ router.get('/:code', async (req, res) => {
   
   const code = String(req.params.code || '').trim().toUpperCase();
   
+  // 1. Si es SKU ELIMFILTERS
   if (isElimfiltersSKU(code)) {
     const found = await mongo.findBySKU(code);
     if (found) {
@@ -161,12 +251,26 @@ router.get('/:code', async (req, res) => {
     });
   }
   
+  // 2. Buscar en scrapers
   const result = await scraperBridge(code);
   if (result) {
     await saveToSheets(result, code);
     return res.json({ success: true, data: result });
   }
   
+  // 3. Generar nuevo SKU
+  console.log(`⚠️ No encontrado en scrapers, generando SKU para: ${code}`);
+  const newResult = await generateAndSaveNewSKU(code);
+  
+  if (newResult) {
+    return res.json({ 
+      success: true, 
+      generated: true,
+      data: newResult 
+    });
+  }
+  
+  // 4. NOT_FOUND
   return res.status(404).json({ success: false, error: 'NOT_FOUND' });
 });
 
