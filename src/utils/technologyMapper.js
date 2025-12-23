@@ -1,9 +1,4 @@
-﻿/**
- * Technology Mapper - v5.0.0
- * Mapea filtros a tecnologías ELIMFILTERS™ basándose en familia, duty y atributos
- */
-
-const technologyDatabase = require('../config/technologyDatabase');
+﻿const technologyDatabase = require('../config/technologyDatabase');
 
 class TechnologyMapper {
   mapTechnology(family, duty, attributes = {}) {
@@ -92,49 +87,49 @@ class TechnologyMapper {
     
     if (description.includes('secondary') || description.includes('secundari')) {
       return {
-        technology_name: 'AQUACORE™ Marine 2000 – Ultra-Separator Secondary Stage',
+        technology_name: 'AQUACORE Marine 2000 - Ultra-Separator Secondary Stage',
         technology_tier: '2000',
-        technology_scope: 'Marine – Secondary HPCR Protection',
-        media_type: 'AQUACORE™ Marine 2000',
+        technology_scope: 'Marine - Secondary HPCR Protection',
+        media_type: 'AQUACORE Marine 2000',
         technology_equivalents: 'Racor/Parker Serie secundarias S3201/S3209, Fleetguard FH230/FS36231, Donaldson Synteq DRY Marina'
       };
     }
 
     if (description.includes('turbine') || subtype.includes('turbine')) {
       return {
-        technology_name: 'TURBINE X1000 – High-Capacity Assembly',
+        technology_name: 'TURBINE X1000 - High-Capacity Assembly',
         technology_tier: 'X1000',
-        technology_scope: 'Turbine – High Capacity',
-        media_type: 'AQUACORE™ Turbine',
+        technology_scope: 'Turbine - High Capacity',
+        media_type: 'AQUACORE Turbine',
         technology_equivalents: 'Racor/Parker 1000FG, Donaldson MAR1000, Fleetguard FH256'
       };
     }
 
     return {
-      technology_name: 'AQUACORE™ Marine 1000 – Primary Coalescing Stage',
+      technology_name: 'AQUACORE Marine 1000 - Primary Coalescing Stage',
       technology_tier: '1000',
-      technology_scope: 'Marine – Primary Fuel/Water Separation',
-      media_type: 'AQUACORE™ Marine 1000',
+      technology_scope: 'Marine - Primary Fuel/Water Separation',
+      media_type: 'AQUACORE Marine 1000',
       technology_equivalents: 'Racor/Parker 500FG/900FG/1000FG, Fleetguard FS19594, Donaldson MAR Series'
     };
   }
 
   getTurbineTechnology(attributes) {
     return {
-      technology_name: 'HYDROFLOW™ TurboMax – Industrial/Marine Turbine Filtration',
+      technology_name: 'HYDROFLOW TurboMax - Industrial/Marine Turbine Filtration',
       technology_tier: 'TurboMax',
-      technology_scope: 'Turbine – Industrial/Marine',
-      media_type: 'HYDROFLOW™ TurboMax',
+      technology_scope: 'Turbine - Industrial/Marine',
+      media_type: 'HYDROFLOW TurboMax',
       technology_equivalents: 'Donaldson High Efficiency Glass Turbine Filters, Fleetguard MicroGlass Industrial'
     };
   }
 
   getDefaultTechnology(family, duty) {
     return {
-      technology_name: ELIMTEK™ –  Filter (),
+      technology_name: 'ELIMTEK - ' + family + ' Filter (' + duty + ')',
       technology_tier: 'Standard',
       technology_scope: duty,
-      media_type: 'ELIMTEK™',
+      media_type: 'ELIMTEK',
       technology_equivalents: ''
     };
   }
