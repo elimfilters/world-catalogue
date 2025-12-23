@@ -1,15 +1,18 @@
+﻿/**
+ * ELIMFILTERS API Server - v5.0.0
+ * Servidor principal con detección y escritura a Google Sheets
+ */
+
 const express = require('express');
 const cors = require('cors');
 const detectRouter = require('./src/api/detect');
+const processRouter = require('./src/api/process');
 const metricsMarineRouter = require('./src/api/metricsMarine');
 const { checkMarineAlerts } = require('./src/services/marineAlerts');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ================================
-// Middleware base
-// ================================
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -19,18 +22,11 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ================================
-// Logging middleware
-// ================================
 app.use((req, res, next) => {
-  console.log(`📥 ${req.method} ${req.path} - ${new Date().toISOString()}`);
+  console.log(\📥 \ \ - \\);
   next();
 });
 
-// ================================
-// RUTAS PRINCIPALES
-// ================================
-// Ruta raíz - Información del API
 app.get('/', (req, res) => {
   res.status(200).json({
     name: 'ELIMFILTERS API',
@@ -40,33 +36,44 @@ app.get('/', (req, res) => {
       health: 'GET /health',
       search: 'POST /search',
       searchLegacy: 'GET /search?partNumber=XXX',
+      process: 'POST /api/process',
+      processGet: 'GET /api/process/:code',
+      processBatch: 'POST /api/process/batch',
       metrics: 'GET /metrics/marine'
     },
-    documentation: 'https://catalogo-production-beaf.up.railway.app/health'
+    features: [
+      'Filter Detection (HD/LD/MARINE)',
+      'SKU Generation',
+      'Google Sheets Integration',
+      'Cross-Reference Lookup',
+      'Batch Processing'
+    ]
   });
 });
 
-// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     service: 'ELIMFILTERS Detection API',
     version: '5.0.0',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    memory: process.memoryUsage(),
+    features: {
+      detection: true,
+      googleSheets: !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
+      batch: true,
+      marine: true
+    }
   });
 });
 
-// Rutas de búsqueda
 app.use('/search', detectRouter);
-
-// Métricas MARINE (READ-ONLY)
+app.use('/api/process', processRouter);
 app.use('/metrics/marine', metricsMarineRouter);
 
-// ================================
-// 404 handler
-// ================================
 app.use((req, res) => {
-  console.log(`❌ 404 - Route not found: ${req.method} ${req.path}`);
+  console.log(\❌ 404 - Route not found: \ \\);
   res.status(404).json({
     success: false,
     error: 'Endpoint not found',
@@ -74,15 +81,15 @@ app.use((req, res) => {
     availableEndpoints: [
       'POST /search',
       'GET /search?partNumber=XXX',
+      'POST /api/process',
+      'GET /api/process/:code',
+      'POST /api/process/batch',
       'GET /health',
       'GET /metrics/marine'
     ]
   });
 });
 
-// ================================
-// Error handler
-// ================================
 app.use((err, req, res, next) => {
   console.error('💥 [SERVER ERROR]:', err);
   res.status(500).json({
@@ -92,9 +99,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ================================
-// MARINE ALERTS (AUTOMÁTICAS)
-// ================================
 setInterval(() => {
   try {
     const alerts = checkMarineAlerts();
@@ -106,19 +110,23 @@ setInterval(() => {
   }
 }, 60000);
 
-// ================================
-// Start server
-// ================================
 app.listen(PORT, () => {
-  console.log(`────────────────────────────────────────────────────────`);
-  console.log(`🚀 ELIMFILTERS API v5.0.0`);
-  console.log(`📡 Running on port ${PORT}`);
-  console.log(`🌎 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`────────────────────────────────────────────────────────`);
-  console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔍 Search POST: http://localhost:${PORT}/search`);
-  console.log(`🔍 Search GET: http://localhost:${PORT}/search?partNumber=XXX`);
-  console.log(`📊 Marine metrics: GET http://localhost:${PORT}/metrics/marine`);
+  console.log(\────────────────────────────────────────────────────────\);
+  console.log(\🚀 ELIMFILTERS API v5.0.0\);
+  console.log(\📡 Running on port \\);
+  console.log(\🌎 Environment: \\);
+  console.log(\────────────────────────────────────────────────────────\);
+  console.log(\📍 Health: http://localhost:\/health\);
+  console.log(\🔍 Search: POST http://localhost:\/search\);
+  console.log(\📝 Process: POST http://localhost:\/api/process\);
+  console.log(\📝 Batch: POST http://localhost:\/api/process/batch\);
+  console.log(\────────────────────────────────────────────────────────\);
+  
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    console.log(\✅ Google Sheets integration: ENABLED\);
+  } else {
+    console.log(\⚠️  Google Sheets integration: DISABLED (missing credentials)\);
+  }
 });
 
 module.exports = app;
