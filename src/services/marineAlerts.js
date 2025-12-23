@@ -1,24 +1,36 @@
 // ============================================================================
-// MARINE ALERTS — SAFE MODE
+// MARINE ALERTS — SAFE MODE (DISABLED BY DEFAULT)
 // - Nunca rompe el servidor
-// - Solo analiza datos válidos
+// - Nunca asume arrays
+// - Solo se activa si ENABLE_MARINE_ALERTS=true
 // ============================================================================
 
-function checkMarineAlerts(records) {
-  try {
-    if (!Array.isArray(records) || records.length === 0) {
-      return null; // Nada que evaluar
-    }
+const ENABLED = process.env.ENABLE_MARINE_ALERTS === 'true';
 
-    // Ejemplo de alertas futuras
-    if (records.length > 1000) {
-      console.warn('⚠️ MARINE alert: high volume detected');
-    }
+/**
+ * Check MARINE alerts (SAFE)
+ * @param {Object} payload
+ */
+function checkMarineAlerts(payload) {
+  if (!ENABLED) {
+    return;
+  }
 
-    return true;
-  } catch (err) {
-    console.error('❌ Error in MARINE alerts:', err.message);
-    return null;
+  if (!payload || typeof payload !== 'object') {
+    return;
+  }
+
+  const applications = Array.isArray(payload.applications)
+    ? payload.applications
+    : [];
+
+  const cross = Array.isArray(payload.cross)
+    ? payload.cross
+    : [];
+
+  // ⚠️ A partir de aquí TODO es seguro
+  if (applications.length === 0 && cross.length === 0) {
+    console.warn('[MARINE ALERT] No applications or cross references');
   }
 }
 
