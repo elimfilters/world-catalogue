@@ -82,7 +82,8 @@ app.use((err, req, res, next) => {
 setInterval(() => {
   try {
     const alerts = checkMarineAlerts();
-    if (alerts.length > 0) {
+    // checkMarineAlerts puede devolver undefined si está deshabilitado
+    if (alerts && Array.isArray(alerts) && alerts.length > 0) {
       console.warn('🚨 MARINE ALERTS:', alerts);
     }
   } catch (e) {
