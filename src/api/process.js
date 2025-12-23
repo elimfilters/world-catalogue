@@ -1,9 +1,4 @@
-﻿/**
- * Process Router - v5.0.0
- * Endpoint para procesar códigos y escribirlos al Google Sheet Master
- */
-
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
 const googleSheetWriter = require('../services/googleSheetWriter');
 
@@ -19,9 +14,9 @@ router.post('/', async (req, res) => {
       });
     }
 
-    console.log(\\n\\);
-    console.log(\📥 POST /api/process - Code: \\);
-    console.log(\\\);
+    console.log('\n' + '='.repeat(70));
+    console.log('📥 POST /api/process - Code: ' + code);
+    console.log('='.repeat(70));
 
     const result = await googleSheetWriter.processAndWrite(code);
 
@@ -32,7 +27,7 @@ router.post('/', async (req, res) => {
     res.status(result.alreadyExists ? 200 : 201).json(result);
 
   } catch (error) {
-    console.error(\❌ Error in POST /api/process:\, error);
+    console.error('❌ Error in POST /api/process:', error);
     
     res.status(500).json({
       success: false,
@@ -54,9 +49,9 @@ router.get('/:code', async (req, res) => {
       });
     }
 
-    console.log(\\n\\);
-    console.log(\📥 GET /api/process/\\);
-    console.log(\\\);
+    console.log('\n' + '='.repeat(70));
+    console.log('📥 GET /api/process/' + code);
+    console.log('='.repeat(70));
 
     const result = await googleSheetWriter.processAndWrite(code);
 
@@ -67,7 +62,7 @@ router.get('/:code', async (req, res) => {
     res.status(result.alreadyExists ? 200 : 201).json(result);
 
   } catch (error) {
-    console.error(\❌ Error in GET /api/process/:code:\, error);
+    console.error('❌ Error in GET /api/process/:code:', error);
     
     res.status(500).json({
       success: false,
@@ -90,23 +85,23 @@ router.post('/batch', async (req, res) => {
       });
     }
 
-    console.log(\\n\\);
-    console.log(\📥 POST /api/process/batch - Processing \ codes\);
-    console.log(\\\);
+    console.log('\n' + '='.repeat(70));
+    console.log('📥 POST /api/process/batch - Processing ' + codes.length + ' codes');
+    console.log('='.repeat(70));
 
     const results = [];
     const errors = [];
 
     for (const code of codes) {
       try {
-        console.log(\\n🔄 Processing \...\);
+        console.log('\n🔄 Processing ' + code + '...');
         const result = await googleSheetWriter.processAndWrite(code);
         results.push({
           code: code,
           ...result
         });
       } catch (error) {
-        console.error(\❌ Error processing \:\, error.message);
+        console.error('❌ Error processing ' + code + ':', error.message);
         errors.push({
           code: code,
           error: error.message
@@ -114,8 +109,8 @@ router.post('/batch', async (req, res) => {
       }
     }
 
-    console.log(\\n✅ Batch complete: \ success, \ errors\);
-    console.log(\\\);
+    console.log('\n✅ Batch complete: ' + results.length + ' success, ' + errors.length + ' errors');
+    console.log('='.repeat(70));
 
     res.status(200).json({
       success: true,
@@ -127,7 +122,7 @@ router.post('/batch', async (req, res) => {
     });
 
   } catch (error) {
-    console.error(\❌ Error in POST /api/process/batch:\, error);
+    console.error('❌ Error in POST /api/process/batch:', error);
     
     res.status(500).json({
       success: false,
