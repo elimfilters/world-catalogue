@@ -4,10 +4,15 @@ const { isElimfiltersSKU } = require('../utils/isElimfiltersSKU');
 const mongo = require('../scrapers/mongoDBScraper');
 const { scraperBridge } = require('../scrapers/scraperBridge');
 
+console.log('🟢 detect.js cargado correctamente');
+
 // ==========================================
 // GET /search?partNumber=XXX (WordPress)
 // ==========================================
 router.get('/', async (req, res) => {
+  console.log('🟡 GET / ejecutado');
+  console.log('Query params:', req.query);
+  
   const partNumber = req.query.partNumber || req.query.q || req.query.part;
   
   if (!partNumber) {
@@ -51,9 +56,15 @@ router.get('/', async (req, res) => {
 // POST /search (API v5.0.0)
 // ==========================================
 router.post('/', async (req, res) => {
+  console.log('🔵 POST / EJECUTADO');
+  console.log('Body:', req.body);
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('Query:', req.query);
+  
   const { partNumber } = req.body;
   
   if (!partNumber) {
+    console.log('❌ partNumber no encontrado en body');
     return res.status(400).json({
       success: false,
       error: 'partNumber requerido en body'
@@ -61,6 +72,7 @@ router.post('/', async (req, res) => {
   }
 
   const code = String(partNumber).trim().toUpperCase();
+  console.log('✅ Buscando:', code);
 
   try {
     if (isElimfiltersSKU(code)) {
@@ -101,6 +113,8 @@ router.post('/', async (req, res) => {
 // GET /search/:code (URL directa)
 // ==========================================
 router.get('/:code', async (req, res) => {
+  console.log('🟢 GET /:code ejecutado:', req.params.code);
+  
   const code = String(req.params.code || '').trim().toUpperCase();
   
   if (isElimfiltersSKU(code)) {
