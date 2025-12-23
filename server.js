@@ -23,7 +23,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
-  console.log(\📥 \ \ - \\);
+  console.log('📥 ' + req.method + ' ' + req.path + ' - ' + new Date().toISOString());
   next();
 });
 
@@ -73,7 +73,7 @@ app.use('/api/process', processRouter);
 app.use('/metrics/marine', metricsMarineRouter);
 
 app.use((req, res) => {
-  console.log(\❌ 404 - Route not found: \ \\);
+  console.log('❌ 404 - Route not found: ' + req.method + ' ' + req.path);
   res.status(404).json({
     success: false,
     error: 'Endpoint not found',
@@ -111,21 +111,21 @@ setInterval(() => {
 }, 60000);
 
 app.listen(PORT, () => {
-  console.log(\────────────────────────────────────────────────────────\);
-  console.log(\🚀 ELIMFILTERS API v5.0.0\);
-  console.log(\📡 Running on port \\);
-  console.log(\🌎 Environment: \\);
-  console.log(\────────────────────────────────────────────────────────\);
-  console.log(\📍 Health: http://localhost:\/health\);
-  console.log(\🔍 Search: POST http://localhost:\/search\);
-  console.log(\📝 Process: POST http://localhost:\/api/process\);
-  console.log(\📝 Batch: POST http://localhost:\/api/process/batch\);
-  console.log(\────────────────────────────────────────────────────────\);
+  console.log('────────────────────────────────────────────────────────');
+  console.log('🚀 ELIMFILTERS API v5.0.0');
+  console.log('📡 Running on port ' + PORT);
+  console.log('🌎 Environment: ' + (process.env.NODE_ENV || 'development'));
+  console.log('────────────────────────────────────────────────────────');
+  console.log('📍 Health: http://localhost:' + PORT + '/health');
+  console.log('🔍 Search: POST http://localhost:' + PORT + '/search');
+  console.log('📝 Process: POST http://localhost:' + PORT + '/api/process');
+  console.log('📝 Batch: POST http://localhost:' + PORT + '/api/process/batch');
+  console.log('────────────────────────────────────────────────────────');
   
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    console.log(\✅ Google Sheets integration: ENABLED\);
+    console.log('✅ Google Sheets integration: ENABLED');
   } else {
-    console.log(\⚠️  Google Sheets integration: DISABLED (missing credentials)\);
+    console.log('⚠️  Google Sheets integration: DISABLED (missing credentials)');
   }
 });
 
