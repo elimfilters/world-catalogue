@@ -1,5 +1,5 @@
 ﻿/**
- * ELIMFILTERS API Server - v5.0.0
+ * ELIMFILTERS API Server - v5.0.1
  * Servidor principal con detección y escritura a Google Sheets
  */
 
@@ -30,7 +30,7 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     name: 'ELIMFILTERS API',
-    version: '5.0.0',
+    version: '5.0.1',
     status: 'running',
     endpoints: {
       health: 'GET /health',
@@ -55,7 +55,7 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     service: 'ELIMFILTERS Detection API',
-    version: '5.0.0',
+    version: '5.0.1',
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
     memory: process.memoryUsage(),
@@ -112,7 +112,7 @@ setInterval(() => {
 
 app.listen(PORT, () => {
   console.log('────────────────────────────────────────────────────────');
-  console.log('🚀 ELIMFILTERS API v5.0.0');
+  console.log('🚀 ELIMFILTERS API v5.0.1');
   console.log('📡 Running on port ' + PORT);
   console.log('🌎 Environment: ' + (process.env.NODE_ENV || 'development'));
   console.log('────────────────────────────────────────────────────────');
