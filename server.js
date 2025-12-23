@@ -30,7 +30,6 @@ app.use((req, res, next) => {
 // ================================
 // RUTAS PRINCIPALES
 // ================================
-
 // Ruta raíz - Información del API
 app.get('/', (req, res) => {
   res.status(200).json({
@@ -39,7 +38,8 @@ app.get('/', (req, res) => {
     status: 'running',
     endpoints: {
       health: 'GET /health',
-      search: 'POST /search?mode=partag',
+      search: 'POST /search',
+      searchLegacy: 'GET /search?partNumber=XXX',
       metrics: 'GET /metrics/marine'
     },
     documentation: 'https://catalogo-production-beaf.up.railway.app/health'
@@ -56,23 +56,24 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Rutas de búsqueda (CAMBIO AQUÍ: de '/' a '/search')
+// Rutas de búsqueda
 app.use('/search', detectRouter);
 
-// 🔵 MÉTRICAS MARINE (READ-ONLY)
+// Métricas MARINE (READ-ONLY)
 app.use('/metrics/marine', metricsMarineRouter);
 
 // ================================
 // 404 handler
 // ================================
 app.use((req, res) => {
-  console.log('❌ 404 - Route not found:', req.method, req.path);
+  console.log(`❌ 404 - Route not found: ${req.method} ${req.path}`);
   res.status(404).json({
     success: false,
     error: 'Endpoint not found',
     requestedPath: req.path,
     availableEndpoints: [
-      'POST /search?mode=partag',
+      'POST /search',
+      'GET /search?partNumber=XXX',
       'GET /health',
       'GET /metrics/marine'
     ]
@@ -97,14 +98,13 @@ app.use((err, req, res, next) => {
 setInterval(() => {
   try {
     const alerts = checkMarineAlerts();
-    // checkMarineAlerts puede devolver undefined si está deshabilitado
     if (alerts && Array.isArray(alerts) && alerts.length > 0) {
       console.warn('🚨 MARINE ALERTS:', alerts);
     }
   } catch (e) {
     console.error('❌ Error in MARINE alerts:', e.message);
   }
-}, 60000); // cada 60 segundos
+}, 60000);
 
 // ================================
 // Start server
@@ -116,7 +116,8 @@ app.listen(PORT, () => {
   console.log(`🌎 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`────────────────────────────────────────────────────────`);
   console.log(`📍 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔍 Search endpoint: POST http://localhost:${PORT}/search?mode=partag`);
+  console.log(`🔍 Search POST: http://localhost:${PORT}/search`);
+  console.log(`🔍 Search GET: http://localhost:${PORT}/search?partNumber=XXX`);
   console.log(`📊 Marine metrics: GET http://localhost:${PORT}/metrics/marine`);
 });
 
