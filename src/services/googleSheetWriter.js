@@ -6,7 +6,7 @@
 const { google } = require('googleapis');
 const { detectPartNumber } = require('./detectionServiceFinal');
 const technologyMapper = require('../utils/technologyMapper');
-const skuGenerator = require('../sku/skuGenerator');
+const skuGenerator = require('../sku/generator');
 
 class GoogleSheetWriter {
   constructor() {
@@ -32,15 +32,15 @@ class GoogleSheetWriter {
 
   async processAndWrite(inputCode) {
     try {
-      console.log(\n);
-      console.log(🔍 PROCESSING CODE: );
+      console.log('\n' + '='.repeat(70));
+      console.log('🔍 PROCESSING CODE: ' + inputCode);
       console.log('='.repeat(70));
 
       const detectionResult = await detectPartNumber(inputCode);
-      console.log(📊 Detection Result:, JSON.stringify(detectionResult, null, 2));
+      console.log('📊 Detection Result:', JSON.stringify(detectionResult, null, 2));
 
       if (detectionResult.status !== 'OK') {
-        console.log(⚠️  Status:  - Reason: );
+        console.log('⚠️  Status: ' + detectionResult.status + ' - Reason: ' + detectionResult.reason);
         return {
           success: false,
           status: detectionResult.status,
@@ -58,7 +58,7 @@ class GoogleSheetWriter {
           detectionResult.duty,
           homologatedCode
         );
-        console.log(✅ Generated SKU: );
+        console.log('✅ Generated SKU: ' + sku);
       }
 
       if (!sku) {
@@ -67,7 +67,7 @@ class GoogleSheetWriter {
 
       const exists = await this.skuExists(sku);
       if (exists) {
-        console.log(⚠️  SKU  already exists in Google Sheet);
+        console.log('⚠️  SKU ' + sku + ' already exists in Google Sheet');
         return {
           success: true,
           message: 'SKU already exists',
@@ -92,7 +92,7 @@ class GoogleSheetWriter {
 
       const writeResult = await this.writeFilterData(filterData);
 
-      console.log(✅ SUCCESS - Written to Google Sheet);
+      console.log('✅ SUCCESS - Written to Google Sheet');
       console.log('='.repeat(70));
 
       return {
@@ -187,7 +187,7 @@ class GoogleSheetWriter {
       .map(ref => {
         const brand = ref.brand || ref.manufacturer || '';
         const code = ref.code || ref.partNumber || '';
-        return brand && code ? ${brand}  : code;
+        return brand && code ? brand + ' ' + code : code;
       })
       .filter(Boolean);
     return crossRefs.join(', ');
@@ -276,14 +276,14 @@ class GoogleSheetWriter {
 
       const response = await this.sheets.spreadsheets.values.append({
         spreadsheetId: this.sheetId,
-        range: ${this.sheetName}!A:AX,
+        range: this.sheetName + '!A:AX',
         valueInputOption: 'USER_ENTERED',
         resource: {
           values: [row],
         },
       });
 
-      console.log(✅ Filter  written to Google Sheet);
+      console.log('✅ Filter ' + filterData.normsku + ' written to Google Sheet');
       return {
         success: true,
         sku: filterData.normsku,
@@ -303,7 +303,7 @@ class GoogleSheetWriter {
 
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.sheetId,
-        range: ${this.sheetName}!B:B,
+        range: this.sheetName + '!B:B',
       });
 
       const values = response.data.values || [];
