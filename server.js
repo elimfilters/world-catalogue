@@ -30,14 +30,23 @@ app.use((req, res, next) => {
 // ================================
 // RUTAS PRINCIPALES
 // ================================
-app.use('/', detectRouter);
 
-// 🔵 MÉTRICAS MARINE (READ-ONLY)
-app.use('/metrics/marine', metricsMarineRouter);
+// Ruta raíz - Información del API
+app.get('/', (req, res) => {
+  res.status(200).json({
+    name: 'ELIMFILTERS API',
+    version: '5.0.0',
+    status: 'running',
+    endpoints: {
+      health: 'GET /health',
+      search: 'POST /search?mode=partag',
+      metrics: 'GET /metrics/marine'
+    },
+    documentation: 'https://catalogo-production-beaf.up.railway.app/health'
+  });
+});
 
-// ================================
 // Health check
-// ================================
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
@@ -46,6 +55,12 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// Rutas de búsqueda (CAMBIO AQUÍ: de '/' a '/search')
+app.use('/search', detectRouter);
+
+// 🔵 MÉTRICAS MARINE (READ-ONLY)
+app.use('/metrics/marine', metricsMarineRouter);
 
 // ================================
 // 404 handler
