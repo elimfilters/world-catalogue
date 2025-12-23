@@ -35,11 +35,35 @@ router.post('/search', async (req, res) => {
     );
   }
 
-  try {
-    const result = await detectionService.detectPartNumber(partNumber.trim());
-
-    // detectionService YA devuelve respuesta normalizada
-    return res.status(200).json(result);
+ try {
+  console.log('🧪 [TEST] Before calling detection service');
+  
+  // TEMPORAL: Respuesta de prueba
+  const testResponse = {
+    api_version: "5.0.0",
+    status: "OK",
+    source: "TEST",
+    sku: "TEST-" + partNumber,
+    family: "Donaldson",
+    duty: "Filtro de Prueba",
+    attributes: {
+      test: true,
+      message: "Esta es una respuesta de prueba"
+    },
+    cross: [],
+    applications: [],
+    meta: {
+      normalized_query: partNumber,
+      reason: "TEST_MODE"
+    }
+  };
+  
+  console.log('🧪 [TEST] Returning test response:', testResponse);
+  return res.status(200).json(testResponse);
+  
+  // DESCOMENTAR CUANDO FUNCIONE:
+  // const result = await detectionService.detectPartNumber(partNumber.trim());
+  // return res.status(200).json(result);
 
   } catch (err) {
     console.error('❌ [API] Fatal error:', err);
