@@ -1,6 +1,6 @@
 ﻿/**
- * ELIMFILTERS API Server - v5.0.1
- * Servidor principal con detección y escritura a Google Sheets
+ * ELIMFILTERS API Server - v5.0.2
+ * Servidor principal con detección, escritura y exportación a Google Sheets
  */
 
 const express = require('express');
@@ -8,6 +8,7 @@ const cors = require('cors');
 const detectRouter = require('./src/api/detect');
 const processRouter = require('./src/api/process');
 const metricsMarineRouter = require('./src/api/metricsMarine');
+const exportRouter = require('./src/api/export');
 const { checkMarineAlerts } = require('./src/services/marineAlerts');
 
 const app = express();
@@ -30,7 +31,7 @@ app.use((req, res, next) => {
 app.get('/', (req, res) => {
   res.status(200).json({
     name: 'ELIMFILTERS API',
-    version: '5.0.1',
+    version: '5.0.2',
     status: 'running',
     endpoints: {
       health: 'GET /health',
@@ -39,12 +40,15 @@ app.get('/', (req, res) => {
       process: 'POST /api/process',
       processGet: 'GET /api/process/:code',
       processBatch: 'POST /api/process/batch',
+      export: 'POST /api/export/sheets',
+      exportStatus: 'GET /api/export/status',
       metrics: 'GET /metrics/marine'
     },
     features: [
       'Filter Detection (HD/LD/MARINE)',
       'SKU Generation',
       'Google Sheets Integration',
+      'Export Filtered Products',
       'Cross-Reference Lookup',
       'Batch Processing'
     ]
@@ -55,13 +59,14 @@ app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     service: 'ELIMFILTERS Detection API',
-    version: '5.0.1',
+    version: '5.0.2',
     timestamp: new Date().toISOString(),
     uptime: Math.floor(process.uptime()),
     memory: process.memoryUsage(),
     features: {
       detection: true,
       googleSheets: !!process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
+      export: true,
       batch: true,
       marine: true
     }
@@ -70,6 +75,7 @@ app.get('/health', (req, res) => {
 
 app.use('/search', detectRouter);
 app.use('/api/process', processRouter);
+app.use('/api/export', exportRouter);
 app.use('/metrics/marine', metricsMarineRouter);
 
 app.use((req, res) => {
@@ -84,6 +90,8 @@ app.use((req, res) => {
       'POST /api/process',
       'GET /api/process/:code',
       'POST /api/process/batch',
+      'POST /api/export/sheets',
+      'GET /api/export/status',
       'GET /health',
       'GET /metrics/marine'
     ]
@@ -112,7 +120,7 @@ setInterval(() => {
 
 app.listen(PORT, () => {
   console.log('────────────────────────────────────────────────────────');
-  console.log('🚀 ELIMFILTERS API v5.0.1');
+  console.log('🚀 ELIMFILTERS API v5.0.2');
   console.log('📡 Running on port ' + PORT);
   console.log('🌎 Environment: ' + (process.env.NODE_ENV || 'development'));
   console.log('────────────────────────────────────────────────────────');
@@ -120,12 +128,15 @@ app.listen(PORT, () => {
   console.log('🔍 Search: POST http://localhost:' + PORT + '/search');
   console.log('📝 Process: POST http://localhost:' + PORT + '/api/process');
   console.log('📝 Batch: POST http://localhost:' + PORT + '/api/process/batch');
+  console.log('📤 Export: POST http://localhost:' + PORT + '/api/export/sheets');
   console.log('────────────────────────────────────────────────────────');
   
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
     console.log('✅ Google Sheets integration: ENABLED');
+    console.log('✅ Export functionality: ENABLED');
   } else {
     console.log('⚠️  Google Sheets integration: DISABLED (missing credentials)');
+    console.log('⚠️  Export functionality: DISABLED');
   }
 });
 
