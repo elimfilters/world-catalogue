@@ -1,25 +1,21 @@
-// ============================================================================
+﻿// ============================================================================
 // DONALDSON SCRAPER – AUTORIDAD TÉCNICA HD
 // Valida códigos Donaldson reales, cruces OEM y reglas estrictas de serie
-// NO scrapea web
-// NO infiere productos
 // ============================================================================
 
 const { extract4Digits } = require('../utils/digitExtractor');
 const prefixMap = require('../config/prefixMap');
 const { appendWatch } = require('../utils/pSeriesWatchlist');
 
-// ============================================================================
-// BASE DE DATOS CURADA (SOLO EJEMPLOS REPRESENTATIVOS)
-// En producción se extiende vía ingestión controlada
-// ============================================================================
-
 const DONALDSON_DATABASE = {
   'P552100': {
     family: 'OIL',
     specifications: {
       media_type: 'Cellulose',
-      style: 'Spin-On'
+      style: 'Spin-On',
+      height_mm: '136',
+      outer_diameter_mm: '93',
+      thread_size: '3/4-16 UNF'
     },
     cross_references: {
       'FLEETGUARD-LF3620': 'P552100',
@@ -50,10 +46,6 @@ const DONALDSON_DATABASE = {
   }
 };
 
-// ============================================================================
-// SERIES DETECTION (ESTRICTO)
-// ============================================================================
-
 function detectSeriesType(code) {
   const c = code.toUpperCase();
   if (c.startsWith('DBL')) return 'DBL';
@@ -62,10 +54,6 @@ function detectSeriesType(code) {
   if (c.startsWith('P')) return 'P';
   return null;
 }
-
-// ============================================================================
-// FAMILY DETECTION (REGLAS DONALDSON)
-// ============================================================================
 
 function detectFamilyFromCode(code) {
   const c = code.toUpperCase();
@@ -86,10 +74,6 @@ function detectFamilyFromCode(code) {
   return null;
 }
 
-// ============================================================================
-// CROSS-REFERENCE RESOLUTION
-// ============================================================================
-
 function findDonaldsonCode(inputCode) {
   const normalized = inputCode.toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -107,83 +91,81 @@ function findDonaldsonCode(inputCode) {
   return null;
 }
 
-// ============================================================================
-// SCRAPER PRINCIPAL (SIN WEB)
-// ============================================================================
-
 async function scrapeDonaldson(code) {
   const normalized = String(code || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-  // 1️⃣ Base curada
   const resolved = findDonaldsonCode(normalized);
   if (resolved && DONALDSON_DATABASE[resolved]) {
     const data = DONALDSON_DATABASE[resolved];
+    
+    const crossRefs = Object.keys(data.cross_references || {}).map(xref => ({
+      brand: xref.split('-')[0],
+      code: xref.split('-')[1] || xref,
+      type: 'CROSS'
+    }));
+
     return {
-      found: true,
-      code: resolved,
-      family_hint: data.family,
-      series: detectSeriesType(resolved),
-      cross: Object.keys(data.cross_references || {}),
-      attributes: data.specifications || {}
+      confirmed: true,
+      source: 'DONALDSON',
+      facts: {
+        code: resolved,
+        family: data.family,
+        duty: 'HD',
+        attributes: data.specifications || {},
+        cross: crossRefs,
+        applications: []
+      }
     };
   }
 
-  // 2️⃣ Validación estricta por patrón Donaldson
-  if (
-    prefixMap.DONALDSON_STRICT_REGEX.test(normalized)
-  ) {
+  if (prefixMap.DONALDSON_STRICT_REGEX && prefixMap.DONALDSON_STRICT_REGEX.test(normalized)) {
     const family = detectFamilyFromCode(normalized);
     if (family) {
       return {
-        found: true,
-        code: normalized,
-        family_hint: family,
-        series: detectSeriesType(normalized),
-        cross: [],
-        attributes: {}
+        confirmed: true,
+        source: 'DONALDSON',
+        facts: {
+          code: normalized,
+          family: family,
+          duty: 'HD',
+          attributes: {
+            series: detectSeriesType(normalized)
+          },
+          cross: [],
+          applications: []
+        }
       };
     }
   }
 
-  // 3️⃣ Registrar intento fallido
   if (normalized.startsWith('P')) {
-    appendWatch(normalized, 'NOT_FOUND_DONALDSON');
+    if (typeof appendWatch === 'function') {
+      appendWatch(normalized, 'NOT_FOUND_DONALDSON');
+    }
   }
 
-  return { found: false };
+  return { confirmed: false };
 }
-
-// ============================================================================
-// VALIDATOR PARA SCRAPER BRIDGE
-// ============================================================================
 
 async function validateDonaldsonCode(inputCode) {
   const normalized = String(inputCode || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-
   const result = await scrapeDonaldson(normalized);
 
-  if (!result || !result.found) {
+  if (!result || !result.confirmed) {
     return { valid: false, code: normalized, reason: 'NOT_FOUND_DONALDSON' };
   }
 
   return {
     valid: true,
-    code: result.code,
+    code: result.facts.code,
     source: 'DONALDSON',
-    family: result.family_hint,
-    duty: 'HD',
-    last4: extract4Digits(result.code),
-    cross: result.cross || [],
-    attributes: {
-      ...(result.attributes || {}),
-      series: result.series
-    }
+    family: result.facts.family,
+    duty: result.facts.duty,
+    last4: extract4Digits(result.facts.code),
+    cross: result.facts.cross || [],
+    attributes: result.facts.attributes || {}
   };
 }
-
-// ============================================================================
-// EXPORTS
-// ============================================================================
 
 module.exports = {
   scrapeDonaldson,
