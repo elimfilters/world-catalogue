@@ -1,10 +1,9 @@
 require('dotenv').config();
 const { google } = require('googleapis');
-const path = require('path');
 
-// Configurar autenticación usando el archivo credentials.json directamente
+// Configurar autenticacion usando variable de entorno
 const auth = new google.auth.GoogleAuth({
-  keyFile: path.join(__dirname, '../credentials.json'),
+  credentials: JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY || '{}'),
   scopes: ['https://www.googleapis.com/auth/spreadsheets'],
 });
 
@@ -12,8 +11,6 @@ const sheets = google.sheets({ version: 'v4', auth });
 
 /**
  * Escribir datos en Google Sheets
- * @param {Array<Array>} data - Array de arrays con los datos a escribir
- * @param {string} range - Rango donde escribir (ej: "Sheet1!A1:D10")
  */
 async function writeToSheet(data, range = 'Sheet1!A1') {
   try {
@@ -25,19 +22,16 @@ async function writeToSheet(data, range = 'Sheet1!A1') {
         values: data,
       },
     });
-    
-    console.log(`✅ ${response.data.updatedCells} celdas actualizadas`);
+    console.log(response.data.updatedCells + ' celdas actualizadas');
     return response.data;
   } catch (error) {
-    console.error('❌ Error escribiendo en Google Sheets:', error.message);
+    console.error('Error escribiendo en Google Sheets:', error.message);
     throw error;
   }
 }
 
 /**
  * Agregar datos al final de la hoja
- * @param {Array<Array>} data - Array de arrays con los datos a escribir
- * @param {string} range - Rango donde agregar (ej: "Sheet1!A:D")
  */
 async function appendToSheet(data, range = 'Sheet1!A:D') {
   try {
@@ -49,18 +43,16 @@ async function appendToSheet(data, range = 'Sheet1!A:D') {
         values: data,
       },
     });
-    
-    console.log(`✅ ${response.data.updates.updatedCells} celdas agregadas`);
+    console.log(response.data.updates.updatedCells + ' celdas agregadas');
     return response.data;
   } catch (error) {
-    console.error('❌ Error agregando a Google Sheets:', error.message);
+    console.error('Error agregando a Google Sheets:', error.message);
     throw error;
   }
 }
 
 /**
  * Leer datos de Google Sheets
- * @param {string} range - Rango a leer (ej: "Sheet1!A1:D10")
  */
 async function readFromSheet(range = 'Sheet1!A1:D10') {
   try {
@@ -68,12 +60,11 @@ async function readFromSheet(range = 'Sheet1!A1:D10') {
       spreadsheetId: process.env.SPREADSHEET_ID,
       range: range,
     });
-    
     const rows = response.data.values;
-    console.log(`✅ ${rows ? rows.length : 0} filas leídas`);
+    console.log((rows ? rows.length : 0) + ' filas leidas');
     return rows;
   } catch (error) {
-    console.error('❌ Error leyendo Google Sheets:', error.message);
+    console.error('Error leyendo Google Sheets:', error.message);
     throw error;
   }
 }
