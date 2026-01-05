@@ -1,7 +1,11 @@
 ﻿const express = require('express');
 const mongoose = require('mongoose');
-const app = express();
+const cors = require('cors');
 require('dotenv').config();
-app.get('/', (req, res) => res.send('API ELIMFILTERS ACTIVA'));
-mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ Conectado a MongoDB')).catch(err => console.error(err));
-app.listen(3000, () => console.log('🚀 Servidor en puerto 3000'));
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use('/api/v1', require('./routes/filterRoutes'));
+mongoose.connect(process.env.MONGODB_URI).then(() => console.log('✅ MongoDB connected')).catch(err => console.error(err));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 ELIMFILTERS API v11.0.6 running on port ${PORT}`));
