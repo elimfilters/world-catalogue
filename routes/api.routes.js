@@ -9,42 +9,43 @@ router.get('/scrape/:code', async (req, res) => {
         const { code } = req.params;
         const cleanCode = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
 
-        // 1. Intentar buscar en DB Local primero
+        // 1. BUSQUEDA EN MONGO (Existente)
         let filter = await mongodbService.findFilterByCode(cleanCode);
         
-        // 2. Si no está en DB, buscar en Google Sheets
+        // 2. BUSQUEDA EN GOOGLE SHEETS (Existente)
         if (!filter) {
             filter = await googleSheetsService.findFilterInSheets(cleanCode);
         }
 
-        // 3. SI NO EXISTE EN NINGÚN LADO (Aquí estaba el error)
+        // 3. SI NO EXISTE: ACTIVAR LÓGICA ELIMFILTERS (HD vs LD)
         if (!filter) {
-            console.log(`🚀 Código ${cleanCode} nuevo. Iniciando proceso de asignación HD/LD...`);
+            console.log(`🚀 Código nuevo detectado: ${cleanCode}. Iniciando Master Scraper...`);
             
-            // Llamamos al masterScraper que ya tiene la lógica de Donaldson (HD) y Fram (LD)
+            // Aquí entra la lógica de Donaldson para HD o Fram para LD
             const scrapedData = await masterScraper.executeFullScrape(cleanCode);
 
             if (scrapedData && !scrapedData.error) {
+                // Si el Scraper encontró info técnica, el servidor responde con el nuevo prospecto
                 return res.json({ 
                     success: true, 
-                    isNew: true,
+                    isNew: true, // Indica a la web que es un SKU por crear
                     data: scrapedData.main_product 
                 });
             }
 
-            // Si el scraper tampoco lo encuentra en ninguna marca
+            // Si llegamos aquí, realmente no existe en ninguna fuente
             return res.status(404).json({ 
                 success: false, 
-                error: "Código no encontrado en ninguna fuente (DB, Sheets o Fabricantes)" 
+                error: "Código no identificado en bases de datos ni fabricantes" 
             });
         }
 
-        // 4. Si se encontró en DB o Sheets, devolver normal
+        // 4. RESPUESTA PARA SKUs YA EXISTENTES
         return res.json({ success: true, isNew: false, data: filter });
 
     } catch (error) {
-        console.error("🔴 Error en ruta api/scrape:", error);
-        res.status(500).json({ success: false, error: "Error interno del servidor" });
+        console.error("🔴 Error Crítico en API Railway:", error);
+        res.status(500).json({ success: false, error: "Error interno del servidor en producción" });
     }
 });
 
