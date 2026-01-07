@@ -165,21 +165,38 @@ class MasterScraper {
   // DETECCIÓN DONALDSON
   // ═══════════════════════════════════════════════════════════════════════════
   
-  isDonaldsonCode(code) {
-    const patterns = [
+    isDonaldsonCode(code) {
+    // Códigos nativos Donaldson
+    const nativePatterns = [
       /^P\d{6}$/,           // P551808
       /^R\d{6}$/,           // R12345
       /^X\d{6}$/,           // X12345
       /^\d{1,2}R\d{4}$/,    // 1R1808
-      /^DBL\d{4}$/,         // DBL7621
-      /^B\d{5}$/,           // B12345 (algunos modelos)
-      /^C\d{6}$/,           // C12345 (coolant)
-      /^H\d{6}$/,           // H12345 (hydraulic)
-      /^ECC\d{5}$/,         // ECC12345 (emission)
-      /^FPG\d{5}$/          // FPG12345 (fuel pre-filter)
+      /^DBL\d{4,6}$/,       // DBL7621
+      /^B\d{5}$/,           // B12345
+      /^C\d{6}$/,           // C12345
+      /^H\d{6}$/,           // H12345
+      /^ECC\d{5}$/,         // ECC12345
+      /^FPG\d{5}$/          // FPG12345
     ];
-    
-    return patterns.some(pattern => pattern.test(code));
+
+    // Códigos cross-reference (Fleetguard, Cummins, Baldwin, etc.)
+    const crossRefPatterns = [
+      /^LF\d{4,5}$/,        // LF3620 (Fleetguard Oil)
+      /^FF\d{4,5}$/,        // FF5052 (Fleetguard Fuel)
+      /^FS\d{4,5}$/,        // FS1234 (Fleetguard Fuel/Water Sep)
+      /^AF\d{4,5}$/,        // AF25667 (Fleetguard Air)
+      /^HF\d{4,5}$/,        // HF6177 (Fleetguard Hydraulic)
+      /^WF\d{4,5}$/,        // WF2054 (Fleetguard Water)
+      /^\d{5,6}$/,          // 51806 (Cummins OEM)
+      /^BT\d{3,4}$/,        // BT339 (Baldwin)
+      /^B\d{3,4}$/,         // B160 (Baldwin)
+      /^PA\d{4,5}$/,        // PA2837 (Baldwin Air)
+      /^PT\d{4}$/           // PT9441 (Baldwin)
+    ];
+
+    const allPatterns = [...nativePatterns, ...crossRefPatterns];
+    return allPatterns.some(pattern => pattern.test(code));
   }
 
   getDonaldsonPattern(code) {
@@ -376,3 +393,4 @@ class MasterScraper {
 }
 
 module.exports = new MasterScraper();
+

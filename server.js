@@ -1,158 +1,102 @@
-﻿// ============================================
-// SERVER.JS - ELIMFILTERS API v11.0.6
-// ============================================
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-require('dotenv').config();
+﻿/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ELIMFILTERS BACKEND SERVER
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const mongoose = require("mongoose");
 
 const app = express();
+const PORT = process.env.PORT || 3000;
 
-// ========================================
+// ═══════════════════════════════════════════════════════════════════════════
 // MIDDLEWARE
-// ========================================
+// ═══════════════════════════════════════════════════════════════════════════
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Logging middleware
+// Request logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
-// ========================================
+// ═══════════════════════════════════════════════════════════════════════════
 // MONGODB CONNECTION
-// ========================================
+// ═══════════════════════════════════════════════════════════════════════════
+
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 30000,
-  socketTimeoutMS: 45000,
-  connectTimeoutMS: 30000
+  useUnifiedTopology: true
 })
 .then(() => {
-  console.log('✅ MongoDB connected');
-  console.log('   Database:', mongoose.connection.name);
-  console.log('   Host:', mongoose.connection.host);
+  console.log("✅ MongoDB conectado");
 })
-.catch(err => {
-  console.error('❌ MongoDB connection error:', err.message);
-  process.exit(1);
+.catch((error) => {
+  console.error("❌ Error conectando MongoDB:", error);
 });
 
-// ========================================
+// ═══════════════════════════════════════════════════════════════════════════
 // ROUTES
-// ========================================
-const filterRoutes = require('./routes/filterRoutes');
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Ruta de prueba principal
-app.get('/', (req, res) => {
+// Health check
+app.get("/", (req, res) => {
   res.json({
-    success: true,
-    message: 'ELIMFILTERS API v11.0.6',
-    status: 'online',
-    server: process.env.SERVER_ID || 'PRIMARY',
+    service: "ELIMFILTERS Backend API",
+    version: "1.0.0",
+    status: "running",
     endpoints: {
-      health: '/health',
-      test: '/test',
-      search: '/api/v1/search',
-      filters: '/api/v1/filters',
-      stats: '/api/v1/stats'
+      scrape_single: "GET /api/scrape/:code",
+      scrape_multiple: "POST /api/scrape/multiple",
+      search_filters: "GET /api/filters/search?q=code",
+      get_filter: "GET /api/filters/:sku",
+      stats: "GET /api/stats"
     }
   });
 });
 
-// Ruta de diagnóstico
-app.get('/test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Test endpoint funcionando correctamente',
-    timestamp: new Date().toISOString(),
-    server: process.env.SERVER_ID || 'PRIMARY',
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    environment: process.env.NODE_ENV
-  });
-});
-
-// Health Check
-app.get('/health', async (req, res) => {
-  try {
-    const Filter = require('./models/filterModel');
-    const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
-    const testQuery = await Filter.countDocuments().maxTimeMS(5000);
-    
-    res.status(200).json({
-      status: 'healthy',
-      server: process.env.SERVER_ID || 'PRIMARY',
-      location: process.env.SERVER_LOCATION || 'unknown',
-      timestamp: new Date().toISOString(),
-      database: mongoStatus,
-      recordCount: testQuery,
-      uptime: Math.floor(process.uptime()),
-      version: '11.0.6'
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'unhealthy',
-      server: process.env.SERVER_ID || 'PRIMARY',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
-
-// Server Info
-app.get('/server-info', (req, res) => {
-  res.json({
-    serverId: process.env.SERVER_ID || 'PRIMARY',
-    location: process.env.SERVER_LOCATION || 'unknown',
-    version: '11.0.6',
-    environment: process.env.NODE_ENV,
-    uptime: Math.floor(process.uptime()),
-    nodeVersion: process.version,
-    platform: process.platform
-  });
-});
-
 // API Routes
-app.use('/api/v1', filterRoutes);
+const apiRoutes = require("./routes/api.routes");
+app.use("/api", apiRoutes);
 
-// 404 Handler
+// ═══════════════════════════════════════════════════════════════════════════
+// ERROR HANDLING
+// ═══════════════════════════════════════════════════════════════════════════
+
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: 'Ruta no encontrada',
-    path: req.path
+    error: "Endpoint no encontrado"
   });
 });
 
-// Error Handler
-app.use((err, req, res, next) => {
-  console.error('Error:', err.stack);
+app.use((error, req, res, next) => {
+  console.error("❌ Error global:", error);
   res.status(500).json({
     success: false,
-    message: 'Error interno del servidor',
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    error: error.message
   });
 });
 
-// ========================================
+// ═══════════════════════════════════════════════════════════════════════════
 // START SERVER
-// ========================================
-const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, () => {
-  console.log('🚀 ELIMFILTERS API v11.0.6 running on port', PORT);
-});
+// ═══════════════════════════════════════════════════════════════════════════
 
-// Graceful Shutdown
-process.on('SIGTERM', () => {
-  console.log('🛑 SIGTERM recibido');
-  server.close(() => {
-    mongoose.connection.close(false, () => {
-      process.exit(0);
-    });
-  });
+app.listen(PORT, () => {
+  console.log(`\n🚀 ELIMFILTERS Backend API`);
+  console.log(`📍 Server running on port ${PORT}`);
+  console.log(`🌐 Base URL: http://localhost:${PORT}`);
+  console.log(`\n📋 Available endpoints:`);
+  console.log(`   GET  /api/scrape/:code`);
+  console.log(`   POST /api/scrape/multiple`);
+  console.log(`   GET  /api/filters/search`);
+  console.log(`   GET  /api/filters/:sku`);
+  console.log(`   GET  /api/stats`);
+  console.log(`\n✅ Ready to receive requests\n`);
 });
-
-module.exports = app;
