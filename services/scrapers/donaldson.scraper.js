@@ -3,32 +3,29 @@ const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 puppeteer.use(StealthPlugin());
 
 async function scrapeDonaldson(sku) {
-    const browser = await puppeteer.launch({ 
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-        headless: "new" 
-    });
-    
+    let browser;
     try {
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+        browser = await puppeteer.launch({ 
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome',
+            args: [
+                '--no-sandbox', 
+                '--disable-setuid-sandbox', 
+                '--disable-dev-shm-usage',
+                '--single-process'
+            ],
+            headless: "new" 
+        });
         
-        // Vamos directo a la búsqueda para capturar la ficha técnica
+        const page = await browser.newPage();
+        await page.setDefaultNavigationTimeout(60000); // 60 segundos por si el sitio está lento
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
         const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
         await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
-        // Esperamos a que cargue la tabla de atributos o el primer producto
-        await page.waitForSelector('.product-info-name a, .product-title', { timeout: 10000 });
+        // Esperar a que el contenido real aparezca
+        await page.waitForSelector('.product-title, .product-info-name', { timeout: 20000 });
 
-        // Si es una página de resultados, hacemos click en el primero
-        const isResultsPage = await page.$('.product-info-name a');
-        if (isResultsPage) {
-            await Promise.all([
-                page.click('.product-info-name a'),
-                page.waitForNavigation({ waitUntil: 'networkidle2' }),
-            ]);
-        }
-
-        // EXTRAER DATA REAL DE LA FICHA
         const data = await page.evaluate(() => {
             const specs = {};
             document.querySelectorAll('.product-attribute-list li').forEach(li => {
@@ -38,9 +35,8 @@ async function scrapeDonaldson(sku) {
             });
 
             const alternatives = [];
-            document.querySelectorAll('.alternative-products .product-card').forEach(card => {
-                const altId = card.querySelector('.sku-number')?.innerText.trim();
-                if (altId) alternatives.push(altId);
+            document.querySelectorAll('.alternative-products .sku-number').forEach(el => {
+                alternatives.push(el.innerText.trim());
             });
 
             return {
@@ -54,8 +50,8 @@ async function scrapeDonaldson(sku) {
         return { success: true, data };
 
     } catch (e) {
-        await browser.close();
-        return { error: "Bloqueo o timeout en Donaldson", detail: e.message };
+        if (browser) await browser.close();
+        return { error: "Error en el barrido", detail: e.message };
     }
 }
 module.exports = scrapeDonaldson;

@@ -1,0 +1,5 @@
+﻿[phases.setup]
+nixPkgs = ["...", "nodejs", "google-chrome", "cacert"]
+
+[phases.build]
+cmds = ["npm install", "npx puppeteer install"]
