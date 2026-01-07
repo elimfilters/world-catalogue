@@ -10,19 +10,19 @@ async function scrapeDonaldson(sku) {
             args: [
                 '--no-sandbox', 
                 '--disable-setuid-sandbox', 
-                '--disable-dev-shm-usage', 
+                '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--no-zygote',
                 '--single-process'
-            ],
-            headless: "new" 
+            ]
         });
         
         const page = await browser.newPage();
-        // Bloqueamos imágenes y CSS para ahorrar RAM y evitar el error 500
+        await page.setDefaultNavigationTimeout(30000);
+        
+        // Bloqueo total de multimedia para ahorrar RAM
         await page.setRequestInterception(true);
         page.on('request', (req) => {
-            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+            if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
                 req.abort();
             } else {
                 req.continue();
@@ -30,9 +30,10 @@ async function scrapeDonaldson(sku) {
         });
 
         const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
 
-        await page.waitForSelector('.product-title, .product-info-name', { timeout: 20000 });
+        // Verificamos si estamos en resultados o ficha directa
+        await page.waitForSelector('.product-title, .product-info-name', { timeout: 15000 });
 
         const data = await page.evaluate(() => {
             const specs = {};
@@ -44,7 +45,7 @@ async function scrapeDonaldson(sku) {
             return {
                 idReal: document.querySelector('.product-title')?.innerText.trim(),
                 especificaciones: specs,
-                alternativosReales: Array.from(document.querySelectorAll('.alternative-products .sku-number')).map(el => el.innerText.trim())
+                alternativos: Array.from(document.querySelectorAll('.alternative-products .sku-number')).map(e => e.innerText.trim())
             };
         });
 
@@ -52,7 +53,7 @@ async function scrapeDonaldson(sku) {
         return { success: true, data };
     } catch (e) {
         if (browser) await browser.close();
-        return { error: "Fallo en barrido real", detail: e.message };
+        return { error: "Fallo de visión", detail: e.message };
     }
 }
 module.exports = scrapeDonaldson;
