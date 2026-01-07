@@ -4,6 +4,9 @@ nixPkgs = ["nodejs", "google-chrome", "cacert"]
 [phases.build]
 cmds = ["npm install", "npx puppeteer install"]
 
+[phases.start]
+cmds = ["node index.js"]
+
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
 PUPPETEER_EXECUTABLE_PATH = "/usr/bin/google-chrome"
