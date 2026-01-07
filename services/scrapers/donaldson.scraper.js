@@ -3,52 +3,44 @@ const cheerio = require('cheerio');
 
 async function scrapeDonaldson(sku) {
     const cleanSku = sku.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    // Intentamos búsqueda general en lugar de URL directa de producto
-    const searchUrl = `https://shop.donaldson.com/store/en-us/search?Ntt=${cleanSku}`;
-
-    const config = {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36' },
-        timeout: 15000
-    };
+    const url = `https://shop.donaldson.com/store/es-us/search?Ntt=${cleanSku}`;
 
     try {
-        const { data } = await axios.get(searchUrl, config);
+        const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         const $ = cheerio.load(data);
-
-        // Si hay múltiples resultados o es una referencia cruzada, Donaldson muestra una tabla.
-        // Buscamos el link del primer producto que aparezca.
-        let productUrl = null;
-        const firstProductLink = $('.product-info-name a').first().attr('href');
         
-        if (firstProductLink) {
-            const finalUrl = `https://shop.donaldson.com${firstProductLink}`;
-            const detailPage = await axios.get(finalUrl, config);
-            const $detail = cheerio.load(detailPage.data);
-            
-            // Extraer specs de la página de detalle
-            const specs = {};
-            $detail('.product-attribute-list li').each((i, el) => {
-                const label = $detail(el).find('.attr-label').text().trim().replace(':', '');
-                const value = $detail(el).find('.attr-value').text().trim();
-                if (label) specs[label] = value;
-            });
+        // Buscamos el link de la ficha técnica real
+        const productLink = $('.product-info-name a').first().attr('href');
+        if (!productLink) return { error: "No encontrado" };
 
-            return {
-                main_product: {
-                    SKU_SEARCHED: cleanSku,
-                    DONALDSON_EQUIVALENT: $detail('.product-title').text().trim(),
-                    OUTER_DIAMETER: specs['Outer Diameter'] || 'N/A',
-                    THREAD_SIZE: specs['Thread Size'] || 'N/A',
-                    LENGTH: specs['Length'] || 'N/A',
-                    TRILOGY_EFFICIENCY: $detail('.alternative-products').text().includes('Blue') ? 'High' : 'Standard',
-                    SOURCE: "PRODUCTION_BLINDADO_CROSSREF"
-                }
-            };
+        const ficha = await axios.get(`https://shop.donaldson.com${productLink}`);
+        const $f = cheerio.load(ficha.data);
+
+        const resultados = [];
+
+        // BARRIDO GENERAL: Capturamos CUALQUIER producto en la sección de alternativas (como en tu imagen)
+        $f('.alternative-products .product-card, .upgrade-options .product-card').each((i, el) => {
+            const realID = $f(el).find('.sku-number, .product-sku').text().trim();
+            if (realID) {
+                const lastFour = realID.replace(/[^0-9]/g, '').slice(-4);
+                resultados.push({
+                    DONALDSON_ID: realID,
+                    ELIM_SKU: `EL8${lastFour}`,
+                    TECNOLOGIA: realID.startsWith('DB') ? 'Donaldson Blue (Nanofiber)' : 'Standard'
+                });
+            }
+        });
+
+        // Si no encontró alternativas, al menos devolvemos el principal
+        if (resultados.length === 0) {
+            const mainID = $f('.product-title').text().trim();
+            const lastFour = mainID.replace(/[^0-9]/g, '').slice(-4);
+            resultados.push({ DONALDSON_ID: mainID, ELIM_SKU: `EL8${lastFour}`, TECNOLOGIA: 'Main' });
         }
 
-        return { error: "No se encontró referencia para este SKU", sku: cleanSku };
-    } catch (error) {
-        return { error: "Error de conexión", message: error.message };
+        return { success: true, all_variants: resultados };
+    } catch (e) {
+        return { error: e.message };
     }
 }
 module.exports = scrapeDonaldson;
