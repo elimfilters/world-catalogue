@@ -1,0 +1,13 @@
+﻿{
+  "groq_settings": {
+    "model": "llama-3.3-70b-versatile",
+    "temperature": 0.1,
+    "max_tokens": 500
+  },
+  "classification_categories": {
+    "duty_types": ["HEAVY_DUTY", "LIGHT_DUTY", "MARINE"],
+    "filter_types": ["AIR", "OIL", "FUEL", "HYDRAULIC", "COOLANT"]
+  },
+  "version": "1.0.0",
+  "last_updated": "2026-01-06"
+}

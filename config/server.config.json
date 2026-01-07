@@ -1,0 +1,110 @@
+﻿{
+  "server": {
+    "port": 3000,
+    "base_url": "http://localhost:3000",
+    "name": "ELIMFILTERS Backend API",
+    "version": "12.0.0"
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/scrape/:code",
+      "description": "Buscar y generar SKU para un código individual con especificaciones técnicas completas"
+    },
+    {
+      "method": "POST",
+      "path": "/api/scrape/multiple",
+      "description": "Procesar múltiples códigos en batch"
+    },
+    {
+      "method": "GET",
+      "path": "/api/filters/search",
+      "description": "Buscar filtros en catálogo"
+    },
+    {
+      "method": "GET",
+      "path": "/api/filters/:sku",
+      "description": "Obtener detalles de un filtro por SKU"
+    },
+    {
+      "method": "GET",
+      "path": "/api/stats",
+      "description": "Estadísticas del sistema"
+    }
+  ],
+  "features": {
+    "google_sheets": true,
+    "mongodb": true,
+    "scraping_with_specs": true,
+    "master_scraper": true,
+    "donaldson_scraper": true,
+    "fram_scraper": true,
+    "racor_scraper": true,
+    "marine_scraper": true,
+    "groq_ai": true,
+    "trilogy_generation": true,
+    "duty_detection": true,
+    "direct_sku": true,
+    "technical_specs_extraction": true
+  },
+  "scrapers": {
+    "donaldson": {
+      "specs_extracted": [
+        "height_mm",
+        "height_inch",
+        "outer_diameter_mm",
+        "outer_diameter_inch",
+        "inner_diameter_mm",
+        "thread_size",
+        "gasket_od_mm",
+        "gasket_id_mm",
+        "micron_rating",
+        "media_type",
+        "anti_drainback",
+        "efficiency",
+        "max_pressure_psi",
+        "service_life_hours",
+        "applications",
+        "oem_codes"
+      ]
+    },
+    "fram": {
+      "specs_extracted": [
+        "height_inch",
+        "outer_diameter_inch",
+        "thread_size",
+        "gasket_diameter_inch",
+        "micron_rating",
+        "media_type",
+        "anti_drainback",
+        "silicone_valve",
+        "efficiency",
+        "dirt_capacity_grams",
+        "applications",
+        "fits_vehicles"
+      ]
+    },
+    "racor": {
+      "specs_extracted": [
+        "micron_rating",
+        "flow_rate_gph",
+        "flow_rate_lph",
+        "max_pressure_psi",
+        "bowl_type",
+        "bowl_material",
+        "bowl_capacity_oz",
+        "drain_valve",
+        "sight_glass",
+        "housing_material",
+        "seal_material",
+        "media_type",
+        "water_separation_efficiency",
+        "inlet_outlet_size",
+        "applications",
+        "compatible_models"
+      ]
+    }
+  },
+  "status": "PRODUCTION_READY",
+  "last_updated": "2026-01-06"
+}
