@@ -1,46 +1,61 @@
-﻿const axios = require('axios');
-const cheerio = require('cheerio');
+﻿const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
 
 async function scrapeDonaldson(sku) {
-    const cleanSku = sku.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const url = `https://shop.donaldson.com/store/es-us/search?Ntt=${cleanSku}`;
-
+    const browser = await puppeteer.launch({ 
+        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        headless: "new" 
+    });
+    
     try {
-        const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        const $ = cheerio.load(data);
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
         
-        // Buscamos el link de la ficha técnica real
-        const productLink = $('.product-info-name a').first().attr('href');
-        if (!productLink) return { error: "No encontrado" };
+        // Vamos directo a la búsqueda para capturar la ficha técnica
+        const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
+        await page.goto(searchUrl, { waitUntil: 'networkidle2' });
 
-        const ficha = await axios.get(`https://shop.donaldson.com${productLink}`);
-        const $f = cheerio.load(ficha.data);
+        // Esperamos a que cargue la tabla de atributos o el primer producto
+        await page.waitForSelector('.product-info-name a, .product-title', { timeout: 10000 });
 
-        const resultados = [];
-
-        // BARRIDO GENERAL: Capturamos CUALQUIER producto en la sección de alternativas (como en tu imagen)
-        $f('.alternative-products .product-card, .upgrade-options .product-card').each((i, el) => {
-            const realID = $f(el).find('.sku-number, .product-sku').text().trim();
-            if (realID) {
-                const lastFour = realID.replace(/[^0-9]/g, '').slice(-4);
-                resultados.push({
-                    DONALDSON_ID: realID,
-                    ELIM_SKU: `EL8${lastFour}`,
-                    TECNOLOGIA: realID.startsWith('DB') ? 'Donaldson Blue (Nanofiber)' : 'Standard'
-                });
-            }
-        });
-
-        // Si no encontró alternativas, al menos devolvemos el principal
-        if (resultados.length === 0) {
-            const mainID = $f('.product-title').text().trim();
-            const lastFour = mainID.replace(/[^0-9]/g, '').slice(-4);
-            resultados.push({ DONALDSON_ID: mainID, ELIM_SKU: `EL8${lastFour}`, TECNOLOGIA: 'Main' });
+        // Si es una página de resultados, hacemos click en el primero
+        const isResultsPage = await page.$('.product-info-name a');
+        if (isResultsPage) {
+            await Promise.all([
+                page.click('.product-info-name a'),
+                page.waitForNavigation({ waitUntil: 'networkidle2' }),
+            ]);
         }
 
-        return { success: true, all_variants: resultados };
+        // EXTRAER DATA REAL DE LA FICHA
+        const data = await page.evaluate(() => {
+            const specs = {};
+            document.querySelectorAll('.product-attribute-list li').forEach(li => {
+                const label = li.querySelector('.attr-label')?.innerText.replace(':','').trim();
+                const value = li.querySelector('.attr-value')?.innerText.trim();
+                if (label) specs[label] = value;
+            });
+
+            const alternatives = [];
+            document.querySelectorAll('.alternative-products .product-card').forEach(card => {
+                const altId = card.querySelector('.sku-number')?.innerText.trim();
+                if (altId) alternatives.push(altId);
+            });
+
+            return {
+                idReal: document.querySelector('.product-title')?.innerText.trim(),
+                especificaciones: specs,
+                alternativosReales: alternatives
+            };
+        });
+
+        await browser.close();
+        return { success: true, data };
+
     } catch (e) {
-        return { error: e.message };
+        await browser.close();
+        return { error: "Bloqueo o timeout en Donaldson", detail: e.message };
     }
 }
 module.exports = scrapeDonaldson;
