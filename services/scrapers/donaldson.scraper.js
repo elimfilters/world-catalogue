@@ -5,66 +5,51 @@ async function scrapeDonaldson(sku) {
     const cleanSku = sku.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
     const url = `https://shop.donaldson.com/store/en-us/product/${cleanSku}`;
 
+    // Configuración blindada: Timeouts y Headers de navegador real
+    const config = {
+        headers: { 
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+        },
+        timeout: 10000 // 10 segundos antes de abortar
+    };
+
     try {
-        const { data } = await axios.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        const { data } = await axios.get(url, config);
         const $ = cheerio.load(data);
 
-        // 1. ESPECIFICACIONES TÉCNICAS (Prioridad para columnas Master V5)
+        // Extracción técnica robusta
         const specs = {};
         $('.product-attribute-list li').each((i, el) => {
             const label = $(el).find('.attr-label').text().trim().replace(':', '');
             const value = $(el).find('.attr-value').text().trim();
-            specs[label] = value;
+            if (label) specs[label] = value;
         });
 
-        // 2. CORRECCIÓN: Captura de "Productos Alternativos" para la Trilogía
-        // Donaldson agrupa los upgrades en secciones de 'alternative-products' o similares
-        const upgrades = [];
-        $('.alternative-products .product-card, .upgrade-options .product-info').each((i, el) => {
-            upgrades.push($(el).text().trim());
-        });
+        // Captura blindada de Upgrades (Trilogía)
+        const upgradeText = $('.alternative-products').text().toLowerCase() || "";
         
-        const upgradeContext = upgrades.join(' ').toLowerCase();
-
-        // Asignación lógica basada en la observación de productos alternativos
-        let eff = "Standard";
-        let cap = "Standard";
-        let life = "Standard";
-
-        if (upgradeContext.includes('blue') || upgradeContext.includes('nanofiber') || upgradeContext.includes('ultra-web')) {
-            eff = "High Efficiency (Nanofiber)";
-            cap = "High Capacity";
-            life = "Extended Life";
-        } else if (upgradeContext.includes('synthetic') || upgradeContext.includes('synteq')) {
-            eff = "Premium Synthetic";
-            cap = "Increased";
-            life = "Double Life";
+        let eff = "Standard", cap = "Standard", life = "Standard";
+        if (upgradeText.includes('blue') || upgradeText.includes('ultra-web')) {
+            eff = "High Efficiency (Nanofiber)"; cap = "High Capacity"; life = "Extended Life";
         }
 
-        // 3. ESTRUCTURA FINAL PARA GOOGLE SHEET MASTER_UNIFIED_V5
-        const main_product = {
-            SKU_CLEAN: cleanSku,
-            BRAND: "DONALDSON",
-            // Columnas de dimensiones
-            OUTER_DIAMETER: specs['Outer Diameter'] || specs['Diámetro exterior'] || '',
-            INNER_DIAMETER: specs['Inner Diameter'] || specs['Diámetro interior'] || '',
-            THREAD_SIZE: specs['Thread Size'] || specs['Tamaño de la rosca'] || '',
-            LENGTH: specs['Length'] || specs['Longitud'] || '',
-            
-            // Columnas de la Trilogía (derivadas de Productos Alternativos)
-            TRILOGY_EFFICIENCY: eff,
-            TRILOGY_CAPACITY: cap,
-            TRILOGY_LIFE: life,
-            
-            // Info adicional para el Master
-            MEDIA_TYPE: specs['Media Type'] || "Cellulose",
-            GASKET_OD: specs['Gasket OD'] || ''
+        return {
+            main_product: {
+                SKU_CLEAN: cleanSku,
+                BRAND: "DONALDSON",
+                OUTER_DIAMETER: specs['Outer Diameter'] || specs['Diámetro exterior'] || 'N/A',
+                THREAD_SIZE: specs['Thread Size'] || specs['Tamaño de la rosca'] || 'N/A',
+                LENGTH: specs['Length'] || specs['Longitud'] || 'N/A',
+                TRILOGY_EFFICIENCY: eff,
+                TRILOGY_CAPACITY: cap,
+                TRILOGY_LIFE: life,
+                SOURCE: "PRODUCTION_BLINDADO"
+            }
         };
-
-        return { main_product };
     } catch (error) {
-        return { error: "Error de conexión o SKU no encontrado", sku: cleanSku };
+        console.error(`[Scraper Error] SKU ${cleanSku}:`, error.message);
+        return { error: "SKU no encontrado o servidor bloqueado", status: error.response?.status };
     }
 }
-
 module.exports = scrapeDonaldson;
