@@ -6,24 +6,32 @@ async function scrapeDonaldson(sku) {
     let browser;
     try {
         browser = await puppeteer.launch({ 
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome',
+            executablePath: '/usr/bin/google-chrome',
             args: [
                 '--no-sandbox', 
                 '--disable-setuid-sandbox', 
-                '--disable-dev-shm-usage',
+                '--disable-dev-shm-usage', 
+                '--disable-gpu',
+                '--no-zygote',
                 '--single-process'
             ],
             headless: "new" 
         });
         
         const page = await browser.newPage();
-        await page.setDefaultNavigationTimeout(60000); // 60 segundos por si el sitio está lento
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        
-        const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
-        await page.goto(searchUrl, { waitUntil: 'networkidle2' });
+        // Bloqueamos imágenes y CSS para ahorrar RAM y evitar el error 500
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
 
-        // Esperar a que el contenido real aparezca
+        const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
+        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
         await page.waitForSelector('.product-title, .product-info-name', { timeout: 20000 });
 
         const data = await page.evaluate(() => {
@@ -33,25 +41,18 @@ async function scrapeDonaldson(sku) {
                 const value = li.querySelector('.attr-value')?.innerText.trim();
                 if (label) specs[label] = value;
             });
-
-            const alternatives = [];
-            document.querySelectorAll('.alternative-products .sku-number').forEach(el => {
-                alternatives.push(el.innerText.trim());
-            });
-
             return {
                 idReal: document.querySelector('.product-title')?.innerText.trim(),
                 especificaciones: specs,
-                alternativosReales: alternatives
+                alternativosReales: Array.from(document.querySelectorAll('.alternative-products .sku-number')).map(el => el.innerText.trim())
             };
         });
 
         await browser.close();
         return { success: true, data };
-
     } catch (e) {
         if (browser) await browser.close();
-        return { error: "Error en el barrido", detail: e.message };
+        return { error: "Fallo en barrido real", detail: e.message };
     }
 }
 module.exports = scrapeDonaldson;
