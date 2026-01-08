@@ -1,104 +1,50 @@
-﻿// server.js - COMPLETE WITH SCRAPER ROUTES
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
-require('dotenv').config();
-
+﻿const express = require('express');
+const puppeteer = require('puppeteer');
 const app = express();
-
-// ==========================================
-// MIDDLEWARE
-// ==========================================
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// ==========================================
-// MONGODB CONNECTION
-// ==========================================
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://elimfilters:Elliot2025@cluster0.vairwow.mongodb.net/?appName=Cluster0';
-
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log('✅ MongoDB conectado'))
-.catch(err => console.error('❌ Error conectando a MongoDB:', err));
-
-// ==========================================
-// ROUTES
-// ==========================================
-
-// Health check
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'online',
-    message: 'ELIMFILTERS Backend API v11.0.6',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Rutas existentes
-const scrapeRoutes = require('./routes/scrapeRoutes');
-app.use('/api/scrape', scrapeRoutes);
-
-// Rutas de filtros
-const filterRoutes = require('./routes/filterRoutes');
-app.use('/api/filters', filterRoutes);
-
-// Stats route
-app.get('/api/stats', (req, res) => {
-  res.json({
-    status: 'active',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString()
-  });
-});
-
-// ==========================================
-// SCRAPER ROUTES - NUEVO
-// ==========================================
-const scraperRoutes = require('./routes/scraperRoutes');
-app.use('/api/scraper', scraperRoutes);
-
-// ==========================================
-// ERROR HANDLING
-// ==========================================
-app.use((req, res) => {
-  res.status(404).json({ 
-    error: 'Endpoint not found',
-    path: req.path,
-    method: req.method
-  });
-});
-
-app.use((err, req, res, next) => {
-  console.error('❌ Error:', err);
-  res.status(500).json({ 
-    error: 'Internal server error',
-    message: err.message
-  });
-});
-
-// ==========================================
-// START SERVER
-// ==========================================
 const PORT = process.env.PORT || 8080;
 
-app.listen(PORT, () => {
-  console.log(`
-🚀 ELIMFILTERS Backend API
-📍 Server running on port ${PORT}
-🌐 Base URL: http://localhost:${PORT}
-📋 Available endpoints:
-   GET  /api/scrape/:code
-   POST /api/scrape/multiple
-   GET  /api/filters/search
-   GET  /api/filters/:sku
-   GET  /api/stats
-   GET  /api/scraper/donaldson/:sku  [NEW]
-✅ Ready to receive requests
-  `);
+// SCRAPER INTEGRADO PARA EVITAR ERRORES DE RUTA
+async function scrapeDonaldson(sku) {
+    let browser;
+    try {
+        const auth = '2TkgEoerBNEMc8le3f0bf75543d11176c6e74ce2be2c3cd2e';
+        browser = await puppeteer.connect({
+            browserWSEndpoint: `wss://chrome.browserless.io?token=${auth}`
+        });
+        const page = await browser.newPage();
+        await page.goto('https://shop.donaldson.com/store/es-us/home', { waitUntil: 'networkidle2' });
+        await page.waitForSelector('#search-input');
+        await page.type('#search-input', sku, { delay: 100 });
+        
+        const tab = 'a[href*="P551808"]';
+        await page.waitForSelector(tab, { timeout: 10000 });
+        await page.click(tab);
+        await page.waitForSelector('.product-attribute-list', { timeout: 15000 });
+
+        const specs = await page.evaluate(() => {
+            const res = {};
+            document.querySelectorAll('.product-attribute-list li').forEach(li => {
+                const l = li.querySelector('.attr-label')?.innerText.replace(':','').trim();
+                const v = li.querySelector('.attr-value')?.innerText.trim();
+                if (l) res[l] = v;
+            });
+            return res;
+        });
+
+        await browser.disconnect();
+        return { success: true, sku, specs };
+    } catch (e) {
+        if (browser) await browser.disconnect();
+        return { success: false, error: e.message };
+    }
+}
+
+// MATRIZ DE RUTAS (Directas, sin /api)
+app.get('/resuelve/:sku', async (req, res) => {
+    const data = await scrapeDonaldson(req.params.sku);
+    res.json(data);
 });
 
-module.exports = app;
+app.get('/health', (req, res) => res.send('OK'));
+
+app.listen(PORT, () => console.log(`Server en puerto ${PORT}`));
