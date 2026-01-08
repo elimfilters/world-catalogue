@@ -1,36 +1,56 @@
-﻿const puppeteer = require('puppeteer');
+﻿const axios = require('axios');
+const cheerio = require('cheerio');
 
-async function scrapeDonaldson(sku) {
-    let browser;
+module.exports = async function donaldsonScraper(code) {
+    const sku = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const searchUrl = `https://shop.donaldson.com/store/en-us/search?keyword=${sku}`;
+
     try {
-        const auth = '2TkgEoerBNEMc8le3f0bf75543d11176c6e74ce2be2c3cd2e';
-        browser = await puppeteer.connect({
-            browserWSEndpoint: `wss://chrome.browserless.io?token=${auth}`
+        const searchResponse = await axios.get(searchUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0' }
         });
-        const page = await browser.newPage();
-        await page.goto('https://shop.donaldson.com/store/es-us/home', { waitUntil: 'networkidle2' });
-        await page.waitForSelector('#search-input');
-        await page.type('#search-input', sku);
-        
-        const tab = 'a[href*="P551808"]';
-        await page.waitForSelector(tab, { timeout: 10000 });
-        await page.click(tab);
-        
-        await page.waitForSelector('.product-attribute-list', { timeout: 15000 });
-        const specs = await page.evaluate(() => {
-            const data = {};
-            document.querySelectorAll('.product-attribute-list li').forEach(li => {
-                const l = li.querySelector('.attr-label')?.innerText.replace(':','').trim();
-                const v = li.querySelector('.attr-value')?.innerText.trim();
-                if (l) data[l] = v;
-            });
-            return data;
+
+        const $ = cheerio.load(searchResponse.data);
+        const productLink = $('a.product-title__link').first().attr('href');
+
+        if (!productLink) {
+            throw new Error(`No se encontró producto Donaldson para código: ${sku}`);
+        }
+
+        const productUrl = `https://shop.donaldson.com${productLink}`;
+        const productResponse = await axios.get(productUrl);
+        const $$ = cheerio.load(productResponse.data);
+
+        const title = $$('h1.product-title').text().trim();
+
+        const specs = {};
+        $$('.product-attributes__list-item').each((i, el) => {
+            const key = $$(el).find('.product-attributes__label').text().trim();
+            const value = $$(el).find('.product-attributes__value').text().trim();
+            if (key && value) specs[key] = value;
         });
-        await browser.disconnect();
-        return { success: true, sku, data: specs };
-    } catch (e) {
-        if (browser) await browser.disconnect();
-        return { success: false, error: e.message };
+
+        const alternates = [];
+        $$('.cross-reference__list-item').each((i, el) => {
+            const ref = $$(el).text().trim();
+            if (ref) alternates.push(ref);
+        });
+
+        return {
+            skuBuscado: sku,
+            idReal: productLink.split('/').pop(),
+            descripcion: title,
+            especificaciones: specs,
+            alternativos: alternates,
+            urlFinal: productUrl,
+            cantidadEspecificaciones: Object.keys(specs).length,
+            cantidadAlternativos: alternates.length,
+            timestamp: new Date().toISOString(),
+            v: 'FINAL_TABLE_BASED_v1'
+        };
+
+    } catch (error) {
+        console.error("🔴 Error en donaldsonScraper:", error);
+        throw error;
     }
-}
-module.exports = scrapeDonaldson;
+};
