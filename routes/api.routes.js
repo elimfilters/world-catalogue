@@ -1,13 +1,8 @@
-ï»¿const express = require("express");
+const express = require('express');
 const router = express.Router();
+const scraperRoutes = require('./scraperRoutes');
 
-const donaldsonHDController = require("../controllers/donaldson.hd.controller");
-const framLDController = require("../controllers/fram.ld.controller");
-
-// HD scraper
-router.get("/api/scraper/donaldson/:code", donaldsonHDController);
-
-// LD scraper
-router.get("/api/scraper/fram/:code", framLDController);
+// Usar el scraper dinámico de Puppeteer
+router.use('/scraper', scraperRoutes);
 
 module.exports = router;
