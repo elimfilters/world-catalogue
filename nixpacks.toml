@@ -1,9 +1,5 @@
 ﻿[phases.setup]
-nixPkgs = ["nodejs", "chromium", "cacert"]
+nixPkgs = ["nodejs", "cacert"]
 
 [phases.build]
-cmds = ["npm install"]
-
-[variables]
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
+cmds = ["npm install", "npx puppeteer install"]
