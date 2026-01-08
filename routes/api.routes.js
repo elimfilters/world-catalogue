@@ -7,8 +7,4 @@ router.get('/scraper/donaldson/:sku', async (req, res) => {
     res.json(result);
 });
 
-// Mantener compatibilidad con tus otros endpoints
-router.get('/scrape/:code', (req, res) => res.json({ msg: "Endpoint legacy" }));
-router.get('/stats', (req, res) => res.json({ status: "ok" }));
-
 module.exports = router;
