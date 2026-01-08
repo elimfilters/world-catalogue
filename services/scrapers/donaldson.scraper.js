@@ -1,25 +1,29 @@
-const puppeteer = require('puppeteer');
+﻿const puppeteer = require('puppeteer');
 
 async function scrapeDonaldson(sku) {
     let browser;
     try {
-        // Usamos la variable de entorno que definimos en nixpacks o el fallback de chromium
-        const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
+        console.log("--- CONECTANDO A BROWSERLESS V2 ---");
+        const auth = '2TkgEoerBNEMc8le3f0bf75543d11176c6e74ce2be2c3cd2e';
         
-        browser = await puppeteer.launch({ 
-            executablePath: executablePath,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process'],
-            headless: "new"
+        browser = await puppeteer.connect({
+            browserWSEndpoint: `wss://chrome.browserless.io?token=${auth}`
         });
-        
+
         const page = await browser.newPage();
-        await page.setDefaultNavigationTimeout(60000);
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/119.0.0.0 Safari/537.36');
+        
+        // Simulación Humana exacta que me diste
+        await page.goto('https://shop.donaldson.com/store/es-us/home', { waitUntil: 'networkidle2' });
+        await page.waitForSelector('#search-input', { timeout: 15000 });
+        await page.type('#search-input', sku, { delay: 150 });
 
-        const url = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
-        await page.goto(url, { waitUntil: 'networkidle2' });
+        // Esperar el TAB de P551808
+        const tabSelector = 'a[href*="P551808"]';
+        await page.waitForSelector(tabSelector, { timeout: 15000 });
+        await page.click(tabSelector);
 
-        await page.waitForSelector('.product-title, .product-info-name', { timeout: 20000 });
+        // Esperar la ficha técnica final /80
+        await page.waitForSelector('.product-attribute-list', { timeout: 20000 });
 
         const data = await page.evaluate(() => {
             const specs = {};
@@ -31,15 +35,16 @@ async function scrapeDonaldson(sku) {
             return {
                 idReal: document.querySelector('.product-title')?.innerText.trim(),
                 especificaciones: specs,
-                alternativos: Array.from(document.querySelectorAll('.alternative-products .sku-number')).map(e => e.innerText.trim())
+                v: "VERSION_TUNEL_ACTIVA"
             };
         });
 
-        await browser.close();
+        await browser.disconnect();
         return { success: true, data };
+
     } catch (e) {
-        if (browser) await browser.close();
-        return { success: false, error: "Fallo de visi�n", detail: e.message };
+        if (browser) await browser.disconnect();
+        return { success: false, error: "ERROR_V2_TUNEL", detail: e.message };
     }
 }
 module.exports = scrapeDonaldson;
