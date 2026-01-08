@@ -234,7 +234,7 @@ router.get('/donaldson/:sku', async (req, res) => {
       // ========================================
       // 6. EQUIPMENT APPLICATIONS
       // ========================================
-      const equipmentTable = document.querySelectorAll('table')[1]; // Segunda tabla
+      const equipmentTable = document.querySelectorAll('table')[1];
       if (equipmentTable) {
         const rows = equipmentTable.querySelectorAll('tr');
         rows.forEach(row => {
