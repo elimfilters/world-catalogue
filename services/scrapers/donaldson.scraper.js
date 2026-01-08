@@ -1,137 +1,112 @@
 ﻿const puppeteer = require('puppeteer');
 
-// Función helper para delays
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function scrapeDonaldson(sku) {
     let browser;
     try {
-        console.log("=== INICIANDO SCRAPER DONALDSON ===");
-        console.log("SKU solicitado:", sku);
+        console.log("=== DIAGNÓSTICO COMPLETO ===");
         
         const auth = process.env.BROWSERLESS_TOKEN;
         if (!auth) {
-            throw new Error("BROWSERLESS_TOKEN no está configurado");
+            throw new Error("BROWSERLESS_TOKEN no configurado");
         }
 
-        console.log("Conectando a Browserless...");
         browser = await puppeteer.connect({
             browserWSEndpoint: `wss://chrome.browserless.io?token=${auth}`
         });
 
         const page = await browser.newPage();
         
-        // User agent más realista
+        // Log de cada acción
+        page.on('console', msg => console.log('BROWSER LOG:', msg.text()));
+        page.on('pageerror', error => console.log('PAGE ERROR:', error.message));
+        
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
         
-        console.log("Navegando a homepage...");
-        await page.goto('https://shop.donaldson.com/store/es-us/home', { 
-            waitUntil: 'networkidle0',
-            timeout: 30000 
-        });
+        console.log("PASO 1: Ir a homepage");
+        const url1 = 'https://shop.donaldson.com/store/es-us/home';
+        console.log("URL:", url1);
         
-        console.log("Esperando carga completa...");
-        await delay(3000);
-        
-        // Intentar múltiples selectores para el input de búsqueda
-        console.log("Buscando input de búsqueda...");
-        const searchInput = await page.$('#search-input') || 
-                           await page.$('input[type="search"]') ||
-                           await page.$('input[placeholder*="Search"]') ||
-                           await page.$('input[name="search"]');
-        
-        if (!searchInput) {
-            // Si no encontramos el input, intentamos URL directa
-            console.log("Input no encontrado, intentando URL directa...");
-            const directUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
-            await page.goto(directUrl, { waitUntil: 'networkidle0', timeout: 30000 });
-        } else {
-            console.log("Input encontrado, escribiendo SKU...");
-            await searchInput.type(sku, { delay: 100 });
-            await page.keyboard.press('Enter');
-            await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 });
-        }
-
-        console.log("Esperando resultados...");
-        await delay(3000);
-        
-        // Buscar el link del producto
-        console.log("Buscando link del producto...");
-        const productLink = await page.$(`a[href*="${sku}"]`) ||
-                           await page.$('.product-item a') ||
-                           await page.$('.search-result-item a');
-        
-        if (!productLink) {
-            throw new Error(`No se encontró el producto con SKU: ${sku}`);
+        try {
+            await page.goto(url1, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            console.log("✅ Homepage cargada");
+        } catch (e) {
+            console.log("❌ Error cargando homepage:", e.message);
+            throw e;
         }
         
-        console.log("Haciendo click en producto...");
-        await productLink.click();
-        await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 });
-
-        console.log("Esperando página de producto...");
-        await delay(3000);
-
-        console.log("Extrayendo datos...");
-        const data = await page.evaluate(() => {
-            // Extraer especificaciones técnicas
-            const specs = {};
-            const specsList = document.querySelectorAll('.product-attribute-list li, .specifications li, [class*="spec"] li');
-            specsList.forEach(li => {
-                const key = li.querySelector('.label, .spec-name, dt')?.innerText.trim();
-                const val = li.querySelector('.value, .spec-value, dd')?.innerText.trim();
-                if (key && val) specs[key] = val;
-            });
-            
-            // Extraer descripción
-            const descripcion = 
-                document.querySelector('.product-description')?.innerText.trim() ||
-                document.querySelector('.product-details')?.innerText.trim() ||
-                document.querySelector('.description')?.innerText.trim() ||
-                document.querySelector('[class*="description"]')?.innerText.trim() ||
-                'Sin descripción disponible';
-            
-            // Extraer productos alternativos
-            const alternativosElements = [
-                ...document.querySelectorAll('.alternative-products .sku-number'),
-                ...document.querySelectorAll('.cross-reference-item'),
-                ...document.querySelectorAll('[data-sku]'),
-                ...document.querySelectorAll('.related-product .sku'),
-                ...document.querySelectorAll('.compatible-part-number')
-            ];
-            
-            const alternativos = alternativosElements
-                .map(e => e.innerText?.trim() || e.getAttribute('data-sku')?.trim() || '')
-                .filter(Boolean)
-                .filter((value, index, self) => self.indexOf(value) === index);
-            
-            // Extraer ID real del producto
-            const idReal = 
-                document.querySelector('.product-title')?.innerText.trim() ||
-                document.querySelector('.product-name')?.innerText.trim() ||
-                document.querySelector('.sku-number')?.innerText.trim() ||
-                document.querySelector('h1')?.innerText.trim() ||
-                'ID no encontrado';
-            
+        await delay(2000);
+        
+        console.log("PASO 2: Buscar elementos en la página");
+        const pageInfo = await page.evaluate(() => {
             return {
-                idReal: idReal,
-                descripcion: descripcion,
-                especificaciones: specs,
-                alternativos: alternativos.length > 0 ? alternativos : [],
-                v: "VERSION_TUNEL_ACTIVA_DEBUG"
+                title: document.title,
+                url: window.location.href,
+                hasSearchInput: !!document.querySelector('#search-input'),
+                hasSearchInputAlt1: !!document.querySelector('input[type="search"]'),
+                hasSearchInputAlt2: !!document.querySelector('input[placeholder*="Search"]'),
+                allInputs: Array.from(document.querySelectorAll('input')).map(i => ({
+                    id: i.id,
+                    type: i.type,
+                    placeholder: i.placeholder,
+                    name: i.name
+                }))
             };
         });
+        
+        console.log("INFO DE PÁGINA:", JSON.stringify(pageInfo, null, 2));
+        
+        // Intentar búsqueda directa por URL
+        console.log("PASO 3: Intentar URL directa de búsqueda");
+        const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}`;
+        console.log("URL de búsqueda:", searchUrl);
+        
+        try {
+            await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+            console.log("✅ Página de búsqueda cargada");
+        } catch (e) {
+            console.log("❌ Error en búsqueda:", e.message);
+            throw e;
+        }
+        
+        await delay(2000);
+        
+        console.log("PASO 4: Analizar resultados");
+        const searchResults = await page.evaluate((sku) => {
+            return {
+                title: document.title,
+                url: window.location.href,
+                hasResults: !!document.querySelector('.product-item, .search-result'),
+                productLinks: Array.from(document.querySelectorAll('a'))
+                    .filter(a => a.href.includes(sku) || a.innerText.includes(sku))
+                    .map(a => ({
+                        href: a.href,
+                        text: a.innerText.trim().substring(0, 50)
+                    })).slice(0, 5),
+                allH1: Array.from(document.querySelectorAll('h1')).map(h => h.innerText),
+                bodyText: document.body.innerText.substring(0, 500)
+            };
+        }, sku);
+        
+        console.log("RESULTADOS:", JSON.stringify(searchResults, null, 2));
 
-        console.log("Datos extraídos exitosamente:", data);
         await browser.disconnect();
-        return { success: true, data };
+        
+        return { 
+            success: true, 
+            diagnostic: {
+                pageInfo,
+                searchResults
+            }
+        };
 
     } catch (e) {
-        console.error("ERROR EN SCRAPER:", e.message);
+        console.error("ERROR:", e.message);
         if (browser) await browser.disconnect();
         return { 
             success: false, 
-            error: "ERROR_V2_TUNEL", 
+            error: "DIAGNOSTIC_ERROR", 
             detail: e.message 
         };
     }
