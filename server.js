@@ -5,23 +5,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ===== FORCE MARK =====
+console.log("🔥 LOADING SCRAPER ROUTES WITH BATCH 🔥");
+
 // ===============================
 // ROUTES
 // ===============================
 const scraperRoutes = require("./routes/scraperRoutes");
-
-// MONTAR SCRAPER DONALDSON (INDIVIDUAL + BATCH)
 app.use("/api/scraper", scraperRoutes);
 
 // ===============================
-// ROOT
-// ===============================
-app.get("/", (req, res) => {
-  res.json({ status: "ELIMFILTERS API RUNNING" });
-});
-
-// ===============================
-// START SERVER (RAILWAY)
+// START SERVER
 // ===============================
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
@@ -29,5 +23,5 @@ app.listen(PORT, () => {
   console.log("📍 Server running on port", PORT);
   console.log("📋 Available endpoints:");
   console.log("   GET  /api/scraper/donaldson/:sku");
-  console.log("   POST /api/scraper/donaldson/batch");
+  console.log("   POST /api/scraper/donaldson/batch  <-- MUST EXIST");
 });
