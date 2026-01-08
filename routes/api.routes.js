@@ -4,10 +4,7 @@ const router = express.Router();
 const donaldsonCrossRefController = require("../controllers/donaldson.crossref.controller");
 const framScraperController = require("../controllers/framScraper.controller");
 
-// Donaldson cross reference
 router.get("/api/scraper/donaldson/:code", donaldsonCrossRefController);
-
-// FRAM
 router.get("/api/scraper/fram/:code", framScraperController);
 
 // Debug (temporal)
