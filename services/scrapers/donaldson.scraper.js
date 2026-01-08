@@ -27,7 +27,7 @@ async function scrapeDonaldson(sku) {
             return data;
         });
         await browser.disconnect();
-        return { success: true, data: specs };
+        return { success: true, sku, data: specs };
     } catch (e) {
         if (browser) await browser.disconnect();
         return { success: false, error: e.message };
