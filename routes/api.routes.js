@@ -12,4 +12,7 @@ router.get("/scraper/save/donaldson/:code", saveToMongo);
 // FRAM
 router.get("/scraper/test/fram/:code", framScraperController);
 
+const donaldsonCrossRefController = require("../controllers/donaldson.crossref.controller");
+router.get("/scraper/donaldson/:code", donaldsonCrossRefController);
 module.exports = router;
+
