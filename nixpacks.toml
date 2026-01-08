@@ -1,8 +1,5 @@
 ﻿[phases.setup]
-nixPkgs = ["nodejs", "cacert"]
+nixPkgs = ["nodejs", "cacert", "glib", "nss", "nspr", "atk", "at-spi2-atk", "libdrm", "expat", "libxcb", "libxkbcommon", "mesa"]
 
 [phases.build]
 cmds = ["npm install"]
-
-[phases.start]
-cmds = ["node index.js"]
