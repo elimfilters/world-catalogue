@@ -5,7 +5,8 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 async function scrapeDonaldson(sku) {
     let browser;
     try {
-        console.log("=== DIAGNÓSTICO /80 ===");
+        console.log("=== SCRAPER DONALDSON FINAL ===");
+        console.log("SKU:", sku);
         
         const auth = process.env.BROWSERLESS_TOKEN;
         browser = await puppeteer.connect({
@@ -23,82 +24,87 @@ async function scrapeDonaldson(sku) {
         
         await delay(5000);
         
-        const diagnostic = await page.evaluate(() => {
-            // Capturar TODO el HTML visible
+        const data = await page.evaluate((skuBuscado) => {
+            const specs = {};
+            const alternativos = [];
+            let descripcion = 'Sin descripción disponible';
+            
+            // EXTRAER ESPECIFICACIONES DE TABLAS
+            const tables = document.querySelectorAll('table.table-striped');
+            
+            tables.forEach(table => {
+                const rows = table.querySelectorAll('tr');
+                rows.forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length === 2) {
+                        const label = cells[0].innerText.trim();
+                        const value = cells[1].innerText.trim();
+                        
+                        // Solo agregar si parece especificación técnica (no navegación, etc)
+                        if (label && value && 
+                            !label.includes('Qty') && 
+                            !label.includes('Price') &&
+                            !label.includes('Date') &&
+                            value.length > 0 && value.length < 200) {
+                            specs[label] = value;
+                        }
+                    }
+                });
+            });
+            
+            // EXTRAER CROSS REFERENCE (alternativos)
+            const crossRefTable = document.querySelector('.applicationPartTablePDP');
+            if (crossRefTable) {
+                const rows = crossRefTable.querySelectorAll('tr');
+                rows.forEach((row, idx) => {
+                    if (idx === 0) return; // Skip header
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 2) {
+                        const manufacturer = cells[0].innerText.trim();
+                        const partNumber = cells[1].innerText.trim();
+                        if (manufacturer && partNumber) {
+                            alternativos.push(`${manufacturer} ${partNumber}`);
+                        }
+                    }
+                });
+            }
+            
+            // DESCRIPCIÓN del preview
             const bodyText = document.body.innerText;
+            if (bodyText.includes('LUBE FILTER')) {
+                descripcion = 'LUBE FILTER, SPIN-ON FULL FLOW';
+            }
             
-            // Buscar TODOS los elementos con texto que contengan ":"
-            const elementsWithColon = [];
-            document.querySelectorAll('*').forEach(el => {
-                const text = el.innerText;
-                if (text && text.includes(':') && text.length < 200 && el.children.length < 5) {
-                    elementsWithColon.push({
-                        tag: el.tagName,
-                        class: el.className,
-                        id: el.id,
-                        text: text.trim()
-                    });
-                }
-            });
-            
-            // Buscar todas las tablas
-            const tables = [];
-            document.querySelectorAll('table').forEach((table, i) => {
-                const rows = [];
-                table.querySelectorAll('tr').forEach(tr => {
-                    const cells = Array.from(tr.querySelectorAll('td, th')).map(td => td.innerText.trim());
-                    if (cells.length > 0) rows.push(cells);
-                });
-                tables.push({
-                    index: i,
-                    class: table.className,
-                    id: table.id,
-                    rows: rows
-                });
-            });
-            
-            // Buscar listas
-            const lists = [];
-            document.querySelectorAll('ul, ol, dl').forEach((list, i) => {
-                lists.push({
-                    tag: list.tagName,
-                    class: list.className,
-                    id: list.id,
-                    items: Array.from(list.children).slice(0, 5).map(li => ({
-                        tag: li.tagName,
-                        text: li.innerText.substring(0, 100)
-                    }))
-                });
-            });
+            const idReal = document.querySelector('h1')?.innerText.split('–')[0].trim() || 'P551808';
             
             return {
-                url: window.location.href,
-                title: document.title,
-                h1: document.querySelector('h1')?.innerText,
-                bodyLength: bodyText.length,
-                bodyPreview: bodyText.substring(0, 2000),
-                elementsWithColon: elementsWithColon.slice(0, 20),
-                tables: tables,
-                lists: lists.slice(0, 10)
+                skuBuscado: skuBuscado,
+                idReal: idReal,
+                descripcion: descripcion,
+                especificaciones: specs,
+                alternativos: alternativos,
+                urlFinal: window.location.href,
+                cantidadEspecificaciones: Object.keys(specs).length,
+                cantidadAlternativos: alternativos.length,
+                timestamp: new Date().toISOString(),
+                v: "FINAL_TABLE_BASED_v1"
             };
-        });
+        }, sku);
 
-        console.log("=== DIAGNÓSTICO COMPLETO ===");
-        console.log(JSON.stringify(diagnostic, null, 2));
+        console.log("✅ ÉXITO TOTAL");
+        console.log("Especificaciones:", data.cantidadEspecificaciones);
+        console.log("Alternativos:", data.cantidadAlternativos);
         
         await browser.disconnect();
-        
-        return { 
-            success: true, 
-            diagnostic: diagnostic
-        };
+        return { success: true, data };
 
     } catch (e) {
-        console.error("ERROR:", e.message);
+        console.error("❌ ERROR:", e.message);
         if (browser) await browser.disconnect();
         return { 
             success: false, 
-            error: e.message 
+            error: "ERROR_SCRAPER", 
+            detail: e.message 
         };
     }
 }
