@@ -8,3 +8,6 @@ router.use('/scraper', scraperRoutes);
 const saveController = require("../controllers/save.controller");
 router.post("/api/save", saveController);
 module.exports = router;
+router.get("/api/test-save", (req, res) => {
+  res.json({ success: true, message: "Ruta /api/save está registrada en este build" });
+});
