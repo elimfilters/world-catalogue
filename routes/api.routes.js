@@ -14,5 +14,9 @@ router.get("/scraper/test/fram/:code", framScraperController);
 
 const donaldsonCrossRefController = require("../controllers/donaldson.crossref.controller");
 router.get("/scraper/donaldson/:code", donaldsonCrossRefController);
+
+const debugRoutesController = require("../controllers/debugRoutes.controller");
+router.get("/debug/routes", debugRoutesController);
 module.exports = router;
+
 
