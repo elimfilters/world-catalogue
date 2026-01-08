@@ -1,8 +1,16 @@
 ﻿const express = require('express');
 const router = express.Router();
-const saveToMongo = require('../controllers/saveToMongo.controller');
 
-// NUEVA RUTA: Guarda producto o kit desde código Donaldson
+// ---------- RUTAS EXISTENTES ----------
+const saveToMongo = require('../controllers/saveToMongo.controller');
+const donaldsonScraperController = require('../controllers/donaldsonScraper.controller');
+// ---------- RUTA FRAM ----------
+const framScraperController = require('../controllers/framScraper.controller');
+
 router.get('/scraper/save/donaldson/:code', saveToMongo);
+router.get('/scraper/test/donaldson/:code', donaldsonScraperController);
+
+// 🚀 Nueva ruta FRAM
+router.get('/scraper/test/fram/:code', framScraperController);
 
 module.exports = router;
