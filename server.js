@@ -1,19 +1,17 @@
-﻿require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const scraperRoutes = require('./routes/scraperRoutes');
-
+﻿const express = require("express");
 const app = express();
-app.use(cors());
+
 app.use(express.json());
 
-// Usar el scraper dinámico con Puppeteer
-app.use('/api/scraper', scraperRoutes);
-
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 ELIMFILTERS Backend API');
-    console.log('📍 Server running on port ' + PORT);
-    console.log('📋 Available endpoints:');
-    console.log('   GET  /api/scraper/donaldson/:sku  [Puppeteer Dynamic]');
+app.get("/health", (req, res) => {
+  res.json({ status: "OK", service: "world-catalogue" });
 });
+
+app.post("/api/search", (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: "code required" });
+  res.json({ input: code, normalized: code, status: "OK" });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Server listening on " + PORT));
