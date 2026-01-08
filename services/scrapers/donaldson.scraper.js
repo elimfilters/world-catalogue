@@ -1,5 +1,8 @@
 ﻿const puppeteer = require('puppeteer');
 
+// Función helper para delays
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function scrapeDonaldson(sku) {
     let browser;
     try {
@@ -27,9 +30,8 @@ async function scrapeDonaldson(sku) {
             timeout: 30000 
         });
         
-        // Tomar screenshot para debug
         console.log("Esperando carga completa...");
-        await page.waitForTimeout(3000);
+        await delay(3000);
         
         // Intentar múltiples selectores para el input de búsqueda
         console.log("Buscando input de búsqueda...");
@@ -51,7 +53,7 @@ async function scrapeDonaldson(sku) {
         }
 
         console.log("Esperando resultados...");
-        await page.waitForTimeout(3000);
+        await delay(3000);
         
         // Buscar el link del producto
         console.log("Buscando link del producto...");
@@ -68,7 +70,7 @@ async function scrapeDonaldson(sku) {
         await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 });
 
         console.log("Esperando página de producto...");
-        await page.waitForTimeout(3000);
+        await delay(3000);
 
         console.log("Extrayendo datos...");
         const data = await page.evaluate(() => {
@@ -120,7 +122,7 @@ async function scrapeDonaldson(sku) {
             };
         });
 
-        console.log("Datos extraídos exitosamente");
+        console.log("Datos extraídos exitosamente:", data);
         await browser.disconnect();
         return { success: true, data };
 
