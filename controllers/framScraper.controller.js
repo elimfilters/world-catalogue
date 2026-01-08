@@ -4,9 +4,18 @@ module.exports = async function framScraperController(req, res) {
     try {
         const { code } = req.params;
         const result = await framScraper(code);
-        if (!result.success) return res.status(404).json({ success: false, error: "No encontrado" });
-        res.json({ success: true, data: result });
+        if (!result || result.success === false) {
+            return res.status(404).json({
+                success: false,
+                error: "FRAM product not found: " + code
+            });
+        }
+        return res.json({
+            success: true,
+            data: result
+        });
     } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
+        console.error("🚨 Error in FRAM controller:", err);
+        return res.status(500).json({ success: false, error: err.message });
     }
 };
