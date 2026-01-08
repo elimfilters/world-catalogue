@@ -12,22 +12,22 @@ async function scrapeDonaldson(sku) {
         await page.waitForSelector('#search-input');
         await page.type('#search-input', sku);
         
-        const selector = 'a[href*="P551808"]';
-        await page.waitForSelector(selector, { timeout: 10000 });
-        await page.click(selector);
+        const tab = 'a[href*="P551808"]';
+        await page.waitForSelector(tab, { timeout: 10000 });
+        await page.click(tab);
         
         await page.waitForSelector('.product-attribute-list', { timeout: 15000 });
-        const data = await page.evaluate(() => {
-            const specs = {};
+        const specs = await page.evaluate(() => {
+            const data = {};
             document.querySelectorAll('.product-attribute-list li').forEach(li => {
-                const label = li.querySelector('.attr-label')?.innerText.replace(':','').trim();
-                const value = li.querySelector('.attr-value')?.innerText.trim();
-                if (label) specs[label] = value;
+                const l = li.querySelector('.attr-label')?.innerText.replace(':','').trim();
+                const v = li.querySelector('.attr-value')?.innerText.trim();
+                if (l) data[l] = v;
             });
-            return specs;
+            return data;
         });
         await browser.disconnect();
-        return { success: true, sku, data };
+        return { success: true, data: specs };
     } catch (e) {
         if (browser) await browser.disconnect();
         return { success: false, error: e.message };
