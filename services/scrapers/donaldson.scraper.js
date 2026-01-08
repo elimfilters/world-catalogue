@@ -4,7 +4,7 @@ async function scrapeDonaldson(sku) {
     let browser;
     try {
         console.log("--- CONECTANDO A BROWSERLESS V2 ---");
-        const auth = '2TkgEoerBNEMc8le3f0bf75543d11176c6e74ce2be2c3cd2e';
+        const auth = process.env.BROWSERLESS_TOKEN;
         
         browser = await puppeteer.connect({
             browserWSEndpoint: `wss://chrome.browserless.io?token=${auth}`
