@@ -1,46 +1,40 @@
-﻿const axios = require('axios');
-const cheerio = require('cheerio');
+﻿const axios = require("axios");
+const cheerio = require("cheerio");
 
 module.exports = async function framScraper(code) {
-    const url = https://www.fram.com/fram-extra-guard-oil-filter-spin-on-;
+    const cleanCode = code.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+    const url = `https://www.fram.com/fram-extra-guard-oil-filter-spin-on-${cleanCode}`;
     try {
         const { data: html } = await axios.get(url);
         const $ = cheerio.load(html);
 
-        const title = h1.product-name.text().trim();
-        const description = #description.text().trim() || .description.text().trim();
-        const bullets = [];
-        #description li, .description li.each((i, el) => {
-            const val = .text().trim();
-            if (val) bullets.push(val);
+        const title = $("h1.product-name, h1").first().text().trim();
+        const desc = $(".product-description, .description").first().text().trim();
+        let descriptionBullets = [];
+        $(".product-features li, .features-list li").each((i, el) => {
+            const t = $(el).text().trim();
+            if (t) descriptionBullets.push(t);
         });
-
-        const applicationsText = #applications.text().trim() || .applications.text().trim();
         const applicationsList = [];
-        #applications li, .applications li.each((i, el) => {
-            const val = .text().trim();
-            if (val) applicationsList.push(val);
+        $("#applications li, .applications li").each((i, el) => {
+            const t = $(el).text().trim();
+            if (t) applicationsList.push(t);
         });
-
-        const comparisonText = #comparison.text().trim() || .comparison.text().trim();
-        const installationText = #installation.text().trim() || .installation.text().trim();
+        const comparisonText = $("#comparison, .comparison").text().trim();
+        const installationText = $("#installation, .installation").text().trim();
 
         return {
-            skuBuscado: code,
-            idReal: code,
+            skuBuscado: cleanCode.toUpperCase(),
+            idReal: cleanCode.toUpperCase(),
+            descripcion: desc || title,
             title,
-            description,
-            descriptionBullets: bullets,
-            applicationsText,
+            descriptionBullets,
             applicationsList,
             comparisonText,
             installationText,
-            urlFinal: url,
-            timestamp: new Date().toISOString(),
-            v: "FRAM_SCRAPER_v1"
+            urlFinal: url
         };
-    } catch (error) {
-        console.error("❌ Error en FRAM scraper:", error.message);
-        return { error: true, message: error.message };
+    } catch (e) {
+        return { error: true, message: e.message };
     }
 };

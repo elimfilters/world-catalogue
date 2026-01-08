@@ -1,22 +1,29 @@
 ﻿const express = require("express");
 const router = express.Router();
 
-const donaldsonScraperController = require("../controllers/donaldsonScraper.controller");
+const donaldsonCrossRefController = require("../controllers/donaldson.crossref.controller");
 const framScraperController = require("../controllers/framScraper.controller");
-const saveToMongo = require("../controllers/saveToMongo.controller");
 
-// Donaldson
-router.get("/scraper/test/donaldson/:code", donaldsonScraperController);
-router.get("/scraper/save/donaldson/:code", saveToMongo);
+// Donaldson cross reference
+router.get("/api/scraper/donaldson/:code", donaldsonCrossRefController);
 
 // FRAM
-router.get("/scraper/test/fram/:code", framScraperController);
+router.get("/api/scraper/fram/:code", framScraperController);
 
-const donaldsonCrossRefController = require("../controllers/donaldson.crossref.controller");
-router.get("/scraper/donaldson/:code", donaldsonCrossRefController);
+// Debug (temporal)
+router.get("/api/debug/routes", (req, res) => {
+    try {
+        const routes = [];
+        req.app._router.stack.forEach((m) => {
+            if (m.route) {
+                const methods = Object.keys(m.route.methods).join(",");
+                routes.push({ path: m.route.path, methods });
+            }
+        });
+        res.json({ success: true, routes });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
 
-const debugRoutesController = require("../controllers/debugRoutes.controller");
-router.get("/debug/routes", debugRoutesController);
 module.exports = router;
-
-
