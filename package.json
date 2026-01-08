@@ -1,28 +1,11 @@
-{
-  "name": "elimfilters-api",
-  "version": "11.0.6",
+﻿{
+  "name": "world-catalogue",
+  "version": "1.0.0",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "seed": "node scripts/seedDatabase.js"
+    "start": "node server.js"
   },
   "dependencies": {
-    "axios": "^1.13.2",
-    "cheerio": "^1.1.2",
-    "cors": "^2.8.5",
-    "dotenv": "^16.6.1",
-    "express": "^4.22.1",
-    "google-auth-library": "^10.5.0",
-    "google-spreadsheet": "^5.0.2",
-    "googleapis": "^169.0.0",
-    "groq-sdk": "^0.37.0",
-    "mongodb": "^7.0.0",
-    "mongoose": "^8.21.0",
-    "puppeteer": "^24.34.0",
-    "puppeteer-core": "^24.34.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.1"
+    "express": "^4.19.2"
   }
 }
