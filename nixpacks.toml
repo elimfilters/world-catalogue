@@ -2,4 +2,7 @@
 nixPkgs = ["nodejs", "cacert"]
 
 [phases.build]
-cmds = ["npm install", "npx puppeteer install"]
+cmds = ["npm install"]
+
+[phases.start]
+cmds = ["node index.js"]
