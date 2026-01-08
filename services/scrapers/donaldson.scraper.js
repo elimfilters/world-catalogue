@@ -1,6 +1,4 @@
-﻿const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
+const puppeteer = require('puppeteer');
 
 async function scrapeDonaldson(sku) {
     let browser;
@@ -41,7 +39,7 @@ async function scrapeDonaldson(sku) {
         return { success: true, data };
     } catch (e) {
         if (browser) await browser.close();
-        return { success: false, error: "Fallo de visión", detail: e.message };
+        return { success: false, error: "Fallo de visi�n", detail: e.message };
     }
 }
 module.exports = scrapeDonaldson;
