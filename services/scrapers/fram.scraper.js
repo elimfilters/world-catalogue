@@ -9,15 +9,11 @@ module.exports = async function framScraper(code) {
         });
         const $ = cheerio.load(html);
 
-        // Título principal
-        const title = $("h1, .product-title").first().text().trim();
+        const title = $("h1").first().text().trim();
+        const description = $(".product-description").first().text().trim() || title;
 
-        // Descripción corta
-        const description = $(".product-description, .description").first().text().trim() || title;
-
-        // Especificaciones o características
         let specs = {};
-        $(".product-features li, .features-list li").each((i, el) => {
+        $(".product-features li").each((i, el) => {
             const text = $(el).text().trim();
             if (text) specs[i] = text;
         });
@@ -31,7 +27,6 @@ module.exports = async function framScraper(code) {
             urlFinal: url
         };
     } catch (error) {
-        console.error("🔥 Error en FRAM Scraper:", error.message);
         return { success: false, error: error.message };
     }
 };
