@@ -1,26 +1,13 @@
 ﻿const express = require("express");
 const router = express.Router();
 
-const donaldsonCrossRefController = require("../controllers/donaldson.crossref.controller");
-const framScraperController = require("../controllers/framScraper.controller");
+const donaldsonHDController = require("../controllers/donaldson.hd.controller");
+const framLDController = require("../controllers/fram.ld.controller");
 
-router.get("/api/scraper/donaldson/:code", donaldsonCrossRefController);
-router.get("/api/scraper/fram/:code", framScraperController);
+// HD scraper
+router.get("/api/scraper/donaldson/:code", donaldsonHDController);
 
-// Debug (temporal)
-router.get("/api/debug/routes", (req, res) => {
-    try {
-        const routes = [];
-        req.app._router.stack.forEach((m) => {
-            if (m.route) {
-                const methods = Object.keys(m.route.methods).join(",");
-                routes.push({ path: m.route.path, methods });
-            }
-        });
-        res.json({ success: true, routes });
-    } catch (err) {
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
+// LD scraper
+router.get("/api/scraper/fram/:code", framLDController);
 
 module.exports = router;
