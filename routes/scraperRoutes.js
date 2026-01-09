@@ -1,7 +1,8 @@
 ﻿const express = require("express");
 const router = express.Router();
 
-const { scrapeDonaldson } = require("../scrapers/donaldsonScraper");
+// RUTA CORRECTA DEL SCRAPER
+const { scrapeDonaldson } = require("../services/scrapers/donaldsonScraper");
 
 // ===============================
 // DONALDSON INDIVIDUAL
@@ -17,17 +18,13 @@ router.get("/donaldson/:sku", async (req, res) => {
 });
 
 // ===============================
-// DONALDSON BATCH (MAX 10)
+// DONALDSON BATCH
 // ===============================
 router.post("/donaldson/batch", async (req, res) => {
   try {
     const { codes } = req.body || {};
-
     if (!Array.isArray(codes) || codes.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "codes array required"
-      });
+      return res.status(400).json({ success: false, error: "codes array required" });
     }
 
     const results = [];
