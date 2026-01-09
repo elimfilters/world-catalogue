@@ -3,7 +3,7 @@
 class SKUGenerator {
   constructor() {
     this.prefixes = prefixesConfig.prefixes;
-    this.variants = prefixesConfig.trilogy_variants;
+    this.variants = prefixesConfig.trilogy.suffixes;
   }
 
   /**
@@ -150,3 +150,4 @@ class SKUGenerator {
 }
 
 module.exports = new SKUGenerator();
+

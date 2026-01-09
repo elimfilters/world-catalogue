@@ -1,179 +1,61 @@
-﻿const { google } = require("googleapis");
-const path = require("path");
+﻿const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
 
-class GoogleSheetsService {
-  constructor() {
-    this.sheetId = "1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U";
-    this.auth = null;
-    this.sheets = null;
-  }
+const serviceAccountAuth = new JWT({
+  email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  scopes: ['https://www.googleapis.com/auth/spreadsheets']
+});
 
-  async initialize() {
-    try {
-      const credentialsPath = path.join(__dirname, "..", "config", "google-credentials.json");
-      
-      this.auth = new google.auth.GoogleAuth({
-        keyFile: credentialsPath,
-        scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-      });
+const doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID, serviceAccountAuth);
 
-      const authClient = await this.auth.getClient();
-      this.sheets = google.sheets({ version: "v4", auth: authClient });
-      
-      console.log("✅ Google Sheets conectado con Service Account");
-      return true;
-      
-    } catch (error) {
-      console.error("❌ Error conectando Google Sheets:", error.message);
-      return false;
-    }
-  }
-
-  async searchUnified(code) {
-    console.log(`📊 [GOOGLE SHEETS] Buscando en MASTER_UNIFIED_V5: ${code}`);
+async function searchInSheets(code) {
+  try {
+    await doc.loadInfo();
     
-    try {
-      if (!this.sheets) {
-        await this.initialize();
-      }
-
-      if (!this.sheets) {
-        console.log("   ⚠️  Sheets no disponible");
-        return null;
-      }
-
-      const response = await this.sheets.spreadsheets.values.get({
-        spreadsheetId: this.sheetId,
-        range: "MASTER_UNIFIED_V5!A:Z",
-      });
-
-      const rows = response.data.values;
-      
-      if (!rows || rows.length === 0) {
-        console.log("   ❌ No hay datos en la hoja");
-        return null;
-      }
-
-      const headers = rows[0];
-      const codeColumnIndex = headers.findIndex(h => 
-        h.toLowerCase().includes("code") || 
-        h.toLowerCase().includes("sku") ||
-        h.toLowerCase().includes("part")
+    // Buscar en MASTER_UNIFIED_V5 (filtros individuales)
+    const unifiedSheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
+    if (unifiedSheet) {
+      const rows = await unifiedSheet.getRows();
+      const found = rows.find(row => 
+        row.get('Original_Code')?.toUpperCase() === code.toUpperCase() ||
+        row.get('ELIMFILTERS_SKU')?.toUpperCase() === code.toUpperCase() ||
+        row.get('Donaldson_Code')?.toUpperCase() === code.toUpperCase()
       );
-
-      if (codeColumnIndex === -1) {
-        console.log("   ❌ No se encontró columna de código");
-        return null;
-      }
-
-      const searchCode = code.toUpperCase().trim();
       
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const rowCode = (row[codeColumnIndex] || "").toUpperCase().trim();
-        
-        if (rowCode === searchCode) {
-          console.log(`   ✅ Encontrado en fila ${i + 1}`);
-          
-          const result = {};
-          headers.forEach((header, index) => {
-            result[header] = row[index] || "";
-          });
-          
-          return {
-            source: "GOOGLE_SHEETS_UNIFIED",
-            sheet: "MASTER_UNIFIED_V5",
-            row: i + 1,
-            data: result
-          };
-        }
+      if (found) {
+        return {
+          success: true,
+          source: 'google_sheets_unified',
+          data: found.toObject()
+        };
       }
-
-      console.log("   ℹ️  Código no encontrado en MASTER_UNIFIED_V5");
-      return null;
-      
-    } catch (error) {
-      console.error(`   ❌ Error: ${error.message}`);
-      return null;
     }
-  }
-
-  async searchKits(code) {
-    console.log(`📊 [GOOGLE SHEETS] Buscando en MASTER_KITS_V1: ${code}`);
     
-    try {
-      if (!this.sheets) {
-        await this.initialize();
-      }
-
-      if (!this.sheets) {
-        console.log("   ⚠️  Sheets no disponible");
-        return null;
-      }
-
-      const response = await this.sheets.spreadsheets.values.get({
-        spreadsheetId: this.sheetId,
-        range: "MASTER_KITS_V1!A:Z",
-      });
-
-      const rows = response.data.values;
-      
-      if (!rows || rows.length === 0) {
-        console.log("   ❌ No hay datos en la hoja");
-        return null;
-      }
-
-      const headers = rows[0];
-      const codeColumnIndex = headers.findIndex(h => 
-        h.toLowerCase().includes("code") || 
-        h.toLowerCase().includes("sku") ||
-        h.toLowerCase().includes("kit")
+    // Buscar en MASTER_KITS_V1 (kits VIN/Equipment)
+    const kitsSheet = doc.sheetsByTitle['MASTER_KITS_V1'];
+    if (kitsSheet) {
+      const rows = await kitsSheet.getRows();
+      const found = rows.find(row => 
+        row.get('Kit_Code')?.toUpperCase() === code.toUpperCase() ||
+        row.get('VIN')?.toUpperCase() === code.toUpperCase()
       );
-
-      if (codeColumnIndex === -1) {
-        console.log("   ❌ No se encontró columna de código");
-        return null;
-      }
-
-      const searchCode = code.toUpperCase().trim();
       
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const rowCode = (row[codeColumnIndex] || "").toUpperCase().trim();
-        
-        if (rowCode === searchCode) {
-          console.log(`   ✅ Encontrado en fila ${i + 1}`);
-          
-          const result = {};
-          headers.forEach((header, index) => {
-            result[header] = row[index] || "";
-          });
-          
-          return {
-            source: "GOOGLE_SHEETS_KITS",
-            sheet: "MASTER_KITS_V1",
-            row: i + 1,
-            data: result
-          };
-        }
+      if (found) {
+        return {
+          success: true,
+          source: 'google_sheets_kits',
+          data: found.toObject()
+        };
       }
-
-      console.log("   ℹ️  Código no encontrado en MASTER_KITS_V1");
-      return null;
-      
-    } catch (error) {
-      console.error(`   ❌ Error: ${error.message}`);
-      return null;
     }
-  }
-
-  async searchCode(code) {
-    let result = await this.searchUnified(code);
-    if (result) return result;
     
-    result = await this.searchKits(code);
-    return result;
+    return { success: false, message: 'Not found in Google Sheets' };
+    
+  } catch (error) {
+    console.error('Google Sheets error:', error.message);
+    return { success: false, error: error.message };
   }
 }
 
-module.exports = new GoogleSheetsService();
+module.exports = { searchInSheets };

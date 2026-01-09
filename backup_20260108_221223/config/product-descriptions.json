@@ -1,0 +1,273 @@
+﻿{
+  "version": "1.0.0",
+  "last_updated": "2026-01-06",
+  "descriptions_by_prefix": {
+    "EL8": {
+      "prefix": "EL8",
+      "category": "Lube (Oil)",
+      "title": "Filtros de Aceite ELIMFILTERS",
+      "hero_statement": "Los filtros de aceite ELIMFILTERS están diseñados para mantener los sistemas de lubricación funcionando al máximo rendimiento en las condiciones más exigentes.",
+      "trilogy": {
+        "STANDARD": {
+          "technology": "DURAFLOW™",
+          "title": "DURAFLOW™ Standard Protection",
+          "tagline": "Protección confiable para operación diaria",
+          "description": "Medio filtrante de celulosa reforzada diseñado para capturar contaminantes dañinos en condiciones normales de operación.",
+          "key_benefits": [
+            "Celulosa reforzada con resina de alta resistencia",
+            "Eficiencia de filtración estándar para uso cotidiano",
+            "Excelente relación costo-beneficio",
+            "Cumple especificaciones OEM",
+            "Disponibilidad garantizada"
+          ],
+          "ideal_for": "Intervalos de servicio estándar, aplicaciones de trabajo normal, equipos con mantenimiento regular",
+          "media": "Celulosa reforzada (30-40 micrones)",
+          "micron_range": "30-40μ"
+        },
+        "PERFORMANCE": {
+          "technology": "SYNTRAX™",
+          "title": "SYNTRAX™ Performance Blend",
+          "tagline": "Rendimiento mejorado, protección superior",
+          "description": "Mezcla avanzada de celulosa sintética reforzada que ofrece mayor eficiencia de filtración y capacidad de retención que los filtros estándar.",
+          "key_benefits": [
+            "Celulosa sintética reforzada de alto rendimiento",
+            "Eficiencia mejorada 95-98% vs estándar",
+            "Mayor capacidad de retención de contaminantes",
+            "Compatible con aceites sintéticos y minerales",
+            "Vida útil extendida en condiciones severas"
+          ],
+          "ideal_for": "Aplicaciones de trabajo intensivo, condiciones moderadamente severas, equipos de alta utilización",
+          "media": "Celulosa sintética reforzada (15-25 micrones)",
+          "micron_range": "15-25μ"
+        },
+        "ELITE": {
+          "technology": "NANOFORCE™",
+          "title": "NANOFORCE™ Synthetic Elite",
+          "tagline": "Máxima protección sintética para servicio extremo",
+          "description": "Tecnología de nanofibras sintéticas equivalente a Donaldson Ultra-Web™ y Blue®, diseñada para máxima eficiencia y protección en condiciones extremas.",
+          "key_benefits": [
+            "Nanofibras sintéticas 100% - tecnología Ultra-Web equivalent",
+            "Eficiencia de filtración 99.9%",
+            "Captura partículas hasta 10 micrones absolutos",
+            "Compatible con aceites sintéticos de larga duración",
+            "Intervalos de servicio extendidos - hasta 2X vs estándar",
+            "Máxima protección para motores modernos"
+          ],
+          "ideal_for": "Condiciones extremas, intervalos extendidos, motores de alta precisión, aceites sintéticos premium",
+          "media": "Nanofibra sintética 100% (10-15 micrones)",
+          "micron_range": "10-15μ",
+          "equivalent_to": "Donaldson Ultra-Web™, Donaldson Blue®, FRAM Ultra Synthetic"
+        }
+      },
+      "general_features": [
+        "Válvula anti-retorno que previene arranques en seco",
+        "Construcción reforzada para presiones hasta 150 PSI",
+        "Sello premium que garantiza cero fugas",
+        "Compatible con Heavy Duty y Light Duty"
+      ]
+    },
+    "EA1": {
+      "prefix": "EA1",
+      "category": "Air",
+      "technology": "NANOFORCE™",
+      "title": "Filtros de Aire ELIMFILTERS NANOFORCE™",
+      "hero_statement": "Los filtros de aire ELIMFILTERS con tecnología NANOFORCE™ están diseñados para satisfacer las demandas más rigurosas de equipos que operan en los entornos más hostiles.",
+      "tagline": "Aire limpio. Motores protegidos. Máximo rendimiento.",
+      "description": "Tecnología de nanofibras que captura partículas ultrafinas con eficiencia del 99.9% sin restricción de flujo, proporcionando máxima protección en ambientes polvorientos.",
+      "key_benefits": [
+        "Nanofibras sintéticas de alta eficiencia - 99.9% de captura",
+        "Captura partículas hasta 0.3 micrones",
+        "Sello radial robusto que previene entrada de aire sin filtrar",
+        "Diseño reforzado que soporta vibraciones extremas",
+        "Vida útil extendida hasta 2X vs celulosa estándar",
+        "Flujo optimizado para mejor rendimiento del motor"
+      ],
+      "ideal_for": "Equipos de construcción, minería, agricultura, maquinaria pesada en ambientes polvorientos",
+      "media": "Nanofibra sintética",
+      "micron_range": "0.3-10μ",
+      "equivalent_to": "Donaldson Ultra-Web™, Donaldson PowerCore™"
+    },
+    "EF9": {
+      "prefix": "EF9",
+      "category": "Fuel",
+      "technology": "SYNTEPORE™",
+      "title": "Filtros de Combustible ELIMFILTERS SYNTEPORE™",
+      "hero_statement": "Los filtros de combustible ELIMFILTERS SYNTEPORE™ ofrecen protección crítica para sistemas de inyección de alta presión, eliminando contaminantes que causan daños costosos.",
+      "tagline": "Combustible limpio. Inyección precisa. Motores protegidos.",
+      "description": "Media sintética porosa de alta capacidad diseñada para máxima eficiencia en filtración de combustible, compatible con biodiesel B20 y ULSD.",
+      "key_benefits": [
+        "Media sintética porosa de alta eficiencia 98% @ micron rating",
+        "Protege inyectores Common Rail y bombas de alta presión",
+        "Compatible con biodiesel B20, diésel ULSD y mezclas",
+        "Construcción reforzada que resiste presiones extremas",
+        "Válvula anti-drenaje que previene arranques en seco",
+        "Cumple exigencias de motores Tier 4 Final y Euro VI"
+      ],
+      "ideal_for": "Motores diésel modernos, sistemas Common Rail, equipos industriales",
+      "media": "Media sintética porosa",
+      "micron_range": "2-10μ"
+    },
+    "EH6": {
+      "prefix": "EH6",
+      "category": "Hydraulic",
+      "technology": "SYNTEPORE™",
+      "title": "Filtros Hidráulicos ELIMFILTERS SYNTEPORE™",
+      "hero_statement": "Los filtros hidráulicos ELIMFILTERS protegen sistemas hidráulicos de alta precisión en maquinaria pesada y equipos industriales.",
+      "tagline": "Sistemas hidráulicos protegidos. Productividad maximizada.",
+      "description": "Media sintética porosa que protege válvulas y actuadores de precisión contra desgaste prematuro en sistemas de alta presión.",
+      "key_benefits": [
+        "Filtración absoluta que protege componentes de precisión",
+        "Construcción de alta resistencia para presiones hasta 3000 PSI",
+        "Compatible con fluidos sintéticos y minerales",
+        "Eficiencia del 99.5% según normas ISO 16889",
+        "Mantiene sistemas funcionando bajo cargas extremas",
+        "Indicador de saturación integrado en modelos seleccionados"
+      ],
+      "ideal_for": "Excavadoras, grúas, prensas industriales, sistemas hidráulicos de alta presión",
+      "media": "Media sintética porosa",
+      "micron_range": "3-10μ"
+    },
+    "EC1": {
+      "prefix": "EC1",
+      "category": "Cabin",
+      "technology": "MICROKAPPA™",
+      "title": "Filtros de Cabina ELIMFILTERS MICROKAPPA™",
+      "hero_statement": "Los filtros de cabina ELIMFILTERS con MICROKAPPA™ protegen la salud de los ocupantes filtrando polen, polvo, bacterias y olores desagradables.",
+      "tagline": "Aire puro. Viajes saludables. Confort garantizado.",
+      "description": "Filtración multi-capa con microfibra electrostática y carbón activado para máxima calidad de aire en cabina.",
+      "key_benefits": [
+        "Captura 99.5% de polen, polvo y partículas contaminantes",
+        "Capa de carbón activado que elimina olores y gases nocivos",
+        "Microfibra electrostática que filtra bacterias y alérgenos",
+        "Mejora la calidad del aire dentro del vehículo",
+        "Protege el sistema HVAC contra acumulación de suciedad",
+        "Vida útil: 12-15 meses o 15,000 km"
+      ],
+      "ideal_for": "Todo tipo de vehículos y equipos con sistema de climatización",
+      "media": "Microfibra multi-capa + carbón activado",
+      "equivalent_to": "FRAM Fresh Breeze™"
+    },
+    "EM9": {
+      "prefix": "EM9",
+      "category": "Marine",
+      "technology": "MARINEGUARD™",
+      "title": "Filtros Marinos ELIMFILTERS MARINEGUARD™",
+      "hero_statement": "Los filtros ELIMFILTERS MARINEGUARD™ están diseñados específicamente para soportar las condiciones extremas del ambiente marino.",
+      "tagline": "Protección marina. Rendimiento garantizado en el agua.",
+      "description": "Sistema de protección especializado con materiales resistentes a corrosión salina y construcción reforzada para vibraciones marinas extremas.",
+      "key_benefits": [
+        "Construcción Marine Guard™ con recubrimiento anticorrosivo",
+        "Resistencia a corrosión salina y agua marina",
+        "Sello robusto que previene fugas bajo vibración marina extrema",
+        "Compatible con aceites y combustibles marinos",
+        "Diseño específico para motores intraborda, fueraborda y diésel marinos"
+      ],
+      "ideal_for": "Motores marinos, equipos náuticos, sistemas offshore",
+      "media": "Marine-grade synthetic"
+    },
+    "ET9": {
+      "prefix": "ET9",
+      "category": "Turbine",
+      "technology": "AQUAGUARD™",
+      "title": "Filtros Turbina ELIMFILTERS AQUAGUARD™",
+      "hero_statement": "Tecnología avanzada AQUAGUARD™ para sistemas de turbina con múltiples intervalos de servicio (1000FH, 900FH, 500FH).",
+      "tagline": "Separación perfecta. Turbinas protegidas.",
+      "description": "Serie Turbine con media Aquabloc® de máxima eficiencia para separación de agua y protección de sistemas de inyección de precisión.",
+      "key_benefits": [
+        "Eficiencia de separación de agua 99%",
+        "Media Aquabloc® / Turbine™ Series de alto rendimiento",
+        "Múltiples intervalos: 1000FH, 900FH, 500FH",
+        "Cartuchos Serie 2020 (2020PM, 2020TM, 2020SM)",
+        "Protección máxima para turbinas industriales"
+      ],
+      "ideal_for": "Turbinas industriales, generadores de turbina, sistemas de alta eficiencia",
+      "media": "Aquabloc® / Turbine™",
+      "service_intervals": ["1000FH", "900FH", "500FH"]
+    },
+    "ES9": {
+      "prefix": "ES9",
+      "category": "Fuel Separator",
+      "technology": "AQUAGUARD™",
+      "title": "Separadores Combustible/Agua ELIMFILTERS AQUAGUARD™",
+      "hero_statement": "Los separadores ELIMFILTERS con tecnología AQUAGUARD™ ofrecen la protección más avanzada contra agua y contaminantes en sistemas diésel.",
+      "tagline": "Separación perfecta. Motores protegidos.",
+      "description": "Separadores multi-etapa con eficiencia del 99% en separación de agua para máxima protección de inyectores.",
+      "key_benefits": [
+        "Tecnología AQUAGUARD™ con 99% de eficiencia de separación",
+        "Protección crítica de inyectores contra corrosión y desgaste",
+        "Compatible con biodiesel, diésel convencional y mezclas",
+        "Drenaje eficiente de agua condensada",
+        "Construcción robusta para aplicaciones industriales severas"
+      ],
+      "ideal_for": "Motores diésel Heavy Duty, equipos marinos, generadores industriales",
+      "media": "Multi-stage water separation",
+      "equivalent_to": "Racor Turbine Series, Donaldson Aquabloc"
+    },
+    "EW7": {
+      "prefix": "EW7",
+      "category": "Coolant",
+      "technology": "SYNTRAX™",
+      "title": "Filtros de Refrigerante ELIMFILTERS SYNTRAX™",
+      "hero_statement": "Filtración de refrigerante con protección anticorrosión integrada para sistemas de enfriamiento de motores Heavy Duty.",
+      "tagline": "Sistemas de refrigeración protegidos. Motores a temperatura óptima.",
+      "description": "Celulosa sintética reforzada diseñada específicamente para filtración de refrigerante con protección anticorrosión.",
+      "key_benefits": [
+        "Celulosa sintética reforzada de alto rendimiento",
+        "Eficiencia 95-98% en captura de partículas",
+        "Protección anticorrosión integrada",
+        "Compatible con refrigerantes modernos de larga duración",
+        "Protege radiadores y sistemas de enfriamiento"
+      ],
+      "ideal_for": "Sistemas de refrigeración, motores HD, protección de radiadores",
+      "media": "Celulosa sintética reforzada"
+    },
+    "ED4": {
+      "prefix": "ED4",
+      "category": "Air Dryer",
+      "technology": "DESICCANT™",
+      "title": "Secadores de Aire ELIMFILTERS DESICCANT™",
+      "hero_statement": "Sistema desecante avanzado para eliminación de humedad en sistemas de aire comprimido y frenos de aire.",
+      "tagline": "Aire seco. Frenos seguros. Sistemas protegidos.",
+      "description": "Cartucho desecante de alta capacidad diseñado para eliminar humedad en sistemas neumáticos y de frenos.",
+      "key_benefits": [
+        "Cartucho desecante de alta capacidad",
+        "Eliminación eficiente de humedad del aire comprimido",
+        "Protege sistemas neumáticos contra corrosión",
+        "Esencial para sistemas de frenos de aire",
+        "Previene congelamiento en climas fríos"
+      ],
+      "ideal_for": "Secadores de aire, sistemas neumáticos, frenos de aire de camiones",
+      "media": "Desiccant cartridge"
+    },
+    "EK5": {
+      "prefix": "EK5",
+      "category": "Kits Heavy Duty",
+      "title": "Kits de Servicio ELIMFILTERS Heavy Duty",
+      "description": "Kits de servicio completos para mantenimiento Heavy Duty que incluyen todos los filtros necesarios para servicio mayor.",
+      "key_benefits": [
+        "Kit completo para servicio mayor",
+        "Todos los filtros necesarios en un solo paquete",
+        "Garantiza mantenimiento completo",
+        "Ahorro de tiempo en pedidos",
+        "Especialmente diseñados para equipos Heavy Duty"
+      ],
+      "ideal_for": "Mantenimiento programado de equipos pesados, flotas industriales",
+      "note": "Los kits no tienen tecnología filtrante específica, son conjuntos de filtros"
+    },
+    "EK3": {
+      "prefix": "EK3",
+      "category": "Kits Light Duty",
+      "title": "Kits de Servicio ELIMFILTERS Light Duty",
+      "description": "Kits de servicio completos para mantenimiento Light Duty que incluyen todos los filtros necesarios para servicio de vehículos.",
+      "key_benefits": [
+        "Kit completo para servicio de vehículos",
+        "Todos los filtros necesarios en un solo paquete",
+        "Garantiza mantenimiento completo",
+        "Ahorro de tiempo y costos",
+        "Especialmente diseñados para automóviles y camionetas"
+      ],
+      "ideal_for": "Mantenimiento de vehículos de pasajeros, flotas ligeras",
+      "note": "Los kits no tienen tecnología filtrante específica, son conjuntos de filtros"
+    }
+  }
+}

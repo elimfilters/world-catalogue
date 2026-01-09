@@ -1,0 +1,374 @@
+﻿// routes/scraperRoutes.js - ENHANCED VERSION WITH CROSS-REFERENCE SUPPORT
+
+const express = require('express');
+const router = express.Router();
+const puppeteer = require('puppeteer-core');
+
+// ==========================================
+// ENDPOINT DINAMICO: Buscar cualquier SKU
+// Soporta: Codigos Donaldson, OEM y Aftermarket
+// ==========================================
+router.get('/donaldson/:sku', async (req, res) => {
+  const browserlessToken = process.env.BROWSERLESS_TOKEN;
+  const { sku } = req.params;
+
+  if (!browserlessToken) {
+    return res.status(500).json({
+      success: false,
+      error: 'BROWSERLESS_TOKEN no configurado'
+    });
+  }
+
+  let browser;
+  try {
+    console.log(`[SEARCH] Iniciando busqueda para SKU: ${sku}`);
+
+    // Conectar a Browserless
+    browser = await puppeteer.connect({
+      browserWSEndpoint: `wss://production-sfo.browserless.io?token=${browserlessToken}&blockAds=true&stealth=true`
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
+
+    // ========================================
+    // PASO 1: Buscar el SKU en Donaldson
+    // Usando el formato correcto que hace cross-reference automatico
+    // ========================================
+    console.log('[SEARCH] Buscando en Donaldson con cross-reference...');
+    const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*&Ntk=All&originalSearchTerm=${sku}*`;
+    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+
+    // Esperar resultados
+    await page.waitForSelector('a[href*="/product/"], .no-results, .search-results', { timeout: 10000 });
+
+    // ========================================
+    // PASO 2: Extraer el codigo Donaldson del resultado
+    // Donaldson muestra el codigo equivalente automaticamente
+    // ========================================
+    const searchResult = await page.evaluate(() => {
+      // Buscar el producto en los resultados
+      const productLink = document.querySelector('a[href*="/product/"]');
+      
+      if (!productLink) {
+        return { found: false, donaldsonCode: null, productUrl: null };
+      }
+
+      // Extraer el codigo Donaldson de la URL o del texto
+      const href = productLink.href;
+      const codeMatch = href.match(/\/product\/([A-Z0-9-]+)\//);
+      
+      if (!codeMatch) {
+        return { found: false, donaldsonCode: null, productUrl: null };
+      }
+
+      const donaldsonCode = codeMatch[1];
+      
+      // Buscar tambien en el texto del resultado para confirmar
+      const productCard = productLink.closest('.product-tile, .search-result-item, [class*="product"]');
+      let displayedCode = donaldsonCode;
+      
+      if (productCard) {
+        const codeElement = productCard.querySelector('.product-number, .part-number, [class*="code"]');
+        if (codeElement) {
+          const textCode = codeElement.textContent.trim();
+          if (textCode.match(/^[A-Z0-9-]+$/)) {
+            displayedCode = textCode;
+          }
+        }
+      }
+
+      return {
+        found: true,
+        donaldsonCode: displayedCode || donaldsonCode,
+        productUrl: href
+      };
+    });
+
+    if (!searchResult.found) {
+      console.log('[ERROR] No se encontro equivalencia en Donaldson');
+      return res.status(404).json({
+        success: false,
+        error: 'Producto no encontrado en Donaldson',
+        skuBuscado: sku,
+        searchUrl: searchUrl
+      });
+    }
+
+    console.log(`[SUCCESS] Codigo Donaldson encontrado: ${searchResult.donaldsonCode}`);
+    console.log(`[INFO] URL del producto: ${searchResult.productUrl}`);
+
+    // ========================================
+    // PASO 3: Navegar a la pagina del producto
+    // ========================================
+    await page.goto(searchResult.productUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+    await page.waitForSelector('body', { timeout: 10000 });
+
+    // ========================================
+    // PASO 4: Extraer TODA la informacion del producto
+    // ========================================
+    const productData = await page.evaluate(() => {
+      const data = {
+        isKit: false,
+        donaldsonCode: '',
+        description: '',
+        specifications: {},
+        kitComponents: [],
+        variants: [],
+        crossReferences: [],
+        equipmentApplications: []
+      };
+
+      // ========================================
+      // 1. INFORMACION BASICA
+      // ========================================
+      const titleElement = document.querySelector('h4, .product-title, [class*="product-name"]');
+      if (titleElement) {
+        const titleText = titleElement.textContent.trim();
+        const codeMatch = titleText.match(/^([A-Z0-9-]+)/);
+        data.donaldsonCode = codeMatch ? codeMatch[1] : titleText;
+      }
+
+      const descElement = document.querySelector('h6, .product-description, [class*="description"]');
+      if (descElement) {
+        data.description = descElement.textContent.trim();
+      }
+
+      // ========================================
+      // 2. DETECTAR SI ES UN KIT
+      // ========================================
+      const bodyText = document.body.innerHTML;
+      const hasKitComponents = bodyText.includes('FILTRE A') ||
+                               bodyText.includes('FILTER,') ||
+                               bodyText.includes('(1) -') ||
+                               bodyText.includes('Kit Components') ||
+                               bodyText.includes('Componentes del Kit');
+
+      if (data.description.toLowerCase().includes('kit') && hasKitComponents) {
+        data.isKit = true;
+
+        // Extraer componentes del kit
+        const componentLinks = document.querySelectorAll('a[href*="/product/"]');
+        const seenComponents = new Set();
+
+        componentLinks.forEach(link => {
+          const href = link.href;
+          const text = link.textContent.trim();
+
+          // Buscar cantidad en el texto anterior
+          const parent = link.parentElement;
+          const parentText = parent ? parent.textContent : '';
+          const qtyMatch = parentText.match(/\((\d+)\)\s*-/);
+          const quantity = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+
+          // Extraer codigo del producto
+          const codeMatch = href.match(/\/product\/([A-Z0-9-]+)\//);
+          if (codeMatch && !seenComponents.has(codeMatch[1])) {
+            seenComponents.add(codeMatch[1]);
+
+            // Buscar descripcion cerca del link
+            let description = text;
+            const nextElement = link.nextElementSibling;
+            if (nextElement && nextElement.textContent.length > description.length) {
+              description = nextElement.textContent.trim();
+            }
+
+            data.kitComponents.push({
+              quantity: quantity,
+              partNumber: codeMatch[1],
+              description: description,
+              url: href
+            });
+          }
+        });
+      }
+
+      // ========================================
+      // 3. ESPECIFICACIONES TECNICAS
+      // ========================================
+      const allText = document.body.innerText;
+      const specs = {};
+
+      // Extraer specs comunes
+      const patterns = {
+        'Thread Size': /Thread Size[:\s]+([^\n]+)/i,
+        'Outer Diameter': /Outer Diameter[:\s]+([^\n]+)/i,
+        'Inner Diameter': /Inner Diameter[:\s]+([^\n]+)/i,
+        'Height': /(?:Height|Length)[:\s]+([^\n]+)/i,
+        'Gasket OD': /Gasket OD[:\s]+([^\n]+)/i,
+        'Gasket ID': /Gasket ID[:\s]+([^\n]+)/i,
+        'Efficiency 99%': /Efficiency 99%[:\s]+([^\n]+)/i,
+        'Media Type': /Media Type[:\s]+([^\n]+)/i,
+        'Collapse Burst': /Collapse[\/\s]+Burst[:\s]+([^\n]+)/i,
+        'Type': /Type[:\s]+([^\n]+)/i,
+        'Style': /Style[:\s]+([^\n]+)/i,
+        'Rated Flow': /Rated Flow[:\s]+([^\n]+)/i,
+        'Max Pressure': /Max(?:imum)? Pressure[:\s]+([^\n]+)/i,
+        'Burst Pressure': /Burst Pressure[:\s]+([^\n]+)/i,
+        'Beta Ratio': /Beta Ratio[:\s]+([^\n]+)/i,
+        'ISO': /ISO[:\s]+([^\n]+)/i
+      };
+
+      for (const [key, pattern] of Object.entries(patterns)) {
+        const match = allText.match(pattern);
+        if (match && match[1]) {
+          specs[key] = match[1].trim();
+        }
+      }
+
+      data.specifications = specs;
+
+      // ========================================
+      // 4. PRODUCTOS ALTERNATIVOS / VARIANTES
+      // ========================================
+      const variantCards = document.querySelectorAll('[class*="variant"], [class*="alternative"]');
+      const seenVariants = new Set([data.donaldsonCode]);
+
+      variantCards.forEach(card => {
+        const codeElement = card.querySelector('h5, [class*="code"]');
+        const descElement = card.querySelector('h6, [class*="description"]');
+        const noteElement = card.querySelector('p, [class*="note"]');
+
+        if (codeElement) {
+          const code = codeElement.textContent.trim();
+          if (!seenVariants.has(code)) {
+            seenVariants.add(code);
+            data.variants.push({
+              code: code,
+              description: descElement ? descElement.textContent.trim() : '',
+              note: noteElement ? noteElement.textContent.trim() : ''
+            });
+          }
+        }
+      });
+
+      // Tambien buscar en texto plano
+      const variantPattern = /([A-Z]{2,}[0-9]{4,})\s*-\s*([^\n]+)/g;
+      let match;
+      while ((match = variantPattern.exec(allText)) !== null) {
+        const code = match[1];
+        if (!seenVariants.has(code) && code !== data.donaldsonCode) {
+          seenVariants.add(code);
+          data.variants.push({
+            code: code,
+            description: match[2].trim(),
+            note: ''
+          });
+        }
+      }
+
+      // ========================================
+      // 5. CROSS REFERENCES (Tabla de equivalencias)
+      // ========================================
+      const crossRefTable = document.querySelector('table');
+      if (crossRefTable) {
+        const rows = crossRefTable.querySelectorAll('tr');
+        rows.forEach(row => {
+          const cells = row.querySelectorAll('td');
+          if (cells.length >= 2) {
+            const manufacturer = cells[0].textContent.trim();
+            const partNumber = cells[1].textContent.trim();
+            const notes = cells[2] ? cells[2].textContent.trim() : '';
+
+            if (manufacturer && partNumber) {
+              data.crossReferences.push({
+                manufacturer: manufacturer,
+                partNumber: partNumber,
+                notes: notes
+              });
+            }
+          }
+        });
+      }
+
+      // ========================================
+      // 6. EQUIPMENT APPLICATIONS
+      // ========================================
+      const equipmentTable = document.querySelectorAll('table')[1];
+      if (equipmentTable) {
+        const rows = equipmentTable.querySelectorAll('tr');
+        rows.forEach(row => {
+          const cells = row.querySelectorAll('td');
+          if (cells.length >= 5) {
+            data.equipmentApplications.push({
+              equipment: cells[0].textContent.trim(),
+              year: cells[1].textContent.trim(),
+              type: cells[2].textContent.trim(),
+              engine: cells[4].textContent.trim()
+            });
+          }
+        });
+      }
+
+      return data;
+    });
+
+    // ========================================
+    // PASO 5: Determinar tipo de filtro
+    // ========================================
+    const filterType = determineFilterType(productData.description);
+
+    // ========================================
+    // PASO 6: Construir respuesta completa
+    // ========================================
+    const response = {
+      success: true,
+      data: {
+        skuBuscado: sku,
+        donaldsonCode: searchResult.donaldsonCode,
+        isOEMSearch: sku.toUpperCase() !== searchResult.donaldsonCode.toUpperCase(),
+        description: productData.description,
+        filterType: filterType,
+        isKit: productData.isKit,
+        specifications: productData.specifications,
+        kitComponents: productData.kitComponents,
+        variants: productData.variants,
+        crossReferences: productData.crossReferences,
+        equipmentApplications: productData.equipmentApplications,
+        urlFinal: searchResult.productUrl,
+        searchUrl: searchUrl,
+        timestamp: new Date().toISOString(),
+        version: "ENHANCED_CROSSREF_v2"
+      }
+    };
+
+    console.log('[SUCCESS] Scraping completado exitosamente');
+    console.log(`[INFO] Especificaciones encontradas: ${Object.keys(productData.specifications).length}`);
+    console.log(`[INFO] Cross-references encontradas: ${productData.crossReferences.length}`);
+    
+    res.json(response);
+
+  } catch (error) {
+    console.error('[ERROR] Error en scraping:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      skuBuscado: sku,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
+  }
+});
+
+// ==========================================
+// FUNCION AUXILIAR: Determinar tipo de filtro
+// ==========================================
+function determineFilterType(description) {
+  const desc = description.toLowerCase();
+
+  if (desc.includes('air') || desc.includes('aire')) return 'Air';
+  if (desc.includes('lube') || desc.includes('oil') || desc.includes('huile') || desc.includes('aceite')) return 'Lube';
+  if (desc.includes('fuel') || desc.includes('carburant') || desc.includes('combustible')) return 'Fuel';
+  if (desc.includes('hydraulic') || desc.includes('hydraulique') || desc.includes('hidraulico')) return 'Hydraulic';
+  if (desc.includes('cabin') || desc.includes('cabine') || desc.includes('cabina')) return 'Cabin';
+  if (desc.includes('coolant') || desc.includes('liquido de refrig')) return 'Coolant';
+  if (desc.includes('transmission') || desc.includes('transmision')) return 'Transmission';
+  if (desc.includes('kit')) return 'Kit';
+
+  return 'Unknown';
+}
+
+module.exports = router;
