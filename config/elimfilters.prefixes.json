@@ -1,0 +1,69 @@
+{
+  "prefixes": {
+    "OIL": "EL8",
+    "LUBE": "EL8",
+    "AIR": "EA1",
+    "FUEL": "EF9",
+    "HYDRAULIC": "EH6",
+    "CABIN": "EC1",
+    "MARINE": "EM9",
+    "TURBINE": "ET9",
+    "FUEL_SEPARATOR": "ES9",
+    "COOLANT": "EW7",
+    "AIR_DRYER": "ED4",
+    "KIT_HD": "EK5",
+    "KIT_LD": "EK3"
+  },
+  "trilogy_variants": {
+    "STANDARD": {
+      "name": "Standard",
+      "media": "Celulosa estándar",
+      "description": "Filtración económica y confiable",
+      "price_multiplier": 1.0
+    },
+    "PERFORMANCE": {
+      "name": "Performance",
+      "media": "Celulosa mejorada",
+      "description": "Mayor capacidad de retención",
+      "price_multiplier": 1.3
+    },
+    "ELITE": {
+      "name": "Elite",
+      "media": "Sintético premium",
+      "description": "Máxima eficiencia y duración",
+      "price_multiplier": 1.8
+    }
+  },
+  "filter_types": {
+    "OIL": {
+      "name": "Oil Filter",
+      "category": "Lubrication",
+      "typical_micron": "20-40"
+    },
+    "AIR": {
+      "name": "Air Filter",
+      "category": "Air Intake",
+      "typical_micron": "5-10"
+    },
+    "FUEL": {
+      "name": "Fuel Filter",
+      "category": "Fuel System",
+      "typical_micron": "2-10"
+    },
+    "HYDRAULIC": {
+      "name": "Hydraulic Filter",
+      "category": "Hydraulic System",
+      "typical_micron": "3-25"
+    },
+    "CABIN": {
+      "name": "Cabin Air Filter",
+      "category": "HVAC",
+      "typical_micron": "10-30"
+    },
+    "MARINE": {
+      "name": "Marine Filter",
+      "category": "Marine Systems",
+      "typical_micron": "10-40"
+    }
+  }
+}
