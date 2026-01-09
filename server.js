@@ -3,6 +3,8 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
+const filterSearchRouter = require('./routes/filter.search.api');
+app.use('/api', filterSearchRouter);
 app.use(cors());
 app.use(express.json());
 
@@ -34,3 +36,4 @@ app.listen(PORT, () => {
   console.log("   GET  /api/scraper/donaldson/:sku");
   console.log("   POST /api/scraper/donaldson/batch  <-- MUST EXIST");
 });
+
