@@ -1,13 +1,24 @@
 ﻿const express = require('express');
 const router = express.Router();
-const scraperRoutes = require('./scraperRoutes');
+const { processFilterRequest } = require('../services/filter.orchestrator');
 
-// Usar el scraper dinámico de Puppeteer
-router.use('/scraper', scraperRoutes);
-
-const saveController = require("../controllers/save.controller");
-router.post("/api/save", saveController);
-module.exports = router;
-router.get("/api/test-save", (req, res) => {
-  res.json({ success: true, message: "Ruta /api/save está registrada en este build" });
+router.get('/filter/:code', async (req, res) => {
+  try {
+    const { code } = req.params;
+    const result = await processFilterRequest(code);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(404).json(result);
+    }
+  } catch (error) {
+    console.error('API Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
+
+module.exports = router;

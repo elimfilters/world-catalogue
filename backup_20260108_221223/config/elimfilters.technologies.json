@@ -1,0 +1,174 @@
+﻿{
+  "technologies_by_prefix": {
+    "EL8": {
+      "category": "Lube (Oil)",
+      "description": "Filtros de aceite/lubricante con sistema TRILOGY de 3 niveles de protección.",
+      "trilogy": {
+        "STANDARD": {
+          "technology": "DURAFLOW™",
+          "tier": "STANDARD",
+          "media": "Celulosa Reforzada con Resina",
+          "efficiency": "Standard",
+          "life_expectancy": "Standard intervals",
+          "applications": ["Light Duty Oil", "Heavy Duty Oil Standard"],
+          "equivalent_to": ["FRAM Extra Guard", "FRAM Tough Guard", "Celulosa estándar"]
+        },
+        "PERFORMANCE": {
+          "technology": "SYNTRAX™",
+          "tier": "PERFORMANCE",
+          "media": "Celulosa Sintética Reforzada",
+          "efficiency": "95-98%",
+          "life_expectancy": "Standard service intervals",
+          "applications": ["Oil HD/LD Performance", "Hydraulic", "Coolant"],
+          "equivalent_to": ["Celulosa mejorada", "Synthetic blend"]
+        },
+        "ELITE": {
+          "technology": "NANOFORCE™",
+          "tier": "ELITE",
+          "media": "Nanofibra Sintética (Ultra-Web™ equivalent)",
+          "efficiency": "99.9%",
+          "life_expectancy": "Extended service intervals",
+          "applications": ["Premium Oil", "Synthetic Oil Applications"],
+          "equivalent_to": ["Donaldson Ultra-Web", "Donaldson Blue", "FRAM Ultra Synthetic"]
+        }
+      },
+      "applications": ["Filtros de aceite HD/LD", "Lubricación de motores", "Sistemas hidráulicos"]
+    },
+    "EA1": {
+      "technology": "NANOFORCE™",
+      "tier": "ELITE",
+      "category": "Air",
+      "media": "Nanofibra Sintética (Ultra-Web™ equivalent)",
+      "efficiency": "99.9%",
+      "description": "Tecnología de nanofibras para captura de partículas ultrafinas con mínima restricción de flujo.",
+      "applications": ["Filtros de aire HD/LD", "Alta eficiencia", "Ambientes polvorientos"],
+      "equivalent_to": ["Donaldson Ultra-Web", "Donaldson Blue"]
+    },
+    "EF9": {
+      "technology": "SYNTEPORE™",
+      "tier": "STANDARD",
+      "category": "Fuel",
+      "media": "Media Sintética Porosa de Alta Capacidad",
+      "efficiency": "98% @ rated micron",
+      "description": "Medio sintético poroso para máxima eficiencia en filtración de combustible.",
+      "applications": ["Combustible diésel", "Biodiesel", "Sistemas de inyección"],
+      "equivalent_to": ["Celulosa combustible", "Standard fuel media"]
+    },
+    "EH6": {
+      "technology": "SYNTEPORE™",
+      "tier": "STANDARD",
+      "category": "Hydraulic",
+      "media": "Media Sintética Porosa de Alta Capacidad",
+      "efficiency": "98% @ rated micron",
+      "description": "Medio sintético poroso de alta eficiencia para protección de sistemas hidráulicos de precisión.",
+      "applications": ["Sistemas hidráulicos HD", "Equipos de construcción", "Maquinaria industrial"]
+    },
+    "EC1": {
+      "technology": "MICROKAPPA™",
+      "tier": "STANDARD",
+      "category": "Cabin",
+      "media": "Microfibra Multi-Capa + Carbón Activado",
+      "efficiency": "Cabin air quality standards",
+      "life_expectancy": "12-15 months / 15,000 km",
+      "description": "Filtración de partículas finas y carbón activado para máxima calidad de aire en cabina.",
+      "applications": ["Aire cabina", "HVAC", "Calidad de aire interior"],
+      "equivalent_to": ["FRAM Fresh Breeze", "Cabin air standard"]
+    },
+    "EM9": {
+      "technology": "MARINEGUARD™",
+      "tier": "MARINE",
+      "category": "Marine",
+      "media": "Marine-Grade Synthetic (corrosion resistant)",
+      "efficiency": "Marine OEM Standards",
+      "life_expectancy": "Marine service intervals",
+      "description": "Protección especializada contra corrosión salina y condiciones extremas del ambiente marino.",
+      "applications": ["Motores marinos", "Equipos náuticos", "Sistemas offshore"]
+    },
+    "ET9": {
+      "technology": "AQUAGUARD™",
+      "tier": "ELITE",
+      "category": "Turbine",
+      "media": "Aquabloc® / Turbine™ Series Media",
+      "efficiency": "99% Water Separation",
+      "description": "Tecnología avanzada de separación para sistemas de turbina con múltiples intervalos de servicio.",
+      "service_intervals": ["1000FH", "900FH", "500FH"],
+      "applications": ["Turbinas industriales", "Generadores", "Sistemas de alta eficiencia"]
+    },
+    "ES9": {
+      "technology": "AQUAGUARD™",
+      "tier": "ELITE",
+      "category": "Fuel Separator",
+      "media": "Aquabloc® / Multi-stage water separation",
+      "efficiency": "99% Water Separation",
+      "description": "Separadores de agua/combustible con tecnología AQUAGUARD™ de máxima eficiencia.",
+      "applications": ["Separación de agua", "Protección de inyectores", "Sistemas diésel"],
+      "equivalent_to": ["Racor Turbine Series", "Donaldson Aquabloc"]
+    },
+    "EW7": {
+      "technology": "SYNTRAX™",
+      "tier": "STANDARD",
+      "category": "Coolant",
+      "media": "Celulosa Sintética Reforzada",
+      "efficiency": "95-98%",
+      "life_expectancy": "Standard service intervals",
+      "description": "Tecnología sintética para filtración de refrigerante con protección anticorrosión integrada.",
+      "applications": ["Sistemas de refrigeración", "Motores HD", "Protección de radiadores"]
+    },
+    "ED4": {
+      "technology": "DESICCANT™",
+      "tier": "STANDARD",
+      "category": "Air Dryer",
+      "media": "Desiccant cartridge",
+      "description": "Sistema desecante avanzado para eliminación de humedad en sistemas de aire comprimido.",
+      "applications": ["Secadores de aire", "Sistemas neumáticos", "Frenos de aire"]
+    },
+    "EK5": {
+      "technology": "N/A",
+      "category": "Kits Heavy Duty",
+      "description": "Kits de servicio completos para mantenimiento Heavy Duty",
+      "note": "Los kits no tienen tecnología específica, son conjuntos de filtros"
+    },
+    "EK3": {
+      "technology": "N/A",
+      "category": "Kits Light Duty",
+      "description": "Kits de servicio completos para mantenimiento Light Duty",
+      "note": "Los kits no tienen tecnología específica, son conjuntos de filtros"
+    },
+    "E2A": {
+      "technology": "N/A",
+      "category": "Air Filter Housings",
+      "description": "Carcasas para filtros de aire Heavy Duty",
+      "note": "Carcasas/housing sin medio filtrante"
+    }
+  },
+  "trilogy_system": {
+    "description": "Sistema TRILOGY de ELIMFILTERS - Un filtro físico con 3 variantes de medio filtrante",
+    "STANDARD": {
+      "typical_technologies": ["DURAFLOW™", "SYNTRAX™", "SYNTEPORE™", "MICROKAPPA™"],
+      "description": "Celulosa estándar - Engineered for everyday operational demands",
+      "media_base": "Celulosa convencional o reforzada",
+      "micron_range": "30-40",
+      "tier": 1,
+      "price_position": "Económico"
+    },
+    "PERFORMANCE": {
+      "typical_technologies": ["SYNTRAX™", "SYNTEPORE™"],
+      "description": "Celulosa mejorada - Enhanced efficiency and dirt-holding capacity",
+      "media_base": "Celulosa sintética / Blend",
+      "micron_range": "15-25",
+      "tier": 2,
+      "price_position": "Medio"
+    },
+    "ELITE": {
+      "typical_technologies": ["NANOFORCE™", "AQUAGUARD™"],
+      "description": "Sintético premium - Maximum synthetic protection for extreme service",
+      "media_base": "100% Sintético / Nanofibra",
+      "micron_range": "10-15",
+      "tier": 3,
+      "price_position": "Premium"
+    }
+  },
+  "version": "2.0.0",
+  "last_updated": "2026-01-06",
+  "status": "PRODUCTION_READY"
+}

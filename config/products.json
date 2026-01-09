@@ -1,0 +1,20 @@
+{
+  "products": [
+    {
+      "id": 2,
+      "title": "Filtro Caterpillar 1R1808 ",
+      "description": "Filtro hidraulico Caterpillar 1R1808, compatible con maquinaria pesada CAT, alta eficiencia, nuevo en caja original",
+      "price": 45.99,
+      "category_id": 1,
+      "user_id": 1,
+      "brand": "Caterpillar",
+      "color": null,
+      "material": null,
+      "size": null,
+      "condition": "nuevo",
+      "model": "1R1808",
+      "created_at": "2026-01-08T21:09:45.215Z"
+    }
+  ],
+  "nextId": 3
+}
