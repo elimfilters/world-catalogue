@@ -17,7 +17,7 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // Health check
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'ok',
     message: 'ELIMFILTERS Backend API',
     version: '1.0.0',
@@ -40,15 +40,15 @@ app.use('/api/filters', filterRoutes);
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Error:', err);
-  res.status(500).json({ 
+  res.status(500).json({
     success: false,
-    error: err.message 
+    error: err.message
   });
 });
 
 // 404 handler
 app.use((req, res) => {
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Endpoint not found',
     path: req.path,
     method: req.method
