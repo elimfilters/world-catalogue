@@ -29,9 +29,23 @@ class ClassifierService {
     let score = 0;
     const details = {};
 
-    const validPrefixes = ['ESO', 'EPO', 'EHO', 'ESA', 'EPA', 'EHA', 'ESF', 'EPF', 'EHF', 
-                          'ESC', 'EPC', 'EHC', 'ESH', 'EPH', 'EHH', 'EMO', 'EMA', 'EMF', 
-                          'EMC', 'ELO', 'ELOP', 'ELOH', 'ELA', 'ELC', 'ELF'];
+    // ✅ 13 PREFIJOS ESPECIALIZADOS ELIMFILTERS
+    const validPrefixes = [
+      'EA1',  // Air - MACROCORE™
+      'EA2',  // Air Filter Housings
+      'EF9',  // Fuel - NANOFORCE™
+      'ES9',  // Fuel/Water Separator - AQUAGUARD™
+      'EC1',  // Cabin - MICROKAPPA™
+      'EH6',  // Hydraulic - SYNTEPORE™
+      'EL8',  // Oil - SYNTRAX™
+      'EW7',  // Coolant - COOLTECH™
+      'EM9',  // Marina - MARINEGUARD™
+      'ET9',  // Turbinas - TURBOSHIELD™
+      'ED4',  // Air Dryer - DRYCORE™
+      'EK5',  // Kits HD
+      'EK3'   // Kits LD
+    ];
+    
     if (validPrefixes.includes(result.elimfiltersPrefix)) {
       score += 40;
       details.validPrefix = true;
@@ -40,14 +54,18 @@ class ClassifierService {
       details.invalidPrefix = result.elimfiltersPrefix;
     }
 
-    const validTypes = ['OIL', 'AIR', 'CABIN', 'FUEL', 'HYDRO', 'TRANS', 'COOL', 
-                       'FUEL_WATER', 'AIR_SAFETY', 'BREATHER'];
+    const validTypes = [
+      'OIL', 'AIR', 'CABIN', 'FUEL', 'HYDRO', 'COOLANT',
+      'MARINE', 'TURBINE', 'AIR_DRYER', 'AIR_HOUSING', 
+      'FUEL_SEPARATOR', 'KIT'
+    ];
+    
     if (validTypes.includes(result.filterType)) {
       score += 20;
       details.validType = true;
     }
 
-    if (['HD', 'LD'].includes(result.duty)) {
+    if (['HD', 'LD', 'HD/LD'].includes(result.duty)) {
       score += 15;
       details.validDuty = true;
     }
@@ -71,15 +89,59 @@ class ClassifierService {
 ${detectedManufacturer ? `Fabricante: ${detectedManufacturer.name}` : ''}
 
 REGLAS ELIMFILTERS:
-- DUTY: HD (equipos industriales, camiones clase 8, construcción, minería, marina) o LD (autos, SUVs, pickups)
-- TIPOS: OIL, AIR, CABIN, FUEL, HYDRO, TRANS, COOL, FUEL_WATER, AIR_SAFETY, BREATHER
-- PREFIJOS HD: ESO/EPO/EHO (Oil), ESA/EPA/EHA (Air), ESF/EPF/EHF (Fuel), ESC/EPC/EHC (Cabin), ESH/EPH/EHH (Hydro)
-- PREFIJOS Marina: EMO (Oil), EMA (Air), EMF (Fuel), EMC (Cabin)
-- PREFIJOS LD: ELO/ELOP/ELOH (Oil), ELA (Air), ELC (Cabin), ELF (Fuel)
-- TECNOLOGÍAS: SYNTRAX™ (Standard), NANOFORCE™ (Premium), SYNTEPORE™ (High-Performance), MARINEGUARD™, AQUAGUARD™
+
+DUTY:
+- HD: Heavy Duty (camiones, construcción, minería, equipos industriales)
+- LD: Light Duty (autos, SUVs, pickups ligeros)
+- HD/LD: Flexible (aplica para ambos)
+
+PREFIJOS Y TECNOLOGÍAS (13 Series):
+
+1. EA1 - Air (HD/LD) → MACROCORE™
+   Air filters for engines, compressors
+   Equivalent: Donaldson Ultraweb/PowerCore
+
+2. EA2 - Air Filter Housings (HD)
+   Air filter housings and assemblies
+
+3. EF9 - Fuel (HD/LD) → NANOFORCE™
+   Premium fuel filters
+
+4. ES9 - Fuel/Water Separator (HD) → AQUAGUARD™
+   Fuel water separators
+
+5. EC1 - Cabin (HD/LD) → MICROKAPPA™
+   Specialized cabin air filters
+
+6. EH6 - Hydraulic (HD) → SYNTEPORE™
+   High-pressure hydraulic filters
+
+7. EL8 - Oil (HD/LD) → SYNTRAX™
+   Oil filters - Equivalent: Donaldson Synteq™
+
+8. EW7 - Coolant (HD) → COOLTECH™
+   Coolant filters
+
+9. EM9 - Marina (HD/LD) → MARINEGUARD™
+   Marine application filters
+
+10. ET9 - Turbines (HD) → TURBOSHIELD™
+    Turbine filters
+
+11. ED4 - Air Dryer (HD) → DRYCORE™
+    Air dryer filters
+
+12. EK5 - Filter Kits (HD)
+    Complete filter kits for heavy duty
+
+13. EK3 - Filter Kits (LD)
+    Complete filter kits for light duty
+
+TIPOS VÁLIDOS:
+OIL, AIR, CABIN, FUEL, HYDRO, COOLANT, MARINE, TURBINE, AIR_DRYER, AIR_HOUSING, FUEL_SEPARATOR, KIT
 
 Responde SOLO JSON válido:
-{"filterType":"OIL","duty":"HD","elimfiltersPrefix":"ESO","technology":"SYNTRAX™","confidence":"high","reasoning":"breve explicación"}`;
+{"filterType":"FUEL_SEPARATOR","duty":"HD","elimfiltersPrefix":"ES9","technology":"AQUAGUARD™","confidence":"high","reasoning":"breve explicación"}`;
 
     const completion = await this.groq.chat.completions.create({
       messages: [
@@ -98,13 +160,28 @@ Responde SOLO JSON válido:
     const prompt = `Código: ${filterCode}
 ${detectedManufacturer ? `Marca: ${detectedManufacturer.name}` : ''}
 
-Clasifica en JSON:
-- filterType: OIL/AIR/FUEL/CABIN/HYDRO/TRANS/COOL/FUEL_WATER/AIR_SAFETY/BREATHER
-- duty: HD (industrial/camiones) o LD (autos)
-- elimfiltersPrefix: Para HD Oil usa ESO (standard), EPO (premium) o EHO (performance). Para HD Air: ESA/EPA/EHA. Para HD Fuel: ESF/EPF/EHF
-- technology: SYNTRAX™/NANOFORCE™/SYNTEPORE™/Standard
-- confidence: high/medium/low
-- reasoning: breve
+Clasifica usando ELIMFILTERS:
+
+filterType: OIL | AIR | CABIN | FUEL | HYDRO | COOLANT | MARINE | TURBINE | AIR_DRYER | AIR_HOUSING | FUEL_SEPARATOR | KIT
+duty: HD | LD | HD/LD
+
+Mapeo:
+- EL8 (SYNTRAX™) → Oil
+- EA1 (MACROCORE™) → Air  
+- EA2 → Air Filter Housing
+- EF9 (NANOFORCE™) → Fuel
+- ES9 (AQUAGUARD™) → Fuel/Water Separator
+- EC1 (MICROKAPPA™) → Cabin
+- EH6 (SYNTEPORE™) → Hydraulic
+- EW7 (COOLTECH™) → Coolant
+- EM9 (MARINEGUARD™) → Marine
+- ET9 (TURBOSHIELD™) → Turbine
+- ED4 (DRYCORE™) → Air Dryer
+- EK5 → Filter Kits HD
+- EK3 → Filter Kits LD
+
+Responde JSON:
+{"filterType":"...","duty":"...","elimfiltersPrefix":"...","technology":"...","confidence":"high/medium/low","reasoning":"..."}
 
 Solo JSON, sin markdown.`;
 
@@ -125,17 +202,64 @@ Solo JSON, sin markdown.`;
     const prompt = `Código de filtro: ${filterCode}
 ${detectedManufacturer ? `Fabricante: ${detectedManufacturer.name}` : ''}
 
-EJEMPLOS:
-- P551329 (Donaldson fuel HD) → {"filterType":"FUEL","duty":"HD","elimfiltersPrefix":"ESF","technology":"Standard","confidence":"high"}
-- 1R-0750 (CAT oil HD) → {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"ESO","technology":"SYNTRAX™","confidence":"high"}
-- LF3000 (Fleetguard oil HD) → {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EPO","technology":"NANOFORCE™","confidence":"high"}
+EJEMPLOS ELIMFILTERS:
 
-PREFIJOS VÁLIDOS:
-HD: ESO,EPO,EHO (oil), ESA,EPA,EHA (air), ESF,EPF,EHF (fuel), ESC,EPC,EHC (cabin), ESH,EPH,EHH (hydro)
-LD: ELO,ELOP,ELOH (oil), ELA (air), ELF (fuel), ELC (cabin)
-Marina: EMO (oil), EMA (air), EMF (fuel), EMC (cabin)
+Oil:
+- P551329 (Donaldson) → {"filterType":"OIL","duty":"HD/LD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
+- 1R-0750 (CAT) → {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
 
-Responde JSON idéntico al ejemplo. Sin markdown.`;
+Air:
+- P181050 (Donaldson) → {"filterType":"AIR","duty":"HD","elimfiltersPrefix":"EA1","technology":"MACROCORE™","confidence":"high"}
+- AF25454 (Fleetguard) → {"filterType":"AIR","duty":"HD/LD","elimfiltersPrefix":"EA1","technology":"MACROCORE™","confidence":"high"}
+
+Air Housing:
+- AH19037 → {"filterType":"AIR_HOUSING","duty":"HD","elimfiltersPrefix":"EA2","technology":"N/A","confidence":"high"}
+
+Fuel:
+- FS19532 (Fleetguard) → {"filterType":"FUEL","duty":"HD/LD","elimfiltersPrefix":"EF9","technology":"NANOFORCE™","confidence":"high"}
+
+Fuel Separator:
+- FS19765 (Fleetguard) → {"filterType":"FUEL_SEPARATOR","duty":"HD","elimfiltersPrefix":"ES9","technology":"AQUAGUARD™","confidence":"high"}
+- P551004 (Donaldson) → {"filterType":"FUEL_SEPARATOR","duty":"HD","elimfiltersPrefix":"ES9","technology":"AQUAGUARD™","confidence":"high"}
+
+Cabin:
+- P608667 → {"filterType":"CABIN","duty":"HD/LD","elimfiltersPrefix":"EC1","technology":"MICROKAPPA™","confidence":"high"}
+
+Hydraulic:
+- P164378 → {"filterType":"HYDRO","duty":"HD","elimfiltersPrefix":"EH6","technology":"SYNTEPORE™","confidence":"high"}
+
+Coolant:
+- WF2075 → {"filterType":"COOLANT","duty":"HD","elimfiltersPrefix":"EW7","technology":"COOLTECH™","confidence":"high"}
+
+Marine:
+- LF3594 → {"filterType":"MARINE","duty":"HD/LD","elimfiltersPrefix":"EM9","technology":"MARINEGUARD™","confidence":"high"}
+
+Turbine:
+- Gas Turbine → {"filterType":"TURBINE","duty":"HD","elimfiltersPrefix":"ET9","technology":"TURBOSHIELD™","confidence":"high"}
+
+Air Dryer:
+- AD27750 → {"filterType":"AIR_DRYER","duty":"HD","elimfiltersPrefix":"ED4","technology":"DRYCORE™","confidence":"high"}
+
+Kits:
+- LK3116 → {"filterType":"KIT","duty":"HD","elimfiltersPrefix":"EK5","technology":"N/A","confidence":"high"}
+- TK316 → {"filterType":"KIT","duty":"LD","elimfiltersPrefix":"EK3","technology":"N/A","confidence":"high"}
+
+MAPEO SIMPLE:
+Oil → EL8 (SYNTRAX™)
+Air → EA1 (MACROCORE™)
+Air Housing → EA2
+Fuel → EF9 (NANOFORCE™)
+Fuel Separator → ES9 (AQUAGUARD™)
+Cabin → EC1 (MICROKAPPA™)
+Hydraulic → EH6 (SYNTEPORE™)
+Coolant → EW7 (COOLTECH™)
+Marine → EM9 (MARINEGUARD™)
+Turbine → ET9 (TURBOSHIELD™)
+Air Dryer → ED4 (DRYCORE™)
+Kit HD → EK5
+Kit LD → EK3
+
+Responde JSON exacto. Sin markdown.`;
 
     const completion = await this.groq.chat.completions.create({
       messages: [
@@ -300,12 +424,20 @@ Responde JSON idéntico al ejemplo. Sin markdown.`;
       const byType = await FilterClassification.aggregate([
         { $group: { _id: '$filterType', count: { $sum: 1 } } }
       ]);
+      const byPrefix = await FilterClassification.aggregate([
+        { $group: { _id: '$elimfiltersPrefix', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]);
+      const byTechnology = await FilterClassification.aggregate([
+        { $group: { _id: '$technology', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]);
       const byManufacturer = await FilterClassification.aggregate([
         { $group: { _id: '$manufacturer', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 20 }
       ]);
-      return { total, byDuty, byType, topManufacturers: byManufacturer };
+      return { total, byDuty, byType, byPrefix, byTechnology, topManufacturers: byManufacturer };
     } catch (error) {
       console.error('Error obteniendo estadísticas:', error);
       throw error;
