@@ -25,71 +25,203 @@ class ClassifierService {
     return null;
   }
 
-  async classifyWithGroq(filterCode, manufacturerHint = null) {
+  evaluateClassification(result, detectedManufacturer) {
+    let score = 0;
+    const details = {};
+
+    const validPrefixes = ['ESO', 'EPO', 'EHO', 'ESA', 'EPA', 'EHA', 'ESF', 'EPF', 'EHF', 
+                          'ESC', 'EPC', 'EHC', 'ESH', 'EPH', 'EHH', 'EMO', 'EMA', 'EMF', 
+                          'EMC', 'ELO', 'ELOP', 'ELOH', 'ELA', 'ELC', 'ELF'];
+    if (validPrefixes.includes(result.elimfiltersPrefix)) {
+      score += 40;
+      details.validPrefix = true;
+    } else {
+      details.validPrefix = false;
+      details.invalidPrefix = result.elimfiltersPrefix;
+    }
+
+    const validTypes = ['OIL', 'AIR', 'CABIN', 'FUEL', 'HYDRO', 'TRANS', 'COOL', 
+                       'FUEL_WATER', 'AIR_SAFETY', 'BREATHER'];
+    if (validTypes.includes(result.filterType)) {
+      score += 20;
+      details.validType = true;
+    }
+
+    if (['HD', 'LD'].includes(result.duty)) {
+      score += 15;
+      details.validDuty = true;
+    }
+
+    if (result.confidence === 'high') score += 15;
+    else if (result.confidence === 'medium') score += 10;
+    else if (result.confidence === 'low') score += 5;
+    details.confidence = result.confidence;
+
+    if (detectedManufacturer && result.manufacturer === detectedManufacturer.name) {
+      score += 10;
+      details.manufacturerMatch = true;
+    }
+
+    details.totalScore = score;
+    return { score, details };
+  }
+
+  async strategy1(filterCode, detectedManufacturer) {
+    const prompt = `Clasifica este código de filtro: ${filterCode}
+${detectedManufacturer ? `Fabricante: ${detectedManufacturer.name}` : ''}
+
+REGLAS ELIMFILTERS:
+- DUTY: HD (equipos industriales, camiones clase 8, construcción, minería, marina) o LD (autos, SUVs, pickups)
+- TIPOS: OIL, AIR, CABIN, FUEL, HYDRO, TRANS, COOL, FUEL_WATER, AIR_SAFETY, BREATHER
+- PREFIJOS HD: ESO/EPO/EHO (Oil), ESA/EPA/EHA (Air), ESF/EPF/EHF (Fuel), ESC/EPC/EHC (Cabin), ESH/EPH/EHH (Hydro)
+- PREFIJOS Marina: EMO (Oil), EMA (Air), EMF (Fuel), EMC (Cabin)
+- PREFIJOS LD: ELO/ELOP/ELOH (Oil), ELA (Air), ELC (Cabin), ELF (Fuel)
+- TECNOLOGÍAS: SYNTRAX™ (Standard), NANOFORCE™ (Premium), SYNTEPORE™ (High-Performance), MARINEGUARD™, AQUAGUARD™
+
+Responde SOLO JSON válido:
+{"filterType":"OIL","duty":"HD","elimfiltersPrefix":"ESO","technology":"SYNTRAX™","confidence":"high","reasoning":"breve explicación"}`;
+
+    const completion = await this.groq.chat.completions.create({
+      messages: [
+        { role: 'system', content: 'Experto en filtros industriales. Responde SOLO JSON válido, sin markdown.' },
+        { role: 'user', content: prompt }
+      ],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.1,
+      max_tokens: 300
+    });
+
+    return this.parseGroqResponse(completion);
+  }
+
+  async strategy2(filterCode, detectedManufacturer) {
+    const prompt = `Código: ${filterCode}
+${detectedManufacturer ? `Marca: ${detectedManufacturer.name}` : ''}
+
+Clasifica en JSON:
+- filterType: OIL/AIR/FUEL/CABIN/HYDRO/TRANS/COOL/FUEL_WATER/AIR_SAFETY/BREATHER
+- duty: HD (industrial/camiones) o LD (autos)
+- elimfiltersPrefix: Para HD Oil usa ESO (standard), EPO (premium) o EHO (performance). Para HD Air: ESA/EPA/EHA. Para HD Fuel: ESF/EPF/EHF
+- technology: SYNTRAX™/NANOFORCE™/SYNTEPORE™/Standard
+- confidence: high/medium/low
+- reasoning: breve
+
+Solo JSON, sin markdown.`;
+
+    const completion = await this.groq.chat.completions.create({
+      messages: [
+        { role: 'system', content: 'Responde solo JSON limpio.' },
+        { role: 'user', content: prompt }
+      ],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.2,
+      max_tokens: 250
+    });
+
+    return this.parseGroqResponse(completion);
+  }
+
+  async strategy3(filterCode, detectedManufacturer) {
+    const prompt = `Código de filtro: ${filterCode}
+${detectedManufacturer ? `Fabricante: ${detectedManufacturer.name}` : ''}
+
+EJEMPLOS:
+- P551329 (Donaldson fuel HD) → {"filterType":"FUEL","duty":"HD","elimfiltersPrefix":"ESF","technology":"Standard","confidence":"high"}
+- 1R-0750 (CAT oil HD) → {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"ESO","technology":"SYNTRAX™","confidence":"high"}
+- LF3000 (Fleetguard oil HD) → {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EPO","technology":"NANOFORCE™","confidence":"high"}
+
+PREFIJOS VÁLIDOS:
+HD: ESO,EPO,EHO (oil), ESA,EPA,EHA (air), ESF,EPF,EHF (fuel), ESC,EPC,EHC (cabin), ESH,EPH,EHH (hydro)
+LD: ELO,ELOP,ELOH (oil), ELA (air), ELF (fuel), ELC (cabin)
+Marina: EMO (oil), EMA (air), EMF (fuel), EMC (cabin)
+
+Responde JSON idéntico al ejemplo. Sin markdown.`;
+
+    const completion = await this.groq.chat.completions.create({
+      messages: [
+        { role: 'system', content: 'Clasifica filtros siguiendo los ejemplos exactamente. Solo JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.05,
+      max_tokens: 200
+    });
+
+    return this.parseGroqResponse(completion);
+  }
+
+  parseGroqResponse(completion) {
+    const response = completion.choices[0]?.message?.content || '';
+    const cleaned = response.replace(/```json|```/g, '').trim();
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('No JSON encontrado');
+    return JSON.parse(jsonMatch[0]);
+  }
+
+  async classifyWithMatrix(filterCode, manufacturerHint = null) {
     try {
       const detectedManufacturer = this.detectManufacturer(filterCode);
-      const prompt = `Clasifica este código de filtro: ${filterCode}
-${detectedManufacturer ? `Fabricante detectado: ${detectedManufacturer.name}` : ''}
-${manufacturerHint ? `Pista del fabricante: ${manufacturerHint}` : ''}
+      const results = [];
 
-REGLAS DE CLASIFICACIÓN ELIMFILTERS:
-1. DUTY (Heavy vs Light):
-   - Heavy Duty (HD): Equipos industriales, construcción, minería, camiones clase 8, marina, agricultura
-   - Light Duty (LD): Automóviles, SUVs, pickups ligeras, motocicletas
+      console.log(`\n🎯 Clasificando: ${filterCode}`);
+      console.log(`📍 Fabricante detectado: ${detectedManufacturer?.name || 'Ninguno'}\n`);
 
-2. TIPOS DE FILTRO:
-   - OIL: Filtros de aceite de motor
-   - AIR: Filtros de aire primarios
-   - CABIN: Filtros de cabina/aire acondicionado
-   - FUEL: Filtros de combustible (diesel/gasolina)
-   - HYDRO: Filtros hidráulicos
-   - TRANS: Filtros de transmisión
-   - COOL: Filtros de refrigerante
-   - FUEL_WATER: Separadores agua/combustible
-   - AIR_SAFETY: Filtros de seguridad de aire
-   - BREATHER: Filtros respiraderos
+      const strategies = [
+        { name: 'Detallado', fn: this.strategy1.bind(this) },
+        { name: 'Simplificado', fn: this.strategy2.bind(this) },
+        { name: 'Por Ejemplos', fn: this.strategy3.bind(this) }
+      ];
 
-3. PREFIJOS ELIMFILTERS (SKU):
-   Heavy Duty Oil: ESO (Standard SYNTRAX™), EPO (Premium NANOFORCE™), EHO (High-Performance SYNTEPORE™)
-   Heavy Duty Air: ESA, EPA, EHA
-   Heavy Duty Fuel: ESF, EPF, EHF
-   Heavy Duty Cabin: ESC, EPC, EHC
-   Marine: EMO (Marine Oil MARINEGUARD™), EMA, EMF (AQUAGUARD™), EMC
-   Light Duty Oil: ELO, ELOP, ELOH
+      for (const strategy of strategies) {
+        try {
+          console.log(`⚙️  Ejecutando estrategia: ${strategy.name}...`);
+          const result = await strategy.fn(filterCode, detectedManufacturer);
+          const evaluation = this.evaluateClassification(result, detectedManufacturer);
+          
+          results.push({
+            strategy: strategy.name,
+            result,
+            evaluation,
+            score: evaluation.score
+          });
+          
+          console.log(`   Score: ${evaluation.score}/100`);
+        } catch (error) {
+          console.log(`   ❌ Error: ${error.message}`);
+          results.push({
+            strategy: strategy.name,
+            error: error.message,
+            score: 0
+          });
+        }
+      }
 
-Responde SOLO en formato JSON:
-{
-  "filterType": "OIL/AIR/FUEL/etc",
-  "duty": "HD/LD",
-  "elimfiltersPrefix": "ESO/EPO/EHO/etc",
-  "technology": "SYNTRAX™/NANOFORCE™/SYNTEPORE™/MARINEGUARD™/AQUAGUARD™/Standard",
-  "confidence": "high/medium/low",
-  "reasoning": "explicación breve"
-}`;
+      results.sort((a, b) => b.score - a.score);
+      const best = results[0];
 
-      const completion = await this.groq.chat.completions.create({
-        messages: [
-          { role: 'system', content: 'Eres un experto en clasificación de filtros industriales. Responde SOLO en formato JSON válido.' },
-          { role: 'user', content: prompt }
-        ],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.1,
-        max_tokens: 500
-      });
+      console.log(`\n🏆 Mejor resultado: ${best.strategy} (${best.score}/100)\n`);
 
-      const response = completion.choices[0]?.message?.content || '';
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error('No se pudo extraer JSON de la respuesta');
-      const classification = JSON.parse(jsonMatch[0]);
-      
+      if (best.score < 50) {
+        throw new Error('Todos los intentos obtuvieron score bajo (<50)');
+      }
+
       return {
         filterCode,
         manufacturer: detectedManufacturer?.name || manufacturerHint || 'Unknown',
-        ...classification,
-        detectedManufacturer
+        ...best.result,
+        detectedManufacturer,
+        matrix: results.map(r => ({
+          strategy: r.strategy,
+          score: r.score,
+          details: r.evaluation?.details,
+          error: r.error
+        })),
+        selectedStrategy: best.strategy,
+        finalScore: best.score
       };
+
     } catch (error) {
-      console.error('Error clasificando con GROQ:', error);
+      console.error('Error en clasificación con matriz:', error);
       throw error;
     }
   }
@@ -114,8 +246,9 @@ Responde SOLO en formato JSON:
 
   async processFilter(filterCode, manufacturerHint = null) {
     try {
-      const classification = await this.classifyWithGroq(filterCode, manufacturerHint);
+      const classification = await this.classifyWithMatrix(filterCode, manufacturerHint);
       const elimfiltersSKU = this.generateSKU(classification);
+      
       const fullClassification = {
         originalCode: filterCode,
         manufacturer: classification.manufacturer,
@@ -126,8 +259,12 @@ Responde SOLO en formato JSON:
         technology: classification.technology,
         confidence: classification.confidence,
         reasoning: classification.reasoning,
-        detectedManufacturer: classification.detectedManufacturer
+        detectedManufacturer: classification.detectedManufacturer,
+        evaluationMatrix: classification.matrix,
+        selectedStrategy: classification.selectedStrategy,
+        finalScore: classification.finalScore
       };
+      
       const saved = await this.saveClassification(fullClassification);
       return { success: true, classification: saved };
     } catch (error) {
