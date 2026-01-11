@@ -52,7 +52,6 @@ app.post('/api/validate-filter', async (req, res) => {
       return res.status(400).json({ error: 'filterCode is required' });
     }
     
-    // Usar el nuevo classifier
     const result = await classifierService.processFilter(filterCode);
     
     if (result.success) {
@@ -122,6 +121,31 @@ app.get('/api/classifier/stats', async (req, res) => {
     res.json(stats);
   } catch (error) {
     console.error('Stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===============================
+// ADMIN ENDPOINT - Limpiar DB
+// ===============================
+app.post('/api/admin/clean-db', async (req, res) => {
+  try {
+    const { secret } = req.body;
+    
+    if (secret !== 'ELIMFILTERS2026') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const FilterClassification = require('./models/FilterClassification');
+    const result = await FilterClassification.deleteMany({});
+    
+    res.json({
+      success: true,
+      message: 'Base de datos limpiada',
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Error limpiando DB:', error);
     res.status(500).json({ error: error.message });
   }
 });
