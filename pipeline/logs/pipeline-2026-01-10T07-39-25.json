@@ -1,0 +1,35 @@
+{
+  "total": 3,
+  "classified": 0,
+  "scraped": 0,
+  "savedMongoDB": 0,
+  "savedGoogleSheets": 0,
+  "failed": [
+    "P150695",
+    "DBA5047",
+    "G150049"
+  ],
+  "log": [
+    {
+      "sku": "P150695",
+      "timestamp": "2026-01-10T07:39:24.957Z",
+      "steps": {
+        "classification": "FAILED"
+      }
+    },
+    {
+      "sku": "DBA5047",
+      "timestamp": "2026-01-10T07:39:25.193Z",
+      "steps": {
+        "classification": "FAILED"
+      }
+    },
+    {
+      "sku": "G150049",
+      "timestamp": "2026-01-10T07:39:25.235Z",
+      "steps": {
+        "classification": "FAILED"
+      }
+    }
+  ]
+}

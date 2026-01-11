@@ -1,0 +1,71 @@
+{
+  "competitorCode": "57MD42M",
+  "donaldsonCode": "P150695",
+  "url": "https://shop.donaldson.com/store/es-us/product/P150695/15683?_requestid=15414224",
+  "scrapedAt": "2026-01-10T05:12:44.187Z",
+  "mainInfo": {
+    "code": "P150695",
+    "description": "FILTRO DE AIRE, PRIMARIO KONEPAC",
+    "fullTitle": "P150695 - FILTRO DE AIRE, PRIMARIO KONEPAC"
+  },
+  "atributos": {
+    "Diámetro exterior": "10.62 Pulgadas (269.8 MM)",
+    "Diámetro interior": "6.61 Pulgadas (167.8 MM)",
+    "Longitud": "28.02 Pulgadas (711.7 MM)",
+    "DE menor": "9.21 Pulgadas (233.9 MM)",
+    "Eficiencia": "99.9",
+    "Prueba de eficiencia estándar": "ISO 5011",
+    "Familia": "ECG",
+    "Tipo": "Primario",
+    "Estilo": "Cone",
+    "Marca": "Konepac™",
+    "Tipo de medio": "Cellulose",
+    "Longitud empaquetada": "13.40 inch (34.036 cm)",
+    "Ancho empaquetado": "13.20 inch (33.528 cm)",
+    "Altura empaquetada": "30.60 inch (77.724 cm)",
+    "Peso empaquetado": "11.82 lb (5.364 kg)",
+    "Volumen empaquetado": "3.13 ft3 (0.088 m3)",
+    "Código NMFC": "069100-01",
+    "Código UPC": "742330013311",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "Con este producto puede estar expuesto a sustancias químicas, como el estireno, que según el estado de California puede producir cáncer. Para obtener más información, visite www.P65Warnings.ca.gov."
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "AC DELCO",
+      "numero": "A1140C",
+      "notas": ""
+    },
+    {
+      "fabricante": "AMERICAN PARTS",
+      "numero": "94882",
+      "notas": ""
+    },
+    {
+      "fabricante": "BIG A",
+      "numero": "94882",
+      "notas": ""
+    },
+    {
+      "fabricante": "CATERPILLAR",
+      "numero": "3I0405",
+      "notas": ""
+    },
+    {
+      "fabricante": "CUMMINS",
+      "numero": "01402464",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "FREIGHTLINER FL112 - - - Camión - - - DETROIT DIESEL SERIES 60 - - - Ver productos  »",
+    "FREIGHTLINER FLA - - - Camión - - - CUMMINS NTC855 - - - Ver productos  »",
+    "FREIGHTLINER FLA - - - Camión - - - CUMMINS N14 - - - Ver productos  »",
+    "FREIGHTLINER FLA - - - Camión - - - CATERPILLAR 3406 - - - Ver productos  »"
+  ],
+  "productosAlternativos": [
+    {
+      "code": "DBA5047",
+      "description": "FILTRO DE AIRE, PRIMARIO KONEPAC DONALDSON BLUE"
+    }
+  ]
+}

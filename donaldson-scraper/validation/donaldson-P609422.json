@@ -1,0 +1,92 @@
+{
+  "competitorCode": "P609422",
+  "donaldsonCode": "P609422",
+  "url": "https://shop.donaldson.com/store/es-us/product/P609422/31236",
+  "scrapedAt": "2026-01-10T06:50:36.497Z",
+  "mainInfo": {
+    "code": "P609422",
+    "description": "FILTRO DE AIRE, PANEL DE VENTILACIÓN",
+    "fullTitle": "P609422 - FILTRO DE AIRE, PANEL DE VENTILACIÓN"
+  },
+  "atributos": {
+    "Longitud": "10.63 Pulgadas (270 MM)",
+    "Ancho": "10.63 Pulgadas (270 MM)",
+    "Altura": "0.98 Pulgadas (24.99 MM)",
+    "Prueba de eficiencia estándar": "SAE J1669",
+    "Tipo": "Ventilación",
+    "Estilo": "Panel",
+    "Longitud empaquetada": "0.91 FT",
+    "Ancho empaquetado": "0.91 FT",
+    "Altura empaquetada": "0.11 FT",
+    "Peso empaquetado": "0.40 lb (0.182 kg)",
+    "Volumen empaquetado": "0.09 ft3 (0.003 m3)",
+    "Código NMFC": "069100-05",
+    "Código UPC": "742330162033",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "No es necesario"
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "ABPN10G91559",
+      "notas": ""
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "T1000291S",
+      "notas": ""
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "T1000921S",
+      "notas": ""
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "T1000068C",
+      "notas": ""
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "BOA91559",
+      "notas": ""
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "91559",
+      "notas": ""
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "VCCT1000921S",
+      "notas": ""
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "VCT1000921S",
+      "notas": ""
+    },
+    {
+      "fabricante": "KRALINATOR",
+      "numero": "LA4318",
+      "notas": ""
+    },
+    {
+      "fabricante": "MEI CORPORATION",
+      "numero": "7998",
+      "notas": ""
+    },
+    {
+      "fabricante": "VMC",
+      "numero": "AF609422",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "FREIGHTLINER ARGOSY - - - Camión - - - DETROIT DIESEL DD15 - EURO 5 - Ver productos  »",
+    "FREIGHTLINER ARGOSY - - - Camión - - - DETROIT DIESEL DD15 - - - Ver productos  »",
+    "FREIGHTLINER CASCADIA - 2020 - Camión - - - CUMMINS ISX15 - - - Ver productos  »",
+    "FREIGHTLINER CASCADIA - 2021 - Camión - - - CUMMINS ISX15 - - - Ver productos  »",
+    "FREIGHTLINER CASCADIA - 2022 - Camión - - - CUMMINS ISX15 - - - Ver productos  »"
+  ],
+  "productosAlternativos": []
+}

@@ -1,0 +1,392 @@
+﻿require('dotenv').config(); // Lee .env de la raíz
+
+const Groq = require('groq-sdk');
+const fs = require('fs');
+const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURACIÓN
+// ═══════════════════════════════════════════════════════════════
+
+// Leer credenciales Google desde archivo JSON
+let googleCredentials = null;
+try {
+    const credPath = './pipeline/config/google-credentials.json';
+    if (fs.existsSync(credPath)) {
+        googleCredentials = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+        console.log('✅ Credenciales Google cargadas');
+    }
+} catch (error) {
+    console.error('❌ Error leyendo credenciales:', error.message);
+}
+
+const CONFIG = {
+    groq: {
+        apiKey: process.env.GROQ_API_KEY
+    },
+    googleSheets: {
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        credentials: googleCredentials || {
+            client_email: process.env.GOOGLE_CLIENT_EMAIL,
+            private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+        }
+    },
+    useGoogleSheets: process.env.USE_GOOGLE_SHEETS === 'true'
+};
+
+// Validar GROQ API Key
+if (!CONFIG.groq.apiKey) {
+    console.error('❌ ERROR: GROQ_API_KEY no configurada en .env');
+    console.log('💡 Edita: pipeline/config/.env\n');
+    process.exit(1);
+}
+
+const groq = new Groq({ apiKey: CONFIG.groq.apiKey });
+
+console.log('\n🔍 VALIDANDO CONFIGURACIÓN...');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log(`✅ GROQ API Key: Configurada`);
+console.log(`📊 Google Sheets: ${CONFIG.useGoogleSheets ? 'Activado' : 'Desactivado'}`);
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+// ═══════════════════════════════════════════════════════════════
+// CLASIFICACIÓN HD vs LD - OEMs GLOBALES
+// ═══════════════════════════════════════════════════════════════
+
+const HD_OEMS = [
+    // América del Norte
+    'caterpillar', 'cat', 'john deere', 'deere', 'case', 'new holland', 'bobcat', 
+    'jcb', 'terex', 'mack', 'freightliner', 'kenworth', 'peterbilt', 'international',
+    'navistar', 'western star', 'cummins', 'detroit diesel', 'paccar', 'agco',
+    'massey ferguson', 'fendt',
+    
+    // Europa
+    'volvo trucks', 'volvo ce', 'scania', 'man trucks', 'mercedes-benz trucks',
+    'liebherr', 'manitou', 'perkins', 'deutz', 'daf trucks', 'iveco', 'renault trucks',
+    
+    // Asia
+    'komatsu', 'hitachi construction', 'kobelco', 'sumitomo', 'tadano', 'yanmar',
+    'xcmg', 'sany', 'zoomlion', 'liugong', 'lonking', 'shantui', 'doosan infracore',
+    'hyundai heavy', 'daewoo', 'ashok leyland', 'mahindra construction', 
+    'hino trucks', 'ud trucks', 'mitsubishi fuso trucks'
+];
+
+const LD_OEMS = [
+    // América del Norte
+    'ford f-150', 'ford explorer', 'ford escape', 'ford bronco sport', 'ford edge',
+    'chevrolet silverado 1500', 'chevrolet colorado', 'chevrolet equinox', 'chevrolet tahoe',
+    'gmc sierra 1500', 'gmc canyon', 'gmc acadia', 'buick', 'cadillac escalade',
+    'ram 1500', 'jeep', 'dodge durango', 'dodge challenger', 'chrysler', 'tesla', 'rivian', 'lucid',
+    
+    // Asia - Japón
+    'toyota camry', 'toyota corolla', 'toyota rav4', 'toyota tacoma', 'toyota tundra', 
+    'toyota 4runner', 'toyota highlander', 'lexus', 'honda accord', 'honda civic', 
+    'honda cr-v', 'honda pilot', 'honda ridgeline', 'acura', 'nissan altima', 
+    'nissan sentra', 'nissan rogue', 'nissan frontier', 'nissan titan', 'infiniti',
+    'mazda cx-5', 'mazda cx-9', 'mazda3', 'mazda6', 'subaru outback', 'subaru forester',
+    'subaru crosstrek', 'subaru ascent', 'mitsubishi outlander', 'mitsubishi eclipse cross',
+    'suzuki', 'daihatsu', 'isuzu d-max',
+    
+    // Asia - Corea
+    'hyundai elantra', 'hyundai sonata', 'hyundai tucson', 'hyundai santa fe', 
+    'hyundai palisade', 'kia forte', 'kia optima', 'kia sportage', 'kia sorento', 
+    'kia telluride', 'genesis',
+    
+    // Asia - China
+    'byd', 'geely', 'great wall', 'haval', 'wey', 'changan', 'saic', 'nio', 
+    'xpeng', 'li auto', 'gac', 'baic', 'chery', 'hongqi',
+    
+    // Asia - India
+    'tata tiago', 'tata nexon', 'tata safari', 'mahindra xuv', 'mahindra scorpio',
+    'maruti suzuki', 'hero motocorp',
+    
+    // Europa - Alemania
+    'volkswagen', 'vw golf', 'vw jetta', 'vw passat', 'vw tiguan', 'vw atlas',
+    'audi a3', 'audi a4', 'audi a6', 'audi q3', 'audi q5', 'audi q7', 'audi q8',
+    'porsche 911', 'porsche cayenne', 'porsche macan', 'porsche taycan',
+    'seat', 'skoda', 'bentley', 'lamborghini', 'bugatti',
+    'mercedes-benz', 'mercedes a-class', 'mercedes c-class', 'mercedes e-class',
+    'mercedes s-class', 'mercedes gla', 'mercedes glc', 'mercedes gle', 'mercedes gls',
+    'amg', 'maybach', 'smart',
+    'bmw', 'bmw 2 series', 'bmw 3 series', 'bmw 5 series', 'bmw 7 series',
+    'bmw x1', 'bmw x3', 'bmw x5', 'bmw x7', 'mini', 'rolls-royce', 'opel',
+    
+    // Europa - Francia
+    'peugeot', 'citroen', 'ds automobiles', 'renault', 'renault clio', 'renault megane',
+    'renault captur', 'alpine', 'dacia',
+    
+    // Europa - Italia
+    'fiat', 'fiat 500', 'alfa romeo', 'maserati', 'lancia', 'ferrari',
+    
+    // Europa - UK
+    'jaguar', 'land rover', 'range rover', 'defender', 'discovery', 'lotus',
+    'mclaren', 'aston martin',
+    
+    // Europa - Suecia
+    'volvo cars', 'volvo s60', 'volvo s90', 'volvo xc40', 'volvo xc60', 'volvo xc90',
+    'polestar', 'koenigsegg'
+];
+
+// ═══════════════════════════════════════════════════════════════
+// FUNCIÓN: DETERMINAR DUTY (HD vs LD)
+// ═══════════════════════════════════════════════════════════════
+
+function determineDuty(applications) {
+    const appLower = applications.toLowerCase();
+    
+    let hdCount = 0;
+    let ldCount = 0;
+    
+    // Contar coincidencias HD
+    for (const oem of HD_OEMS) {
+        if (appLower.includes(oem.toLowerCase())) {
+            hdCount++;
+        }
+    }
+    
+    // Contar coincidencias LD
+    for (const oem of LD_OEMS) {
+        if (appLower.includes(oem.toLowerCase())) {
+            ldCount++;
+        }
+    }
+    
+    // Palabras clave adicionales
+    const hdKeywords = ['heavy duty', 'construction', 'mining', 'industrial', 'agriculture', 'diesel engine'];
+    const ldKeywords = ['light duty', 'passenger', 'automotive', 'car', 'suv', 'sedan', 'gasoline'];
+    
+    hdKeywords.forEach(kw => {
+        if (appLower.includes(kw)) hdCount += 2;
+    });
+    
+    ldKeywords.forEach(kw => {
+        if (appLower.includes(kw)) ldCount += 2;
+    });
+    
+    if (hdCount > ldCount) return 'HD';
+    if (ldCount > hdCount) return 'LD';
+    if (hdCount > 0 && ldCount > 0) return 'DUAL';
+    
+    return 'UNKNOWN';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SCRAPER UNIVERSAL CON GROQ
+// ═══════════════════════════════════════════════════════════════
+
+async function scrapeUniversal(sku) {
+    console.log(`🔍 Scraping universal: ${sku}`);
+
+    try {
+        const prompt = `Extract complete filter information for part number: ${sku}
+
+Search across ALL filter manufacturers (Donaldson, Fleetguard, Baldwin, FRAM, WIX, Mann, Parker Racor, etc.)
+
+Extract and return as JSON:
+{
+  "sku": "${sku}",
+  "manufacturer": "string",
+  "filter_type": "Oil|Fuel|Air|Hydraulic|Coolant|Cabin|Transmission",
+  "description": "string",
+  "technical_specs": {
+    "outer_diameter_mm": number or null,
+    "inner_diameter_mm": number or null,
+    "height_mm": number or null,
+    "thread": "string or null",
+    "micron_rating": number or null,
+    "media_type": "Cellulose|Synthetic|Blend",
+    "efficiency_percent": number or null
+  },
+  "oem_applications": "string - list all OEM equipment/vehicles that use this filter (Caterpillar, Ford, Toyota, etc.)",
+  "cross_references": [
+    {
+      "manufacturer": "string",
+      "part_number": "string",
+      "tier": "OEM_TIER1|AFTERMARKET"
+    }
+  ],
+  "donaldson_equivalent": "string or null - ONLY if HD filter",
+  "fram_equivalent": "string or null - ONLY if LD filter"
+}
+
+IMPORTANT: 
+- Include as many cross-references as possible
+- Identify OEM applications to determine if HD or LD
+- Find Donaldson equivalent for HD applications
+- Find FRAM equivalent for LD applications`;
+
+        const completion = await groq.chat.completions.create({
+            model: 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0,
+            max_tokens: 2500,
+            tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+            tool_choice: 'auto'
+        });
+
+        const response = completion.choices[0].message.content;
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+
+        if (!jsonMatch) {
+            console.error(`   ❌ No se pudo extraer JSON`);
+            return null;
+        }
+
+        const data = JSON.parse(jsonMatch[0]);
+        
+        // Determinar DUTY
+        const duty = determineDuty(data.oem_applications || '');
+        data.duty = duty;
+        
+        console.log(`   ✅ Extraído: ${data.manufacturer} | ${data.filter_type}`);
+        console.log(`   📊 DUTY: ${duty}`);
+        console.log(`   🔗 Cross-refs: ${data.cross_references?.length || 0}`);
+
+        // Agregar timestamp
+        data.scrapedAt = new Date().toISOString();
+
+        return data;
+
+    } catch (error) {
+        console.error(`   ❌ Error: ${error.message}`);
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GUARDAR EN GOOGLE SHEETS
+// ═══════════════════════════════════════════════════════════════
+
+async function saveToGoogleSheets(data, sheet) {
+    if (!CONFIG.useGoogleSheets) return true;
+
+    console.log(`   📊 Guardando en Google Sheets...`);
+
+    try {
+        const row = {
+            'SKU': data.sku,
+            'Manufacturer': data.manufacturer || 'N/A',
+            'Filter Type': data.filter_type || 'N/A',
+            'DUTY': data.duty || 'UNKNOWN',
+            'Description': data.description || 'N/A',
+            'OEM Applications': data.oem_applications || 'N/A',
+            'Donaldson Equiv': data.donaldson_equivalent || 'N/A',
+            'FRAM Equiv': data.fram_equivalent || 'N/A',
+            'Technical Specs': JSON.stringify(data.technical_specs || {}),
+            'Cross References': JSON.stringify(data.cross_references || []),
+            'Scraped At': data.scrapedAt
+        };
+
+        await sheet.addRow(row);
+        console.log(`   ✅ Guardado en Sheet`);
+
+        return true;
+
+    } catch (error) {
+        console.error(`   ❌ Error Sheet: ${error.message}`);
+        return false;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PIPELINE PRINCIPAL
+// ═══════════════════════════════════════════════════════════════
+
+async function runUniversalPipeline(skuList) {
+    console.log('\n🚀 UNIVERSAL SCRAPER - TODOS LOS FABRICANTES');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📋 SKUs a procesar: ${skuList.length}\n`);
+
+    let googleSheet = null;
+
+    if (CONFIG.useGoogleSheets) {
+        try {
+            const serviceAccountAuth = new JWT({
+                email: CONFIG.googleSheets.credentials.client_email,
+                key: CONFIG.googleSheets.credentials.private_key,
+                scopes: ['https://www.googleapis.com/auth/spreadsheets']
+            });
+
+            const doc = new GoogleSpreadsheet(CONFIG.googleSheets.spreadsheetId, serviceAccountAuth);
+            await doc.loadInfo();
+            googleSheet = doc.sheetsByIndex[0];
+            console.log(`📊 Google Sheets conectado: ${doc.title}\n`);
+        } catch (error) {
+            console.error(`❌ Error Google Sheets: ${error.message}\n`);
+            CONFIG.useGoogleSheets = false;
+        }
+    }
+
+    const results = {
+        total: skuList.length,
+        scraped: 0,
+        savedGoogleSheets: 0,
+        failed: [],
+        byDuty: { HD: 0, LD: 0, DUAL: 0, UNKNOWN: 0 }
+    };
+
+    for (let i = 0; i < skuList.length; i++) {
+        const sku = skuList[i];
+        console.log(`\n[${i + 1}/${skuList.length}] ${sku}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        const data = await scrapeUniversal(sku);
+
+        if (!data) {
+            results.failed.push(sku);
+            continue;
+        }
+
+        results.scraped++;
+        results.byDuty[data.duty]++;
+
+        // Guardar JSON local
+        const filename = `pipeline/logs/${sku.replace(/[\/\\]/g, '_')}.json`;
+        fs.writeFileSync(filename, JSON.stringify(data, null, 2));
+        console.log(`   💾 JSON guardado: ${filename}`);
+
+        // Guardar en Google Sheets
+        if (CONFIG.useGoogleSheets && googleSheet) {
+            const saved = await saveToGoogleSheets(data, googleSheet);
+            if (saved) results.savedGoogleSheets++;
+        }
+
+        if (i < skuList.length - 1) {
+            console.log('   ⏳ Esperando 3 segundos...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+    }
+
+    console.log('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📊 RESUMEN');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📋 Total: ${results.total}`);
+    console.log(`🔍 Scrapeados: ${results.scraped}`);
+    console.log(`📊 Google Sheets: ${results.savedGoogleSheets}`);
+    console.log(`❌ Fallidos: ${results.failed.length}`);
+    console.log('\n📊 POR DUTY:');
+    console.log(`   🔴 HD: ${results.byDuty.HD}`);
+    console.log(`   🔵 LD: ${results.byDuty.LD}`);
+    console.log(`   ⚪ DUAL: ${results.byDuty.DUAL}`);
+    console.log(`   ⚫ UNKNOWN: ${results.byDuty.UNKNOWN}`);
+    console.log('\n🎉 ¡COMPLETADO!\n');
+
+    return results;
+}
+
+async function main() {
+    const skuList = [
+        'LF3620',      // Fleetguard
+        'P550529',     // Donaldson
+        'P565060',     // Donaldson
+        'DBC4086',     // Donaldson
+        'P165354',     // Donaldson
+        'P781466',     // Donaldson
+        'P647714'      // Donaldson
+    ];
+
+    await runUniversalPipeline(skuList);
+}
+
+main();

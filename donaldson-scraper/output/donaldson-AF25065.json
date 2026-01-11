@@ -1,0 +1,71 @@
+{
+  "competitorCode": "AF25065",
+  "donaldsonCode": "P771508",
+  "url": "https://shop.donaldson.com/store/es-us/product/P771508/21575?_requestid=15418025",
+  "scrapedAt": "2026-01-10T05:23:42.331Z",
+  "mainInfo": {
+    "code": "P771508",
+    "description": "FILTRO DE AIRE, PRIMARIO REDONDO",
+    "fullTitle": "P771508 - FILTRO DE AIRE, PRIMARIO REDONDO"
+  },
+  "atributos": {
+    "Diámetro exterior": "8.93 Pulgadas (226.8 MM)",
+    "Diámetro interior": "4.56 Pulgadas (115.8 MM)",
+    "Longitud": "14.61 Pulgadas (371.1 MM)",
+    "Longitud total": "15.12 Pulgadas (384 MM)",
+    "Diámetro del orificio del perno": "0.44 Pulgadas (11.2 MM)",
+    "Eficiencia": "99.9",
+    "Prueba de eficiencia estándar": "ISO 5011",
+    "Tipo": "Primario",
+    "Estilo": "Redondo",
+    "Tipo de medio": "Cellulose",
+    "Longitud empaquetada": "9.80 inch (24.892 cm)",
+    "Ancho empaquetado": "9.80 inch (24.892 cm)",
+    "Altura empaquetada": "16.40 inch (41.656 cm)",
+    "Peso empaquetado": "5.67 lb (2.572 kg)",
+    "Volumen empaquetado": "0.91 ft3 (0.026 m3)",
+    "Código NMFC": "069100-03",
+    "Código UPC": "742330047392",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "Con este producto puede estar expuesto a sustancias químicas, como el estireno, que según el estado de California puede producir cáncer. Para obtener más información, visite www.P65Warnings.ca.gov."
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "AC DELCO",
+      "numero": "PC185",
+      "notas": ""
+    },
+    {
+      "fabricante": "AC DELCO",
+      "numero": "A1035C",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGRALE",
+      "numero": "8009101128000",
+      "notas": ""
+    },
+    {
+      "fabricante": "AHLMANN",
+      "numero": "4167523A",
+      "notas": ""
+    },
+    {
+      "fabricante": "ALCO",
+      "numero": "MD382",
+      "notas": ""
+    },
+    {
+      "fabricante": "ALLIS-CHALMERS",
+      "numero": "2165054",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "AHLMANN AS12 - - - Cargadores De Ruedas - AS SERIES - DEUTZ BF6L913 - - - Ver productos  »",
+    "AHLMANN AS12D - - - Cargadores De Ruedas - AS SERIES - DEUTZ BF6L913 - - - Ver productos  »",
+    "AHLMANN AS12E - - - Cargadores De Ruedas - AS SERIES - DEUTZ BF6L913 - - - Ver productos  »",
+    "ATLAS COPCO 120D - - - Compresor - - - DEUTZ F4L912 - - - Ver productos  »",
+    "ATLAS COPCO 125D - - - Compresor - - - DEUTZ F4L913 - - - Ver productos  »"
+  ],
+  "productosAlternativos": []
+}

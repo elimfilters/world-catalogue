@@ -1,0 +1,149 @@
+{
+  "competitorCode": "P181050",
+  "donaldsonCode": "P181050",
+  "url": "https://shop.donaldson.com/store/es-us/product/P181050/17813?_requestid=3994792",
+  "scrapedAt": "2026-01-10T05:23:16.210Z",
+  "mainInfo": {
+    "code": "P181050",
+    "description": "FILTRO DE AIRE, PRIMARIO CON ALETAS",
+    "fullTitle": "P181050 - FILTRO DE AIRE, PRIMARIO CON ALETAS"
+  },
+  "atributos": {
+    "Diámetro exterior": "4.09 Pulgadas (104 MM)",
+    "Diámetro interior": "2.48 Pulgadas (62.9 MM)",
+    "Longitud": "10.00 Pulgadas (254 MM)",
+    "DE menor": "0.66 Pulgadas (16.76 MM)",
+    "Eficiencia": "99.9",
+    "Prueba de eficiencia estándar": "ISO 5011",
+    "Familia": "FWA",
+    "Tipo": "Primario",
+    "Estilo": "Finned",
+    "Tipo de medio": "Cellulose",
+    "Longitud empaquetada": "5.50 inch (13.970 cm)",
+    "Ancho empaquetado": "5.60 inch (14.224 cm)",
+    "Altura empaquetada": "13.70 inch (34.798 cm)",
+    "Peso empaquetado": "1.38 lb (0.624 kg)",
+    "Volumen empaquetado": "0.24 ft3 (0.007 m3)",
+    "Código NMFC": "069100-04",
+    "Código UPC": "742330025512",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "Con este producto puede estar expuesto a sustancias químicas, como el estireno, que según el estado de California puede producir cáncer. Para obtener más información, visite www.P65Warnings.ca.gov."
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "A P PARTS",
+      "numero": "AP3422K",
+      "notas": ""
+    },
+    {
+      "fabricante": "AC DELCO",
+      "numero": "A297CL",
+      "notas": ""
+    },
+    {
+      "fabricante": "AC DELCO",
+      "numero": "A297C",
+      "notas": ""
+    },
+    {
+      "fabricante": "AC DELCO",
+      "numero": "PC138",
+      "notas": ""
+    },
+    {
+      "fabricante": "AC DELCO",
+      "numero": "PC138K",
+      "notas": ""
+    },
+    {
+      "fabricante": "AEC WHITLOCK",
+      "numero": "W00052474",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "579873M1",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "1031436M91",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "74943271",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "70257597",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "330071420",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "72097035",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "6646494",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "W885314",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "W885317",
+      "notas": ""
+    },
+    {
+      "fabricante": "AIRMAN-HOKUETSU",
+      "numero": "1540111080",
+      "notas": ""
+    },
+    {
+      "fabricante": "AIRMAN-HOKUETSU",
+      "numero": "3214302600",
+      "notas": ""
+    },
+    {
+      "fabricante": "AIRMAN-HOKUETSU",
+      "numero": "3214300300",
+      "notas": ""
+    },
+    {
+      "fabricante": "AIRMAN-HOKUETSU",
+      "numero": "3214302200",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "ALLIS-CHALMERS 510 - - - Carretilla Elevadora - - - - 510 - - - Ver productos  »",
+    "ALLIS-CHALMERS 615 - - - Retroexcavadora - - - - 615 - - - Ver productos  »",
+    "ALLIS-CHALMERS D15 - - - Tractor - - - ALLIS-CHALMERS G149 - - - Ver productos  »",
+    "ALLIS-CHALMERS E - - - Combinar - - - ALLIS-CHALMERS G226 - - - Ver productos  »",
+    "ALLIS-CHALMERS I60 - - - Tractor - - - - I60 - - - Ver productos  »"
+  ],
+  "productosAlternativos": [
+    {
+      "code": "P182050",
+      "description": "FILTRO DE AIRE, PRIMARIO CON ALETAS"
+    },
+    {
+      "code": "P122510",
+      "description": "FILTRO DE AIRE, PRIMARIO CON ALETAS"
+    },
+    {
+      "code": "P148969",
+      "description": "FILTRO DE AIRE, PRIMARIO CON ALETAS"
+    }
+  ]
+}

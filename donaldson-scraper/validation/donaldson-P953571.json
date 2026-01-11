@@ -1,0 +1,62 @@
+{
+  "competitorCode": "P781466",
+  "donaldsonCode": "P953571",
+  "url": "https://shop.donaldson.com/store/es-us/product/P953571/74836",
+  "scrapedAt": "2026-01-10T06:51:44.320Z",
+  "mainInfo": {
+    "code": "P953571",
+    "description": "SECADOR DE AIRE, ENROSCABLE",
+    "fullTitle": "P953571 - SECADOR DE AIRE, ENROSCABLE"
+  },
+  "atributos": {
+    "Notas": "P953571 = P781466 + 5g Lubricant",
+    "Diámetro exterior": "5.51 Pulgadas (140 MM)",
+    "Tamaño de la rosca": "M39 x 1.5",
+    "Longitud": "6.50 Pulgadas (165 MM)",
+    "Diámetro externo de empaque": "4.32 Pulgadas (109.7 MM)",
+    "Diámetro interno de empaque": "3.88 Pulgadas (98.5 MM)",
+    "Estilo": "Spin-On",
+    "Longitud empaquetada": "5.51 inch (13.995 cm)",
+    "Ancho empaquetado": "5.51 inch (13.995 cm)",
+    "Altura empaquetada": "7.09 inch (18.009 cm)",
+    "Peso empaquetado": "5.82 lb (2.640 kg)",
+    "Volumen empaquetado": "0.12 ft3 (0.003 m3)",
+    "Código NMFC": "069100-13",
+    "Código UPC": "742330983751"
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "AGRALE",
+      "numero": "6008099011006",
+      "notas": "P953571 = P781466 + 5g Lubricante"
+    },
+    {
+      "fabricante": "ALCO",
+      "numero": "SP800",
+      "notas": "P953571 = P781466 + 5g Lubricante"
+    },
+    {
+      "fabricante": "ARVIN",
+      "numero": "R950011",
+      "notas": "P953571 = P781466 + 5g Lubricante"
+    },
+    {
+      "fabricante": "ASKAM KAMYON",
+      "numero": "25242T",
+      "notas": "P953571 = P781466 + 5g Lubricante"
+    },
+    {
+      "fabricante": "ASTRA",
+      "numero": "107163",
+      "notas": "P953571 = P781466 + 5g Lubricante"
+    }
+  ],
+  "productosDelEquipo": [
+    "FENDT 207 F/V VARIO - 2017 - Tractor - 200 F/P/V VARIO S3 SERIES - SISU 33AWI - - - Ver productos  »",
+    "FENDT 207 VARIO - 2017 - Tractor - 200 VARIO S3 SERIES - SISU 33AWI - - - Ver productos  »",
+    "FENDT 208 F/V VARIO - 2017 - Tractor - 200 F/P/V VARIO S3 SERIES - SISU 33AWI - - - Ver productos  »",
+    "FENDT 208 VARIO - 2017 - Tractor - 200 VARIO S3 SERIES - SISU 33AWI - - - Ver productos  »",
+    "FENDT 209 F/P/V VARIO - 2017 - Tractor - 200 F/P/V VARIO S3 SERIES - SISU 33AWI - - - Ver productos  »"
+  ],
+  "productosAlternativos": []
+}

@@ -1,0 +1,52 @@
+{
+  "sku": "LF3620",
+  "manufacturer": "WIX",
+  "filter_type": "Oil",
+  "description": "Oil Filter for Heavy Duty Applications",
+  "technical_specs": {
+    "outer_diameter_mm": 120,
+    "inner_diameter_mm": 70,
+    "height_mm": 150,
+    "thread": "3/4-16 UNF",
+    "micron_rating": 20,
+    "media_type": "Synthetic",
+    "efficiency_percent": 99
+  },
+  "oem_applications": "Caterpillar, Cummins, Detroit Diesel, International, John Deere",
+  "cross_references": [
+    {
+      "manufacturer": "Donaldson",
+      "part_number": "P550020",
+      "tier": "OEM_TIER1"
+    },
+    {
+      "manufacturer": "Fleetguard",
+      "part_number": "LF3620",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "Baldwin",
+      "part_number": "B1434",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "FRAM",
+      "part_number": "PH6607",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "Mann",
+      "part_number": "W 719/1",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "Parker Racor",
+      "part_number": "PFR-1001",
+      "tier": "AFTERMARKET"
+    }
+  ],
+  "donaldson_equivalent": "P550020",
+  "fram_equivalent": null,
+  "duty": "HD",
+  "scrapedAt": "2026-01-10T10:56:21.177Z"
+}

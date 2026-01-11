@@ -1,0 +1,272 @@
+﻿require('dotenv').config({ path: './pipeline/config/.env' });
+
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library');
+
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURACIÓN
+// ═══════════════════════════════════════════════════════════════
+
+// Leer credenciales desde archivo JSON
+let googleCredentials = null;
+try {
+    const credPath = './pipeline/config/google-credentials.json';
+    if (fs.existsSync(credPath)) {
+        googleCredentials = JSON.parse(fs.readFileSync(credPath, 'utf8'));
+        console.log('✅ Credenciales cargadas desde JSON');
+    }
+} catch (error) {
+    console.error('❌ Error leyendo credenciales:', error.message);
+}
+
+const CONFIG = {
+    googleSheets: {
+        spreadsheetId: process.env.GOOGLE_SHEET_ID,
+        credentials: googleCredentials || {
+            client_email: process.env.GOOGLE_CLIENT_EMAIL,
+            private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+        }
+    },
+    useGoogleSheets: process.env.USE_GOOGLE_SHEETS === 'true'
+};
+
+console.log('\n🔍 VALIDANDO CONFIGURACIÓN...');
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+console.log(`📊 Google Sheets: ${CONFIG.useGoogleSheets ? 'Activado' : 'Desactivado'}`);
+console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+// ═══════════════════════════════════════════════════════════════
+// SCRAPER DONALDSON
+// ═══════════════════════════════════════════════════════════════
+async function scrapeDonaldson(partNumber, browser) {
+    console.log(`🟡 Scraping: ${partNumber}`);
+
+    const page = await browser.newPage();
+
+    try {
+        const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${partNumber}`;
+        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.waitForTimeout(3000);
+
+        const product = await page.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a'));
+            for (const link of links) {
+                const match = link.href.match(/\/product\/(P\d{6}|DBA\d{4,}|DBC\d{4,}|G\d{6})/);
+                if (match) return { code: match[1], url: link.href };
+            }
+            return null;
+        });
+
+        if (!product) {
+            await page.close();
+            return null;
+        }
+
+        await page.goto(product.url, { waitUntil: 'networkidle2', timeout: 60000 });
+        await page.waitForTimeout(4000);
+
+        const mainInfo = await page.evaluate((code) => {
+            let description = '';
+            const prodSubTitle = document.querySelector('.prodSubTitle') ||
+                               document.querySelector('.prodSubTitleMob');
+            if (prodSubTitle) description = prodSubTitle.textContent.trim();
+            return { code, description };
+        }, product.code);
+
+        await page.evaluate(() => {
+            const atributosLink = Array.from(document.querySelectorAll('a')).find(a =>
+                a.textContent.includes('Atributos') && a.getAttribute('data-target')
+            );
+            if (atributosLink) atributosLink.click();
+        });
+        await page.waitForTimeout(2000);
+
+        const atributos = await page.evaluate(() => {
+            const specs = {};
+            const container = document.querySelector('.prodSpecInfoDiv');
+            if (container) {
+                container.querySelectorAll('tr').forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 2) {
+                        specs[cells[0].textContent.trim()] = cells[1].textContent.trim();
+                    }
+                });
+            }
+            return specs;
+        });
+
+        await page.evaluate(() => {
+            const refLink = Array.from(document.querySelectorAll('a')).find(a =>
+                a.textContent.includes('Referencia cruzada') && a.getAttribute('data-target')
+            );
+            if (refLink) refLink.click();
+        });
+        await page.waitForTimeout(2000);
+
+        const referenciaCruzada = await page.evaluate(() => {
+            const refs = [];
+            const container = document.querySelector('.ListCrossReferenceDetailPageComp');
+            if (container) {
+                container.querySelectorAll('tr').forEach(row => {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 2) {
+                        refs.push({
+                            fabricante: cells[0].textContent.trim(),
+                            numero: cells[1].textContent.trim()
+                        });
+                    }
+                });
+            }
+            return refs;
+        });
+
+        await page.close();
+
+        console.log(`   ✅ Datos extraídos`);
+
+        return {
+            manufacturer: 'DONALDSON',
+            partNumber: product.code,
+            mainInfo,
+            atributos,
+            referenciaCruzada,
+            scrapedAt: new Date().toISOString()
+        };
+
+    } catch (error) {
+        console.error(`   ❌ Error: ${error.message}`);
+        await page.close();
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GUARDAR EN GOOGLE SHEETS
+// ═══════════════════════════════════════════════════════════════
+async function saveToGoogleSheets(data, sheet) {
+    if (!CONFIG.useGoogleSheets) return true;
+
+    console.log(`   📊 Guardando en Google Sheets...`);
+
+    try {
+        const row = {
+            'SKU': data.partNumber,
+            'Manufacturer': data.manufacturer,
+            'Description': data.mainInfo?.description || 'N/A',
+            'Scraped At': data.scrapedAt,
+            'Technical Specs': JSON.stringify(data.atributos || {}),
+            'Cross References': JSON.stringify(data.referenciaCruzada || [])
+        };
+
+        await sheet.addRow(row);
+        console.log(`   ✅ Guardado en Sheet`);
+
+        return true;
+
+    } catch (error) {
+        console.error(`   ❌ Error Sheet: ${error.message}`);
+        return false;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PIPELINE SIMPLIFICADO
+// ═══════════════════════════════════════════════════════════════
+async function runPipeline(skuList) {
+    console.log('\n🚀 PIPELINE SIMPLIFICADO - SOLO DONALDSON');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📋 SKUs a procesar: ${skuList.length}\n`);
+
+    let googleSheet = null;
+
+    if (CONFIG.useGoogleSheets) {
+        try {
+            const serviceAccountAuth = new JWT({
+                email: CONFIG.googleSheets.credentials.client_email,
+                key: CONFIG.googleSheets.credentials.private_key,
+                scopes: ['https://www.googleapis.com/auth/spreadsheets']
+            });
+
+            const doc = new GoogleSpreadsheet(CONFIG.googleSheets.spreadsheetId, serviceAccountAuth);
+            await doc.loadInfo();
+            googleSheet = doc.sheetsByIndex[0];
+            console.log(`📊 Google Sheets conectado: ${doc.title}\n`);
+        } catch (error) {
+            console.error(`❌ Error Google Sheets: ${error.message}\n`);
+            CONFIG.useGoogleSheets = false;
+        }
+    }
+
+    const browser = await puppeteer.launch({
+        headless: false,
+        defaultViewport: { width: 1920, height: 1080 }
+    });
+
+    const results = {
+        total: skuList.length,
+        scraped: 0,
+        savedGoogleSheets: 0,
+        failed: []
+    };
+
+    for (let i = 0; i < skuList.length; i++) {
+        const sku = skuList[i];
+        console.log(`\n[${i + 1}/${skuList.length}] ${sku}`);
+        console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+        const data = await scrapeDonaldson(sku, browser);
+
+        if (!data) {
+            results.failed.push(sku);
+            continue;
+        }
+
+        results.scraped++;
+
+        // Guardar JSON local
+        const filename = `pipeline/logs/${sku}.json`;
+        fs.writeFileSync(filename, JSON.stringify(data, null, 2));
+        console.log(`   💾 JSON guardado: ${filename}`);
+
+        // Guardar en Google Sheets
+        if (CONFIG.useGoogleSheets && googleSheet) {
+            const saved = await saveToGoogleSheets(data, googleSheet);
+            if (saved) results.savedGoogleSheets++;
+        }
+
+        if (i < skuList.length - 1) {
+            console.log('   ⏳ Esperando 2 segundos...');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+    }
+
+    await browser.close();
+
+    console.log('\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log('📊 RESUMEN');
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.log(`📋 Total: ${results.total}`);
+    console.log(`🔍 Scrapeados: ${results.scraped}`);
+    console.log(`📊 Google Sheets: ${results.savedGoogleSheets}`);
+    console.log(`❌ Fallidos: ${results.failed.length}`);
+    console.log('\n🎉 ¡COMPLETADO!\n');
+
+    return results;
+}
+
+async function main() {
+    const skuList = [
+        'LF3620',      // FRAM (Luber-Finer)
+        'P550529',     // Donaldson
+        'P565060',     // Donaldson
+        'DBC4086',     // Donaldson
+        'P165354',     // Donaldson
+        'P781466',     // Donaldson
+        'P647714'      // Donaldson
+    ];
+    await runPipeline(skuList);
+}
+
+main();

@@ -1,0 +1,60 @@
+{
+  "manufacturer": "DONALDSON",
+  "partNumber": "G150049",
+  "mainInfo": {
+    "code": "G150049",
+    "description": "FILTRO DE AIRE, EPG RADIALSEAL"
+  },
+  "atributos": {
+    "Diámetro de entrada": "7.00 Pulgadas (177.8 MM)",
+    "Diámetro de salida": "7.00 Pulgadas (177.8 MM)",
+    "Diámetro del cuerpo máximo": "14.62 Pulgadas (371.35 MM)",
+    "Longitud del cuerpo": "13.89 Pulgadas (352.81 MM)",
+    "Longitud total": "17.52 Pulgadas (445.01 MM)",
+    "Rango bajo de restricción": "5.98 Pulg H2O (14.91 mbar)",
+    "Rango medio de restricción": "7.99 Pulg H2O (19.91 mbar)",
+    "Rango alto de restricción": "10 Pulg H2O (24.91 mbar)",
+    "Estilo": "Radialseal",
+    "Familia": "EPG",
+    "Marca": "RadialSeal™",
+    "Longitud empaquetada": "19.30 inch (49.022 cm)",
+    "Ancho empaquetado": "16.30 inch (41.402 cm)",
+    "Altura empaquetada": "18.20 inch (46.228 cm)",
+    "Peso empaquetado": "15.79 lb (7.169 kg)",
+    "Volumen empaquetado": "3.31 ft3 (0.093 m3)",
+    "Código NMFC": "069100-01",
+    "Código UPC": "742330002209",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "Con este producto puede estar expuesto a sustancias químicas, como el estireno, que según el estado de California puede producir cáncer. Para obtener más información, visite www.P65Warnings.ca.gov."
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "AUTOCAR",
+      "numero": "A2200003001"
+    },
+    {
+      "fabricante": "CASE/CASE IH",
+      "numero": "BN2296141"
+    },
+    {
+      "fabricante": "CASE/CASE IH",
+      "numero": "NG150049"
+    },
+    {
+      "fabricante": "FREIGHTLINER",
+      "numero": "DNG150049"
+    },
+    {
+      "fabricante": "NEOPLAN",
+      "numero": "DONG150049"
+    },
+    {
+      "fabricante": "NEOPLAN",
+      "numero": "QJ0203001"
+    },
+    {
+      "fabricante": "TYLER POWER PRODUCTS",
+      "numero": "2296141"
+    }
+  ],
+  "scrapedAt": "2026-01-10T09:38:16.894Z"
+}

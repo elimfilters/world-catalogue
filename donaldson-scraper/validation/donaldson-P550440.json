@@ -1,0 +1,77 @@
+{
+  "competitorCode": "P550440",
+  "donaldsonCode": "P550440",
+  "url": "https://shop.donaldson.com/store/es-us/product/P550440/20376?_requestid=4026144",
+  "scrapedAt": "2026-01-10T06:49:52.167Z",
+  "mainInfo": {
+    "code": "P550440",
+    "description": "FILTRO DE COMBUSTIBLE, ENROSCABLE SECUNDARIO",
+    "fullTitle": "P550440 - FILTRO DE COMBUSTIBLE, ENROSCABLE SECUNDARIO"
+  },
+  "atributos": {
+    "Tubo de soporte": "Sí S/N",
+    "Diámetro exterior": "3.02 Pulgadas (76.8 MM)",
+    "Tamaño de la rosca": "M16 x 1.5",
+    "Longitud": "4.72 Pulgadas (120 MM)",
+    "Diámetro externo de empaque": "2.76 Pulgadas (70.2 MM)",
+    "Diámetro interno de empaque": "2.38 Pulgadas (60.5 MM)",
+    "Eficiencia 99%": "16 MICRÓN",
+    "Prueba de eficiencia estándar": "ISO 19438",
+    "Ráfaga de colapso": "100 PSI (6.9 Bar)",
+    "Tipo": "Secundario",
+    "Estilo": "Spin-On",
+    "Tipo de medio": "Cellulose",
+    "Longitud empaquetada": "3.20 inch (8.128 cm)",
+    "Ancho empaquetado": "3.05 inch (7.747 cm)",
+    "Altura empaquetada": "5.30 inch (13.462 cm)",
+    "Peso empaquetado": "0.89 lb (0.404 kg)",
+    "Volumen empaquetado": "0.03 ft3 (0.001 m3)",
+    "Código NMFC": "069100-13",
+    "Código UPC": "742330042489"
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "AC DELCO",
+      "numero": "TP1067",
+      "notas": ""
+    },
+    {
+      "fabricante": "AG CHEM EQUIPMENT",
+      "numero": "3903640",
+      "notas": ""
+    },
+    {
+      "fabricante": "AG CHEM EQUIPMENT",
+      "numero": "709935",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "709935",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "72501530",
+      "notas": ""
+    },
+    {
+      "fabricante": "AMERICAN MOTORS CORPORATION",
+      "numero": "SFF5052",
+      "notas": ""
+    },
+    {
+      "fabricante": "ATLAS COPCO",
+      "numero": "1310032244",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "AG CHEM EQUIPMENT 004 - - - Pulverizador - TERRAGATOR - CUMMINS 6CTA8.3 - - - Ver productos  »",
+    "AG CHEM EQUIPMENT 1703 - - - Pulverizador - TERRAGATOR - CUMMINS 6CTA8.3 - - - Ver productos  »",
+    "AG CHEM EQUIPMENT 1803 - - - Pulverizador - TERRAGATOR - CUMMINS 6CTA8.3 - - - Ver productos  »",
+    "AG CHEM EQUIPMENT 1804 - - - Pulverizador - TERRAGATOR - CUMMINS 6CTA8.3 - - - Ver productos  »",
+    "AG CHEM EQUIPMENT 2004 - - - Pulverizador - GO-GATOR - CUMMINS 6BTA5.9 - - - Ver productos  »"
+  ],
+  "productosAlternativos": []
+}

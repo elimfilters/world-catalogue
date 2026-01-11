@@ -1,0 +1,27 @@
+{
+  "successful": [
+    {
+      "competitorCode": "57MD42M",
+      "donaldsonCode": "P150695",
+      "description": "FILTRO DE AIRE, PRIMARIO KONEPAC",
+      "alternativesFound": 1
+    },
+    {
+      "competitorCode": "DBA5047",
+      "donaldsonCode": "DBA5047",
+      "description": "FILTRO DE AIRE, PRIMARIO KONEPAC DONALDSON BLUE",
+      "alternativesFound": 1
+    },
+    {
+      "competitorCode": "P150695",
+      "donaldsonCode": "P150695",
+      "description": "FILTRO DE AIRE, PRIMARIO KONEPAC",
+      "alternativesFound": 1
+    }
+  ],
+  "failed": [],
+  "totalProcessed": 3,
+  "alternativesFound": 1,
+  "startTime": "2026-01-10T06:12:54.643Z",
+  "endTime": "2026-01-10T06:14:07.519Z"
+}

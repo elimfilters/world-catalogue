@@ -1,0 +1,97 @@
+{
+  "competitorCode": "P954895",
+  "donaldsonCode": "P954895",
+  "url": "https://shop.donaldson.com/store/es-us/product/P954895/prod420035",
+  "scrapedAt": "2026-01-10T06:51:23.217Z",
+  "mainInfo": {
+    "code": "P954895",
+    "description": "FILTRO DE COMBUSTIBLE, ENROSCABLE SEPARADOR DE AGUA",
+    "fullTitle": "P954895 - FILTRO DE COMBUSTIBLE, ENROSCABLE SEPARADOR DE AGUA"
+  },
+  "atributos": {
+    "Diámetro exterior": "4.25 Pulgadas (108 MM)",
+    "Tamaño de la rosca": "1-14 UN",
+    "Longitud": "6.22 Pulgadas (158 MM)",
+    "Diámetro externo de empaque": "4.02 Pulgadas (102 MM)",
+    "Diámetro interno de empaque": "3.70 Pulgadas (94 MM)",
+    "Rosca del depósito": "3 1/8-10 UN",
+    "Longitud total": "6.32 Pulgadas (160.5 MM)",
+    "Eficiencia 50%": "9 MICRÓN",
+    "Eficiencia 90%": "20 MICRÓN",
+    "Eficiencia 95%": "25 MICRÓN",
+    "Eficiencia 99%": "30 MICRÓN",
+    "Prueba de eficiencia estándar": "ISO 19438",
+    "Eficiencia de H2O emulsionada": "90 POR CIENTO",
+    "Tipo": "Separador de agua",
+    "Estilo": "Spin-On",
+    "Tipo de medio": "Cellulose, Meltblown",
+    "Aplicación principal": "VOLVO 21380488",
+    "Longitud empaquetada": "4.72 inch (11.989 cm)",
+    "Ancho empaquetado": "4.72 inch (11.989 cm)",
+    "Altura empaquetada": "6.69 inch (16.993 cm)",
+    "Peso empaquetado": "1.76 lb (0.800 kg)",
+    "Volumen empaquetado": "0.09 ft3 (0.003 m3)",
+    "Código NMFC": "069100-13",
+    "Código UPC": "742330992913"
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "MACK",
+      "numero": "20539578",
+      "notas": ""
+    },
+    {
+      "fabricante": "RENAULT VI",
+      "numero": "7420745605",
+      "notas": ""
+    },
+    {
+      "fabricante": "RENAULT VI",
+      "numero": "7421380483",
+      "notas": ""
+    },
+    {
+      "fabricante": "RENAULT VI",
+      "numero": "7420998349",
+      "notas": ""
+    },
+    {
+      "fabricante": "VOLVO",
+      "numero": "21380483",
+      "notas": ""
+    },
+    {
+      "fabricante": "VOLVO",
+      "numero": "20745605",
+      "notas": ""
+    },
+    {
+      "fabricante": "VOLVO",
+      "numero": "P21380488",
+      "notas": ""
+    },
+    {
+      "fabricante": "VOLVO",
+      "numero": "20879812",
+      "notas": ""
+    },
+    {
+      "fabricante": "VOLVO",
+      "numero": "21380488",
+      "notas": ""
+    },
+    {
+      "fabricante": "VOLVO",
+      "numero": "20788794",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "RENAULT VI KERAX 380 DXI - 2011 - Camión - KERAX - RENAULT VI DXI 11 - EURO 5 - Ver productos  »",
+    "RENAULT VI KERAX 430 DXI - 2011 - Camión - KERAX - RENAULT VI DXI 11 - EURO 5 - Ver productos  »",
+    "RENAULT VI KERAX 460 DXI - 2009 - Camión - KERAX - RENAULT VI DXI 13 - EURO 4, EURO 5 - Ver productos  »",
+    "RENAULT VI KERAX 460 DXI - 2011 - Camión - KERAX - RENAULT VI DXI 11 - EURO 5 - Ver productos  »",
+    "RENAULT VI KERAX 480 DXI - 2011 - Camión - KERAX - RENAULT VI DXI 13 - EURO 4, EURO 5 - Ver productos  »"
+  ],
+  "productosAlternativos": []
+}

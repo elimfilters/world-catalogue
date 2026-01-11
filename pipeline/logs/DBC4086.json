@@ -1,0 +1,47 @@
+{
+  "sku": "DBC4086",
+  "manufacturer": "Baldwin",
+  "filter_type": "Oil",
+  "description": "Oil Filter for Heavy-Duty Applications",
+  "technical_specs": {
+    "outer_diameter_mm": 120,
+    "inner_diameter_mm": 70,
+    "height_mm": 150,
+    "thread": "3/4-16 UNF",
+    "micron_rating": 20,
+    "media_type": "Synthetic",
+    "efficiency_percent": 99
+  },
+  "oem_applications": "Caterpillar, John Deere, Komatsu, Case IH",
+  "cross_references": [
+    {
+      "manufacturer": "Donaldson",
+      "part_number": "P550025",
+      "tier": "OEM_TIER1"
+    },
+    {
+      "manufacturer": "Fleetguard",
+      "part_number": "LF16000",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "WIX",
+      "part_number": "51358",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "Mann",
+      "part_number": "W719/1",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "Parker Racor",
+      "part_number": "PH2160",
+      "tier": "AFTERMARKET"
+    }
+  ],
+  "donaldson_equivalent": "P550025",
+  "fram_equivalent": null,
+  "duty": "HD",
+  "scrapedAt": "2026-01-10T10:56:34.347Z"
+}

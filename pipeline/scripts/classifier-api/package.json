@@ -1,0 +1,29 @@
+{
+    "name": "elimfilters-classifier-api",
+    "version": "1.0.0",
+    "description": "ELIMFILTERS Universal Filter Classifier API - MongoDB + GROQ AI",
+    "main": "server.js",
+    "scripts": {
+        "start": "node src/server.js",
+        "dev": "nodemon server.js"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "express-rate-limit": "^7.1.5",
+        "googleapis": "^170.0.0",
+        "groq-sdk": "^0.3.3",
+        "helmet": "^7.1.0",
+        "mongodb": "^6.3.0",
+        "mongoose": "^9.1.2"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.2"
+    },
+    "author": "ELIMFILTERS",
+    "license": "PRIVATE"
+}

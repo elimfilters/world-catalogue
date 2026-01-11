@@ -1,0 +1,86 @@
+{
+  "competitorCode": "DBC4088",
+  "donaldsonCode": "DBC4088",
+  "url": "https://shop.donaldson.com/store/es-us/product/DBC4088/35267",
+  "scrapedAt": "2026-01-10T06:52:06.086Z",
+  "mainInfo": {
+    "code": "DBC4088",
+    "description": "FILTRO DE REFRIGERANTE, ENROSCABLE DONALDSON BLUE",
+    "fullTitle": "DBC4088 - FILTRO DE REFRIGERANTE, ENROSCABLE DONALDSON BLUE"
+  },
+  "atributos": {
+    "Diámetro exterior": "3.66 Pulgadas (93 MM)",
+    "Tamaño de la rosca": "11/16-16 UN",
+    "Longitud": "5.35 Pulgadas (136 MM)",
+    "Diámetro externo de empaque": "2.83 Pulgadas (72 MM)",
+    "Diámetro interno de empaque": "2.44 Pulgadas (62 MM)",
+    "Eficiencia 99%": "14 MICRÓN",
+    "Prueba de eficiencia estándar": "SAE J1985",
+    "Estilo": "Spin-On",
+    "Marca": "SCA",
+    "Marca de medios": "Synteq™",
+    "Tipo de medio": "Sintético",
+    "Longitud empaquetada": "3.90 inch (9.906 cm)",
+    "Ancho empaquetado": "3.90 inch (9.906 cm)",
+    "Altura empaquetada": "5.70 inch (14.478 cm)",
+    "Peso empaquetado": "1.85 lb (0.840 kg)",
+    "Volumen empaquetado": "0.05 ft3 (0.001 m3)",
+    "Código NMFC": "069100-13",
+    "Código UPC": "742330164211",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "Con este producto puede estar expuesto a sustancias químicas, como el formaldehído, que según el estado de California puede causar cáncer. Para obtener más información, visite www.P65Warnings.ca.gov."
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "BIG A",
+      "numero": "96082",
+      "notas": ""
+    },
+    {
+      "fabricante": "BIG A",
+      "numero": "96088",
+      "notas": ""
+    },
+    {
+      "fabricante": "CUMMINS",
+      "numero": "XWF4242",
+      "notas": ""
+    },
+    {
+      "fabricante": "CUMMINS",
+      "numero": "3098688",
+      "notas": ""
+    },
+    {
+      "fabricante": "DETROIT DIESEL",
+      "numero": "23516489",
+      "notas": ""
+    },
+    {
+      "fabricante": "GENERAC",
+      "numero": "OE6795B",
+      "notas": ""
+    },
+    {
+      "fabricante": "HYUNDAI",
+      "numero": "11ND70211",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "FREIGHTLINER CENTURY CLASS - - - Camión - S/T (SAFETY & TECHNOLOGY) - CUMMINS M11 - - - Ver productos  »",
+    "FREIGHTLINER CENTURY CLASS - - - Camión - - - DETROIT DIESEL SERIES 60 - - - Ver productos  »",
+    "FREIGHTLINER CENTURY CLASS S/T - - - Camión - - - DETROIT DIESEL SERIES 60 - - - Ver productos  »",
+    "FREIGHTLINER CLASSIC XL - - - Camión - - - DETROIT DIESEL SERIES 60 - - - Ver productos  »",
+    "FREIGHTLINER CORONADO - - - Camión - - - CATERPILLAR C15 - - - Ver productos  »"
+  ],
+  "productosAlternativos": [
+    {
+      "code": "P552071",
+      "description": "FILTRO DE REFRIGERANTE, ENROSCABLE SCA PLUS"
+    },
+    {
+      "code": "P554071",
+      "description": "FILTRO DE REFRIGERANTE, ENROSCABLE"
+    }
+  ]
+}

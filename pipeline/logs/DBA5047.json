@@ -1,0 +1,39 @@
+{
+  "manufacturer": "DONALDSON",
+  "partNumber": "DBA5047",
+  "mainInfo": {
+    "code": "DBA5047",
+    "description": "FILTRO DE AIRE, PRIMARIO KONEPAC DONALDSON BLUE"
+  },
+  "atributos": {
+    "Diámetro exterior": "10.62 Pulgadas (269.8 MM)",
+    "Diámetro interior": "6.61 Pulgadas (167.8 MM)",
+    "Longitud": "28.02 Pulgadas (711.7 MM)",
+    "Eficiencia": "Up to 99.99%",
+    "Prueba de eficiencia estándar": "ISO 5011",
+    "Tipo": "Primario",
+    "Estilo": "Cone",
+    "Marca": "Donaldson BLUE®",
+    "Marca de medios": "Ultra-Web®",
+    "Tipo de medio": "Ultra-Web Nanofiber",
+    "Longitud empaquetada": "13.30 inch (33.782 cm)",
+    "Ancho empaquetado": "13.30 inch (33.782 cm)",
+    "Altura empaquetada": "30.70 inch (77.978 cm)",
+    "Peso empaquetado": "12.42 lb (5.639 kg)",
+    "Volumen empaquetado": "3.14 ft3 (0.088 m3)",
+    "Código NMFC": "069100-03",
+    "Código UPC": "742330082263",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "Con este producto puede estar expuesto a sustancias químicas, como el estireno, que según el estado de California puede producir cáncer. Para obtener más información, visite www.P65Warnings.ca.gov."
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "MACK",
+      "numero": "25042054"
+    },
+    {
+      "fabricante": "PACCAR",
+      "numero": "PAC5047"
+    }
+  ],
+  "scrapedAt": "2026-01-10T09:37:58.385Z"
+}

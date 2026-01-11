@@ -1,0 +1,47 @@
+{
+  "sku": "P781466",
+  "manufacturer": "Fleetguard",
+  "filter_type": "Fuel",
+  "description": "Fuel Filter for Heavy-Duty Applications",
+  "technical_specs": {
+    "outer_diameter_mm": 120,
+    "inner_diameter_mm": 60,
+    "height_mm": 200,
+    "thread": "1-1/4-12 UNF",
+    "micron_rating": 10,
+    "media_type": "Synthetic",
+    "efficiency_percent": 99.9
+  },
+  "oem_applications": "Caterpillar, Cummins, Detroit Diesel, International, John Deere, Kenworth, Mack, Peterbilt, Volvo",
+  "cross_references": [
+    {
+      "manufacturer": "Donaldson",
+      "part_number": "P553203",
+      "tier": "OEM_TIER1"
+    },
+    {
+      "manufacturer": "Baldwin",
+      "part_number": "BF1234",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "WIX",
+      "part_number": "51358",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "Mann",
+      "part_number": "WK8165",
+      "tier": "AFTERMARKET"
+    },
+    {
+      "manufacturer": "Parker Racor",
+      "part_number": "RF1003",
+      "tier": "AFTERMARKET"
+    }
+  ],
+  "donaldson_equivalent": "P553203",
+  "fram_equivalent": null,
+  "duty": "HD",
+  "scrapedAt": "2026-01-10T10:56:43.164Z"
+}

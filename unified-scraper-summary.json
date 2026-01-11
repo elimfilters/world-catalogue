@@ -1,0 +1,14 @@
+{
+  "successful": [
+    "P150695",
+    "DBA5047",
+    "G150049"
+  ],
+  "failed": [
+    "CH10358",
+    "CA10677"
+  ],
+  "skipped": [],
+  "framCount": 0,
+  "donaldsonCount": 3
+}

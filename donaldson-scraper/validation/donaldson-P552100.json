@@ -1,0 +1,75 @@
+{
+  "competitorCode": "P552100",
+  "donaldsonCode": "P552100",
+  "url": "https://shop.donaldson.com/store/es-us/product/P552100/20823",
+  "scrapedAt": "2026-01-10T06:50:13.176Z",
+  "mainInfo": {
+    "code": "P552100",
+    "description": "FILTRO DE LUBRICANTE, FLUJO PLENO ENROSCABLE",
+    "fullTitle": "P552100 - FILTRO DE LUBRICANTE, FLUJO PLENO ENROSCABLE"
+  },
+  "atributos": {
+    "Diámetro exterior": "4.65 Pulgadas (118 MM)",
+    "Tamaño de la rosca": "1 5/8-12 UN",
+    "Longitud": "10.24 Pulgadas (260 MM)",
+    "Diámetro externo de empaque": "4.33 Pulgadas (110 MM)",
+    "Diámetro interno de empaque": "3.86 Pulgadas (98 MM)",
+    "Eficiencia 99%": "21 MICRÓN",
+    "Prueba de eficiencia estándar": "SAE J1858",
+    "Tipo de medio": "Cellulose",
+    "Ráfaga de colapso": "149 PSI (10.3 Bar)",
+    "Tipo": "Full-Flow",
+    "Estilo": "Spin-On",
+    "Aplicación principal": "DETROIT DIESEL 23518480",
+    "Longitud empaquetada": "4.65 inch (11.811 cm)",
+    "Ancho empaquetado": "4.65 inch (11.811 cm)",
+    "Altura empaquetada": "10.10 inch (25.654 cm)",
+    "Peso empaquetado": "2.71 lb (1.230 kg)",
+    "Volumen empaquetado": "0.13 ft3 (0.004 m3)",
+    "Código NMFC": "069100-05",
+    "Código UPC": "742330044094",
+    "Proposición 65 Aviso para California: ADVERTENCIA": "Con este producto puede estar expuesto a sustancias químicas, como el formaldehído, que según el estado de California puede causar cáncer. Para obtener más información, visite www.P65Warnings.ca.gov."
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "AC DELCO",
+      "numero": "PF2100",
+      "notas": ""
+    },
+    {
+      "fabricante": "AGCO",
+      "numero": "72526443",
+      "notas": ""
+    },
+    {
+      "fabricante": "AMERICAN PARTS",
+      "numero": "92971",
+      "notas": ""
+    },
+    {
+      "fabricante": "AMSOIL",
+      "numero": "SDF77",
+      "notas": ""
+    },
+    {
+      "fabricante": "ARAMINE",
+      "numero": "7764391",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "AGCO 8425 AGCOSTAR - - - Tractor - 8000 SERIES - DETROIT DIESEL 12.7L - - - Ver productos  »",
+    "ATLAS COPCO QAS168 - - - Generadores - - - - QAS168 - - - Ver productos  »",
+    "ATLAS COPCO QAS228 - - - Generadores - - - - QAS228 - - - Ver productos  »"
+  ],
+  "productosAlternativos": [
+    {
+      "code": "P551016",
+      "description": "FILTRO DE LUBRICANTE, FLUJO PLENO ENROSCABLE"
+    },
+    {
+      "code": "DBL3998",
+      "description": "FILTRO DE LUBRICANTE, FLUJO PLENO ENROSCABLE DONALDSON BLUE"
+    }
+  ]
+}

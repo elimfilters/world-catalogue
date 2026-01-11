@@ -1,0 +1,78 @@
+{
+  "competitorCode": "P565060",
+  "donaldsonCode": "P565060",
+  "url": "https://shop.donaldson.com/store/es-us/product/P565060/35279",
+  "scrapedAt": "2026-01-10T06:50:58.751Z",
+  "mainInfo": {
+    "code": "P565060",
+    "description": "FILTRO HIDRÁULICO, ENROSCABLE",
+    "fullTitle": "P565060 - FILTRO HIDRÁULICO, ENROSCABLE"
+  },
+  "atributos": {
+    "Diámetro exterior": "3.66 Pulgadas (93 MM)",
+    "Tamaño de la rosca": "1-12 UN",
+    "Longitud": "7.87 Pulgadas (200 MM)",
+    "Diámetro externo de empaque": "2.81 Pulgadas (71.5 MM)",
+    "Diámetro interno de empaque": "2.42 Pulgadas (61.5 MM)",
+    "Eficiencia Beta 2": "17 MICRÓN",
+    "Eficiencia Beta 200": "32 MICRÓN",
+    "Estilo": "Spin-On",
+    "Serie": "SP15/25",
+    "Tipo de medio": "Cellulose",
+    "Longitud empaquetada": "4.30 inch (10.922 cm)",
+    "Ancho empaquetado": "4.30 inch (10.922 cm)",
+    "Altura empaquetada": "8.60 inch (21.844 cm)",
+    "Peso empaquetado": "1.49 lb (0.674 kg)",
+    "Volumen empaquetado": "0.09 ft3 (0.003 m3)",
+    "Código NMFC": "069100-13",
+    "Código UPC": "742330165942"
+  },
+  "referenciaCruzada": [
+    {
+      "fabricante": "CAN-FLO",
+      "numero": "RSE4025N",
+      "notas": ""
+    },
+    {
+      "fabricante": "CATERPILLAR",
+      "numero": "3I1668",
+      "notas": ""
+    },
+    {
+      "fabricante": "CLARK",
+      "numero": "3918336",
+      "notas": ""
+    },
+    {
+      "fabricante": "COOPERS",
+      "numero": "HSM6007",
+      "notas": ""
+    },
+    {
+      "fabricante": "CURTIS TOLEDO",
+      "numero": "RN28201",
+      "notas": ""
+    }
+  ],
+  "productosDelEquipo": [
+    "INGERSOLL RAND DD-34HF - - - Compactador - - - - DD-34HF - - - Ver productos  »",
+    "INGERSOLL RAND R8 - - - Compresor - - - - R8 - - - Ver productos  »",
+    "JOHN DEERE 2155 - - - Tractor - 2000 SERIES - JOHN DEERE 3179D - - - Ver productos  »",
+    "JOHN DEERE 2355N - - - Tractor - 2000 SERIES - - 2355N - - - Ver productos  »",
+    "JOHN DEERE 2555 - - - Tractor - 2000 SERIES - JOHN DEERE 4239T - - - Ver productos  »"
+  ],
+  "productosAlternativos": [
+    {
+      "code": "P564357",
+      "description": "FILTRO HIDRÁULICO, ENROSCABLE"
+    },
+    {
+      "code": "P179089",
+      "description": "FILTRO HIDRÁULICO, ENROSCABLE"
+    },
+    {
+      "code": "P565059",
+      "description": "FILTRO HIDRÁULICO, ENROSCABLE"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "successful": [
+    {
+      "competitorCode": "P550440",
+      "donaldsonCode": "P550440",
+      "description": "FILTRO DE COMBUSTIBLE, ENROSCABLE SECUNDARIO",
+      "filterType": "Secundario",
+      "alternativesFound": 0
+    },
+    {
+      "competitorCode": "P552100",
+      "donaldsonCode": "P552100",
+      "description": "FILTRO DE LUBRICANTE, FLUJO PLENO ENROSCABLE",
+      "filterType": "Full-Flow",
+      "alternativesFound": 2
+    },
+    {
+      "competitorCode": "P609422",
+      "donaldsonCode": "P609422",
+      "description": "FILTRO DE AIRE, PANEL DE VENTILACIÓN",
+      "filterType": "Ventilación",
+      "alternativesFound": 0
+    },
+    {
+      "competitorCode": "P565060",
+      "donaldsonCode": "P565060",
+      "description": "FILTRO HIDRÁULICO, ENROSCABLE",
+      "filterType": "N/A",
+      "alternativesFound": 3
+    },
+    {
+      "competitorCode": "P954895",
+      "donaldsonCode": "P954895",
+      "description": "FILTRO DE COMBUSTIBLE, ENROSCABLE SEPARADOR DE AGUA",
+      "filterType": "Separador de agua",
+      "alternativesFound": 0
+    },
+    {
+      "competitorCode": "P781466",
+      "donaldsonCode": "P953571",
+      "description": "SECADOR DE AIRE, ENROSCABLE",
+      "filterType": "N/A",
+      "alternativesFound": 0
+    },
+    {
+      "competitorCode": "DBC4088",
+      "donaldsonCode": "DBC4088",
+      "description": "FILTRO DE REFRIGERANTE, ENROSCABLE DONALDSON BLUE",
+      "filterType": "N/A",
+      "alternativesFound": 2
+    },
+    {
+      "competitorCode": "G150049",
+      "donaldsonCode": "G150049",
+      "description": "FILTRO DE AIRE, EPG RADIALSEAL",
+      "filterType": "N/A",
+      "alternativesFound": 0
+    }
+  ],
+  "failed": [],
+  "totalProcessed": 8,
+  "alternativesFound": 0,
+  "startTime": "2026-01-10T06:49:39.399Z",
+  "endTime": "2026-01-10T06:52:34.228Z"
+}

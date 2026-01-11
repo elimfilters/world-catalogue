@@ -1,0 +1,20 @@
+{
+  "name": "world-catalogue",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.19.2",
+    "google-auth-library": "^10.5.0",
+    "google-spreadsheet": "^5.0.2",
+    "groq-sdk": "^0.37.0",
+    "puppeteer": "^21.11.0",
+    "puppeteer-core": "^24.34.0"
+  }
+}
