@@ -15,7 +15,7 @@ mongoose.connect(process.env.MONGODB_URI)
 .then(() => console.log('✅ MongoDB connected'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Health check
+// Health check - DEBE IR ANTES del 404 handler
 app.get('/', (req, res) => {
   res.json({
     status: 'ok',
@@ -31,14 +31,12 @@ app.get('/', (req, res) => {
   });
 });
 
-// Import routes with error handling
-let filterRoutes;
+// Import and use routes
 try {
   console.log('📂 Loading routes/filter.routes.js...');
-  filterRoutes = require('./routes/filter.routes');
+  const filterRoutes = require('./routes/filter.routes');
   console.log('✅ Routes loaded successfully');
   
-  // Use routes
   app.use('/api/filters', filterRoutes);
   console.log('✅ Routes registered at /api/filters');
 } catch (error) {
@@ -48,27 +46,37 @@ try {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌ Error middleware:', err);
   res.status(500).json({
     success: false,
     error: err.message
   });
 });
 
-// 404 handler
+// 404 handler - DEBE IR AL FINAL
 app.use((req, res) => {
+  console.log(`⚠️ 404: ${req.method} ${req.path}`);
   res.status(404).json({
     error: 'Endpoint not found',
     path: req.path,
-    method: req.method
+    method: req.method,
+    availableEndpoints: [
+      'GET /',
+      'POST /api/filters/classify',
+      'GET /api/filters/classifications',
+      'GET /api/filters/stats',
+      'POST /api/filters/batch',
+      'POST /api/filters/search-sheets'
+    ]
   });
 });
 
-// Start server
+// Start server - AL FINAL
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log('🚀 ELIMFILTERS Backend API');
   console.log(`📍 Server running on port ${PORT}`);
+  console.log('✅ Server ready to receive requests');
 });
 
 module.exports = app;
