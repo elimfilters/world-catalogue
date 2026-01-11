@@ -6,3 +6,8 @@ config/google-credentials.json
 **/google-credentials.json
 **/*credentials*.json
 test-groq.js
+
+# Credentials
+**/google-credentials.json
+**/*credentials*.json
+test-groq.js
