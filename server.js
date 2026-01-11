@@ -5,12 +5,11 @@ const mongoose = require('mongoose');
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
+
 const express = require("express");
 const cors = require("cors");
 
 const app = express();
-const filterSearchRouter = require('./routes/filter.search.api');
-app.use('/api', filterSearchRouter);
 app.use(cors());
 app.use(express.json());
 
@@ -22,23 +21,27 @@ console.log("🔥 LOADING SCRAPER ROUTES WITH BATCH 🔥");
 // ===============================
 const scraperRoutes = require("./routes/scraperRoutes");
 app.use("/api/scraper", scraperRoutes);
+
 const framRoutes = require('./routes/framRoutes');
 app.use('/api/scraper', framRoutes);
+
 const apiRoutes = require('./routes/api.routes');
 app.use('/api', apiRoutes);
 
-// ===============================
-// START SERVER
-// ===============================
+const filterSearchRouter = require('./routes/filter.search.api');
+app.use('/api', filterSearchRouter);
 
-app.use('/api', require('./routes/search'));
-
-const PORT = process.env.PORT || 8080;
-
-app.use('/api', require('./routes/search'));
+const searchRoutes = require('./routes/search');
+app.use('/api', searchRoutes);
 
 // ===============================
-// CLASSIFIER ENDPOINTS
+// CLASSIFIER ROUTES (NUEVO - 100+ Fabricantes)
+// ===============================
+const classifierRoutes = require('./routes/classifier.routes');
+app.use('/api/classifier', classifierRoutes);
+
+// ===============================
+// CLASSIFIER ENDPOINTS (Compatibilidad con endpoints viejos)
 // ===============================
 const classifierService = require('./services/classifier.service');
 
@@ -48,14 +51,28 @@ app.post('/api/validate-filter', async (req, res) => {
     if (!filterCode) {
       return res.status(400).json({ error: 'filterCode is required' });
     }
-    const classification = await classifierService.classifyFilter(filterCode);
-    const isValid = classification.manufacturer !== 'UNKNOWN' && classification.confidence !== 'LOW';
-    res.json({
-      filterCode,
-      valid: isValid,
-      classification: isValid ? classification : null,
-      reason: isValid ? null : 'Unknown manufacturer or low confidence'
-    });
+    
+    // Usar el nuevo classifier
+    const result = await classifierService.processFilter(filterCode);
+    
+    if (result.success) {
+      const classification = result.classification;
+      const isValid = classification.manufacturer !== 'Unknown' && classification.confidence !== 'low';
+      
+      res.json({
+        filterCode,
+        valid: isValid,
+        classification: isValid ? classification : null,
+        reason: isValid ? null : 'Unknown manufacturer or low confidence'
+      });
+    } else {
+      res.json({
+        filterCode,
+        valid: false,
+        classification: null,
+        reason: result.error
+      });
+    }
   } catch (error) {
     console.error('Validation error:', error);
     res.status(500).json({ error: error.message });
@@ -68,8 +85,9 @@ app.post('/api/classify-filter', async (req, res) => {
     if (!filterCode) {
       return res.status(400).json({ error: 'filterCode is required' });
     }
-    const classification = await classifierService.classifyFilter(filterCode);
-    res.json(classification);
+    
+    const result = await classifierService.processFilter(filterCode);
+    res.json(result);
   } catch (error) {
     console.error('Classification error:', error);
     res.status(500).json({ error: error.message });
@@ -82,17 +100,10 @@ app.post('/api/classify-batch', async (req, res) => {
     if (!Array.isArray(filterCodes) || filterCodes.length === 0) {
       return res.status(400).json({ error: 'filterCodes array is required' });
     }
-    const results = [];
-    for (const filterCode of filterCodes) {
-      try {
-        const classification = await classifierService.classifyFilter(filterCode);
-        const isValid = classification.manufacturer !== 'UNKNOWN' && classification.confidence !== 'LOW';
-        results.push({ filterCode, valid: isValid, classification });
-      } catch (error) {
-        results.push({ filterCode, valid: false, error: error.message });
-      }
-    }
-    const validCount = results.filter(r => r.valid).length;
+    
+    const results = await classifierService.processBatch(filterCodes);
+    const validCount = results.filter(r => r.success).length;
+    
     res.json({
       total: filterCodes.length,
       valid: validCount,
@@ -107,22 +118,18 @@ app.post('/api/classify-batch', async (req, res) => {
 
 app.get('/api/classifier/stats', async (req, res) => {
   try {
-    const FilterClassification = require('./models/FilterClassification');
-    const total = await FilterClassification.countDocuments();
-    const byManufacturer = await FilterClassification.aggregate([
-      { $group: { _id: '$manufacturer', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ]);
-    const byDuty = await FilterClassification.aggregate([
-      { $group: { _id: '$duty', count: { $sum: 1 } } }
-    ]);
-    res.json({ total, byManufacturer, byDuty });
+    const stats = await classifierService.getStats();
+    res.json(stats);
   } catch (error) {
     console.error('Stats error:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
+// ===============================
+// START SERVER
+// ===============================
+const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {
   console.log("🚀 ELIMFILTERS Backend API");
