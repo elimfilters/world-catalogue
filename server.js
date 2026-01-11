@@ -1,161 +1,68 @@
-﻿require('dotenv').config();
-
-// MongoDB Connection
+﻿const express = require('express');
 const mongoose = require('mongoose');
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
-
-const express = require("express");
-const cors = require("cors");
+const cors = require('cors');
+require('dotenv').config();
 
 const app = express();
+
+// Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// ===== FORCE MARK =====
-console.log("🔥 LOADING SCRAPER ROUTES WITH BATCH 🔥");
+// MongoDB connection
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log('✅ MongoDB connected'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
-// ===============================
-// ROUTES
-// ===============================
-const scraperRoutes = require("./routes/scraperRoutes");
-app.use("/api/scraper", scraperRoutes);
-
-const framRoutes = require('./routes/framRoutes');
-app.use('/api/scraper', framRoutes);
-
-const apiRoutes = require('./routes/api.routes');
-app.use('/api', apiRoutes);
-
-const filterSearchRouter = require('./routes/filter.search.api');
-app.use('/api', filterSearchRouter);
-
-const searchRoutes = require('./routes/search');
-app.use('/api', searchRoutes);
-
-// ===============================
-// CLASSIFIER ROUTES (NUEVO - 100+ Fabricantes)
-// ===============================
-const classifierRoutes = require('./routes/classifier.routes');
-app.use('/api/classifier', classifierRoutes);
-
-// ===============================
-// CLASSIFIER ENDPOINTS (Compatibilidad con endpoints viejos)
-// ===============================
-const classifierService = require('./services/classifier.service');
-
-app.post('/api/validate-filter', async (req, res) => {
-  try {
-    const { filterCode } = req.body;
-    if (!filterCode) {
-      return res.status(400).json({ error: 'filterCode is required' });
-    }
-    
-    const result = await classifierService.processFilter(filterCode);
-    
-    if (result.success) {
-      const classification = result.classification;
-      const isValid = classification.manufacturer !== 'Unknown' && classification.confidence !== 'low';
-      
-      res.json({
-        filterCode,
-        valid: isValid,
-        classification: isValid ? classification : null,
-        reason: isValid ? null : 'Unknown manufacturer or low confidence'
-      });
-    } else {
-      res.json({
-        filterCode,
-        valid: false,
-        classification: null,
-        reason: result.error
-      });
-    }
-  } catch (error) {
-    console.error('Validation error:', error);
-    res.status(500).json({ error: error.message });
-  }
+// Health check
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    message: 'ELIMFILTERS Backend API',
+    version: '1.0.0',
+    endpoints: [
+      'POST /api/filters/classify',
+      'GET /api/filters/classifications',
+      'GET /api/filters/stats',
+      'POST /api/filters/batch',
+      'POST /api/filters/search-sheets'
+    ]
+  });
 });
 
-app.post('/api/classify-filter', async (req, res) => {
-  try {
-    const { filterCode } = req.body;
-    if (!filterCode) {
-      return res.status(400).json({ error: 'filterCode is required' });
-    }
-    
-    const result = await classifierService.processFilter(filterCode);
-    res.json(result);
-  } catch (error) {
-    console.error('Classification error:', error);
-    res.status(500).json({ error: error.message });
-  }
+// Import routes
+const filterRoutes = require('./routes/filter.routes');
+
+// Use routes
+app.use('/api/filters', filterRoutes);
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    success: false,
+    error: err.message 
+  });
 });
 
-app.post('/api/classify-batch', async (req, res) => {
-  try {
-    const { filterCodes } = req.body;
-    if (!Array.isArray(filterCodes) || filterCodes.length === 0) {
-      return res.status(400).json({ error: 'filterCodes array is required' });
-    }
-    
-    const results = await classifierService.processBatch(filterCodes);
-    const validCount = results.filter(r => r.success).length;
-    
-    res.json({
-      total: filterCodes.length,
-      valid: validCount,
-      invalid: filterCodes.length - validCount,
-      results
-    });
-  } catch (error) {
-    console.error('Batch classify error:', error);
-    res.status(500).json({ error: error.message });
-  }
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ 
+    error: 'Endpoint not found',
+    path: req.path,
+    method: req.method
+  });
 });
 
-app.get('/api/classifier/stats', async (req, res) => {
-  try {
-    const stats = await classifierService.getStats();
-    res.json(stats);
-  } catch (error) {
-    console.error('Stats error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ===============================
-// ADMIN ENDPOINT - Limpiar DB
-// ===============================
-app.post('/api/admin/clean-db', async (req, res) => {
-  try {
-    const { secret } = req.body;
-    
-    if (secret !== 'ELIMFILTERS2026') {
-      return res.status(403).json({ error: 'Acceso denegado' });
-    }
-    
-    const FilterClassification = require('./models/FilterClassification');
-    const result = await FilterClassification.deleteMany({});
-    
-    res.json({
-      success: true,
-      message: 'Base de datos limpiada',
-      deletedCount: result.deletedCount
-    });
-  } catch (error) {
-    console.error('Error limpiando DB:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ===============================
-// START SERVER
-// ===============================
+// Start server
 const PORT = process.env.PORT || 8080;
-
 app.listen(PORT, () => {
-  console.log("🚀 ELIMFILTERS Backend API");
-  console.log("📍 Server running on port", PORT);
+  console.log('🚀 ELIMFILTERS Backend API');
+  console.log(`📍 Server running on port ${PORT}`);
 });
+
+module.exports = app;
