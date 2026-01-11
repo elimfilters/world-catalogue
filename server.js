@@ -31,11 +31,20 @@ app.get('/', (req, res) => {
   });
 });
 
-// Import routes
-const filterRoutes = require('./routes/filter.routes');
-
-// Use routes
-app.use('/api/filters', filterRoutes);
+// Import routes with error handling
+let filterRoutes;
+try {
+  console.log('📂 Loading routes/filter.routes.js...');
+  filterRoutes = require('./routes/filter.routes');
+  console.log('✅ Routes loaded successfully');
+  
+  // Use routes
+  app.use('/api/filters', filterRoutes);
+  console.log('✅ Routes registered at /api/filters');
+} catch (error) {
+  console.error('❌ ERROR loading routes:', error.message);
+  console.error('Stack trace:', error.stack);
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
