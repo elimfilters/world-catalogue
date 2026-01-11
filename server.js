@@ -17,10 +17,12 @@ mongoose.connect(process.env.MONGODB_URI)
 
 // Health check - DEBE IR ANTES del 404 handler
 app.get('/', (req, res) => {
+  console.log('✅ Health check endpoint hit');
   res.json({
     status: 'ok',
     message: 'ELIMFILTERS Backend API',
-    version: '1.0.0',
+    version: '1.0.1',
+    timestamp: new Date().toISOString(),
     endpoints: [
       'POST /api/filters/classify',
       'GET /api/filters/classifications',
@@ -74,7 +76,7 @@ app.use((req, res) => {
 // Start server - AL FINAL
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
-  console.log('🚀 ELIMFILTERS Backend API');
+  console.log('🚀 ELIMFILTERS Backend API v1.0.1');
   console.log(`📍 Server running on port ${PORT}`);
   console.log('✅ Server ready to receive requests');
 });
