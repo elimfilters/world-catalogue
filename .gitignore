@@ -2,3 +2,7 @@
 .env
 
 config/google-credentials.json
+# Credentials y secretos
+**/google-credentials.json
+**/*credentials*.json
+test-groq.js
