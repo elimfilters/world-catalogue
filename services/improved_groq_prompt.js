@@ -1,48 +1,62 @@
 ﻿function buildImprovedPrompt(filterCode) {
-  return `Analyze filter code: "${filterCode}"
+  return `CLASSIFY FILTER: "${filterCode}"
 
-DUTY CLASSIFICATION (MUST be either "HD" or "LD", NEVER "HD/LD"):
+⚠️ CRITICAL: Output ONLY "HD" or "LD" for duty field. NEVER "HD/LD".
 
-HD (Heavy Duty) → Equipment for construction, mining, diesel engines:
-  - Construction equipment (excavators, loaders, bulldozers, graders)
-  - Mining equipment
-  - Heavy trucks (Class 7-8)
-  - Diesel engines (any size)
-  - Agricultural tractors and harvesters
-  - Industrial machinery
-  
-  HD EXAMPLES:
-  ✓ 1N0726 (Caterpillar) → OIL → HD (diesel construction equipment)
-  ✓ 1R0735 (Caterpillar) → FUEL → HD (diesel engine)
-  ✓ 1R0750 (Caterpillar) → FUEL → HD (heavy machinery)
-  ✓ 6I2503 (Caterpillar) → OIL → HD (diesel equipment)
+═══════════════════════════════════════════════════════════
+HD (Heavy Duty) - Construction/Industrial Equipment
+═══════════════════════════════════════════════════════════
+For: Diesel engines, construction equipment, heavy trucks, mining, industrial machinery
 
-LD (Light Duty) → Automotive, gasoline engines, light vehicles:
-  - Passenger cars
-  - SUVs
-  - Light pickup trucks (Class 1-3)
-  - Gasoline engines
-  - Marine recreational vehicles
-  - Small generators
-  - Automotive applications
-  
-  LD EXAMPLES:
-  ✓ HF6177 (Fleetguard) → OIL → LD (automotive oil filter)
-  ✓ 02/100100 → OIL → LD (automotive application)
-  ✓ PH8A (Fram) → OIL → LD (passenger car)
-  ✓ 51515 (Wix) → OIL → LD (automotive)
-  ✓ P550588 (Donaldson) → FUEL → LD (light vehicle)
+REAL HD EXAMPLES:
+✓ AF25964 → HD
+✓ 26510380 → HD
+✓ 51970 → HD
+✓ 5801364481 → HD
+✓ DBC4081 → HD
+✓ 84AB9150AA → HD
+✓ 1N0726 (Caterpillar) → HD
+✓ 1R0735 (Caterpillar) → HD
+✓ 6I2503 (Caterpillar) → HD
 
-CRITICAL RULES:
-1. Caterpillar codes (1N, 1R, 6I, etc.) → ALWAYS HD (construction/mining equipment)
-2. Fleetguard HF prefix → Usually LD (automotive)
-3. Generic numeric codes → Check application, default LD if automotive
-4. If uncertain between HD/LD → Use application context, NOT just manufacturer
+PATTERN: Usually numeric codes, Caterpillar codes (1N, 1R, 6I), industrial part numbers
 
-RESPOND ONLY JSON:
-{"manufacturer":"Fleetguard","filterType":"OIL","duty":"LD","elimfiltersPrefix":"EL8","elimfiltersSKU":"EL86177","confidence":"high"}
+═══════════════════════════════════════════════════════════
+LD (Light Duty) - Automotive/Passenger Vehicles
+═══════════════════════════════════════════════════════════
+For: Cars, SUVs, light trucks, gasoline engines, passenger vehicles
 
-CRITICAL: duty must be "HD" or "LD" only, based on APPLICATION not just manufacturer`;
+REAL LD EXAMPLES:
+✓ 15400-PLM-A01 → LD (Honda format)
+✓ 04152-YZZA1 → LD (Toyota format)
+✓ 90915-YZZF2 → LD (Toyota format)
+✓ 26300-35503 → LD (Hyundai/Kia format)
+✓ HU719/7X → LD (Mann filter automotive)
+
+PATTERN: OEM codes with dashes (15400-PLM-A01), Toyota 04152/90915 format, automotive brand codes
+
+═══════════════════════════════════════════════════════════
+DECISION RULES:
+═══════════════════════════════════════════════════════════
+1. Has dashes (15400-PLM-A01, 04152-YZZA1)? → LD (OEM automotive format)
+2. Starts 04152/90915 (Toyota)? → LD
+3. Starts 26300 (Hyundai/Kia)? → LD
+4. Format like HU719/7X (Mann automotive)? → LD
+5. Caterpillar (1N, 1R, 6I)? → HD
+6. Pure numeric (26510380, 5801364481)? → HD
+7. Alphanumeric no dashes (AF25964, DBC4081)? → HD
+
+OUTPUT JSON ONLY:
+{
+  "manufacturer": "Honda",
+  "filterType": "OIL",
+  "duty": "LD",
+  "elimfiltersPrefix": "EL8",
+  "elimfiltersSKU": "EL8PLMA01",
+  "confidence": "high"
+}
+
+⚠️ REMINDER: duty accepts ONLY "HD" or "LD". Never "HD/LD".`;
 }
 
 module.exports = { buildImprovedPrompt };
