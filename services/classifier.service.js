@@ -1,6 +1,8 @@
 ﻿const Groq = require('groq-sdk');
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
 const { isMarineManufacturer, generateMarineSKU } = require('../src/utils/marineDetector');
+const kitService = require('./kitService');
+const donaldsonKitScraper = require('./donaldsonKitScraper');
 
 class ClassifierService {
   constructor() {
@@ -61,7 +63,6 @@ class ClassifierService {
 
       const result = JSON.parse(jsonMatch[0]);
 
-      // ⭐ DETECTAR MARINO DESPUÉS DE GROQ
       if (isMarineManufacturer(result.manufacturer)) {
         console.log('[Marine] Detected:', result.manufacturer);
         const marineSKU = generateMarineSKU(filterCode);
@@ -84,11 +85,28 @@ class ClassifierService {
 
       console.log('[Classifier] Classified as:', result.duty);
 
-      return {
+      const finalResult = {
         ...result,
         detectedManufacturer,
         confidence: result.confidence || 'high'
       };
+
+      // Buscar kit asociado para HD
+      if (result.duty === 'HD' && result.elimfiltersSKU) {
+        try {
+          const donaldsonCode = result.elimfiltersSKU.replace('EL8', 'P55').replace('EF9', 'P55').replace('EA1', 'P');
+          const kit = await kitService.findKitByFilter(donaldsonCode);
+          
+          if (kit) {
+            finalResult.maintenanceKit = kit;
+            console.log('[Kit] Found kit for filter:', kit.kit_sku);
+          }
+        } catch (error) {
+          console.error('[Kit] Error finding kit:', error.message);
+        }
+      }
+
+      return finalResult;
 
     } catch (error) {
       console.error('[Error] Classifier:', error.message);
