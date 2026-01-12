@@ -1,5 +1,6 @@
 const Groq = require('groq-sdk');
 const FilterClassification = require('../models/FilterClassification');
+const { buildImprovedPrompt } = require('./improved_groq_prompt');
 
 class ClassifierService {
   constructor() {
@@ -303,7 +304,7 @@ JSON only:
         messages: [{ role: 'user', content: prompt }],
         model: 'llama-3.3-70b-versatile',
         temperature: 0.1,
-        max_tokens: 200
+        max_tokens: 300
       });
 
       const response = completion.choices[0]?.message?.content;
@@ -363,3 +364,4 @@ JSON only:
 }
 
 module.exports = new ClassifierService();
+
