@@ -1,0 +1,29 @@
+﻿// Agregar al final de server.js ANTES de app.listen()
+
+// ===============================
+// ADMIN ENDPOINT - Limpiar DB
+// ===============================
+app.post('/api/admin/clean-db', async (req, res) => {
+  try {
+    const { secret } = req.body;
+    
+    // Password de seguridad
+    if (secret !== 'ELIMFILTERS2026') {
+      return res.status(403).json({ error: 'Acceso denegado' });
+    }
+    
+    const FilterClassification = require('./models/FilterClassification');
+    
+    // Eliminar todos los documentos
+    const result = await FilterClassification.deleteMany({});
+    
+    res.json({
+      success: true,
+      message: 'Base de datos limpiada',
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Error limpiando DB:', error);
+    res.status(500).json({ error: error.message });
+  }
+});

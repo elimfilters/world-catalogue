@@ -1,26 +1,36 @@
-ï»¿{
+{
   "prefixes": {
-    "OIL": "EL8",
-    "LUBE": "EL8",
-    "AIR": "EA1",
-    "FUEL": "EF9",
-    "HYDRAULIC": "EH6",
-    "CABIN": "EC1",
-    "MARINE": "EM9",
-    "TURBINE": "ET9",
-    "FUEL_SEPARATOR": "ES9",
-    "COOLANT": "EW7",
-    "AIR_DRYER": "ED4",
-    "TRANSMISSION": "ET5",
-    "POWER_STEERING": "EP3"
+    "AIR": { "code": "EA1", "technology": "MACROCORE™", "duty": "HD/LD" },
+    "AIR_HOUSING": { "code": "EA2", "technology": null, "duty": "HD" },
+    "AIR_FILTER_HOUSING": { "code": "EA2", "technology": null, "duty": "HD" },
+    "FUEL": { "code": "EF9", "technology": "NANOFORCE™", "duty": "HD/LD" },
+    "FUEL_SEPARATOR": { "code": "ES9", "technology": "AQUAGUARD™", "duty": "HD" },
+    "CABIN": { "code": "EC1", "technology": "MICROKAPPA™", "duty": "HD/LD" },
+    "CABIN_AIR": { "code": "EC1", "technology": "MICROKAPPA™", "duty": "HD/LD" },
+    "HYDRAULIC": { "code": "EH6", "technology": "SYNTEPORE™", "duty": "HD" },
+    "OIL": { "code": "EL8", "technology": "SYNTRAX™", "duty": "HD/LD" },
+    "LUBE": { "code": "EL8", "technology": "SYNTRAX™", "duty": "HD/LD" },
+    "COOLANT": { "code": "EW7", "technology": "COOLTECH™", "duty": "HD" },
+    "MARINE": { "code": "EM9", "technology": "MARINEGUARD™", "duty": "HD/LD" },
+    "TURBINE": { "code": "ET9", "technology": "TURBOSHIELD™", "duty": "HD" },
+    "AIR_DRYER": { "code": "ED4", "technology": "DRYCORE™", "duty": "HD" },
+    "KIT_HD": { "code": "EK5", "technology": null, "duty": "HD" },
+    "KIT_LD": { "code": "EK3", "technology": null, "duty": "LD" }
   },
   "trilogy": {
     "enabled": true,
-    "variants": ["STANDARD", "PLUS", "MAX"],
-    "suffixes": {
-      "STANDARD": "",
-      "PLUS": "P",
-      "MAX": "M"
+    "variants": ["STANDARD", "PERFORMANCE", "ELITE"],
+    "STANDARD": {
+      "suffix": "",
+      "description": "Engineered for everyday operational demands"
+    },
+    "PERFORMANCE": {
+      "suffix": "P",
+      "description": "Enhanced efficiency and dirt-holding capacity"
+    },
+    "ELITE": {
+      "suffix": "E",
+      "description": "Maximum synthetic protection for extreme service"
     }
   },
   "defaultPrefix": "EL8"

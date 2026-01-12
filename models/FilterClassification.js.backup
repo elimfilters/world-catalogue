@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+Ôªøconst mongoose = require('mongoose');
 
 const filterClassificationSchema = new mongoose.Schema({
   originalCode: { type: String, required: true, index: true },
@@ -8,21 +8,19 @@ const filterClassificationSchema = new mongoose.Schema({
   elimfiltersPrefix: { type: String, index: true },
   elimfiltersSKU: { type: String, unique: true },
   technology: String,
-  crossReferenceCode: { type: String, index: true },
-  crossReferences: [String],
   confidence: String,
   reasoning: String,
   detectedManufacturer: mongoose.Schema.Types.Mixed,
   evaluationMatrix: [mongoose.Schema.Types.Mixed],
   selectedStrategy: String,
   finalScore: Number,
+  crossReferences: [String],
   applications: [String]
 }, { timestamps: true });
 
-// Õndices compuestos para b˙squedas comunes
+// √çndices compuestos para b√∫squedas comunes
 filterClassificationSchema.index({ manufacturer: 1, duty: 1 });
 filterClassificationSchema.index({ filterType: 1, duty: 1 });
-filterClassificationSchema.index({ crossReferenceCode: 1 });
 filterClassificationSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('FilterClassification', filterClassificationSchema);

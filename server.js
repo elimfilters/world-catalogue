@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
+
 const app = express();
 
 // Middleware
@@ -11,8 +12,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection
 mongoose.connect(process.env.MONGODB_URI)
-.then(() => console.log('✅ MongoDB connected'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
+  .then(() => console.log('✅ MongoDB connected'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // Health check - DEBE IR ANTES del 404 handler
 app.get('/', (req, res) => {
@@ -76,7 +77,7 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log('🚀 ELIMFILTERS Backend API v1.0.1');
-  console.log(`📍 Server running on port ${PORT}`);
+  console.log(`📍 Server running on port ${8080}`);
   console.log('✅ Server ready to receive requests');
 });
 

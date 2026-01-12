@@ -1,0 +1,27 @@
+﻿{
+  "prefixes": {
+    "OIL": "EL8",
+    "LUBE": "EL8",
+    "AIR": "EA1",
+    "FUEL": "EF9",
+    "HYDRAULIC": "EH6",
+    "CABIN": "EC1",
+    "MARINE": "EM9",
+    "TURBINE": "ET9",
+    "FUEL_SEPARATOR": "ES9",
+    "COOLANT": "EW7",
+    "AIR_DRYER": "ED4",
+    "TRANSMISSION": "ET5",
+    "POWER_STEERING": "EP3"
+  },
+  "trilogy": {
+    "enabled": true,
+    "variants": ["STANDARD", "PLUS", "MAX"],
+    "suffixes": {
+      "STANDARD": "",
+      "PLUS": "P",
+      "MAX": "M"
+    }
+  },
+  "defaultPrefix": "EL8"
+}

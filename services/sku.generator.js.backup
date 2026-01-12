@@ -3,7 +3,7 @@
 class SKUGenerator {
   constructor() {
     this.prefixes = prefixesConfig.prefixes;
-    this.trilogy = prefixesConfig.trilogy;
+    this.variants = prefixesConfig.trilogy.suffixes;
   }
 
   /**
@@ -12,23 +12,22 @@ class SKUGenerator {
    */
   generate(crossReferenceCode, filterType = "OIL", variant = "PERFORMANCE") {
     console.log(`📦 Generando SKU desde cross-reference: ${crossReferenceCode}`);
-
+    
     const digitsOnly = crossReferenceCode.replace(/\D/g, "");
     const last4 = digitsOnly.slice(-4).padStart(4, "0");
-
-    const prefixInfo = this.getPrefix(filterType);
-    const sku = `${prefixInfo.code}${last4}`;
-
+    
+    const prefix = this.getPrefix(filterType);
+    const sku = `${prefix}${last4}`;
+    
     console.log(`   ✅ SKU generado: ${sku}`);
-
+    
     return {
       sku,
-      prefix: prefixInfo.code,
-      technology: prefixInfo.technology,
+      prefix,
       correlative: last4,
       filter_type: filterType,
       variant,
-      variant_info: this.trilogy[variant],
+      variant_info: this.variants[variant],
       cross_reference_code: crossReferenceCode,
       source: "CROSS_REFERENCE",
       generated_at: new Date().toISOString()
@@ -41,9 +40,9 @@ class SKUGenerator {
    */
   generateDirect(originalCode, filterType = "OIL", variant = "STANDARD") {
     console.log(`📦 Generando SKU DIRECTO desde: ${originalCode}`);
-
+    
     const digitsOnly = originalCode.replace(/\D/g, "");
-
+    
     let correlative;
     if (digitsOnly.length >= 4) {
       correlative = digitsOnly.slice(-4);
@@ -54,21 +53,20 @@ class SKUGenerator {
       const hash = this.simpleHash(originalCode);
       correlative = hash.toString().padStart(4, "0");
     }
-
-    const prefixInfo = this.getPrefix(filterType);
-    const sku = `${prefixInfo.code}${correlative}`;
-
+    
+    const prefix = this.getPrefix(filterType);
+    const sku = `${prefix}${correlative}`;
+    
     console.log(`   Últimos 4 dígitos: ${correlative}`);
     console.log(`   ✅ SKU DIRECTO: ${sku}`);
-
+    
     return {
       sku,
-      prefix: prefixInfo.code,
-      technology: prefixInfo.technology,
+      prefix,
       correlative,
       filter_type: filterType,
       variant,
-      variant_info: this.trilogy[variant],
+      variant_info: this.variants[variant],
       original_code: originalCode,
       source: "ELIMFILTERS_DIRECT",
       note: "Filtro fabricado directamente por ELIMFILTERS sin equivalente Donaldson/FRAM",
@@ -82,19 +80,19 @@ class SKUGenerator {
   generateTrilogy(crossReferences, filterType = "OIL") {
     console.log(`🎯 Generando TRILOGY desde cross-reference`);
     const results = [];
-
+    
     if (crossReferences.standard) {
       results.push(this.generate(crossReferences.standard, filterType, "STANDARD"));
     }
-
+    
     if (crossReferences.performance) {
       results.push(this.generate(crossReferences.performance, filterType, "PERFORMANCE"));
     }
-
+    
     if (crossReferences.elite) {
       results.push(this.generate(crossReferences.elite, filterType, "ELITE"));
     }
-
+    
     console.log(`   ✅ TRILOGY completo: ${results.length} SKUs`);
     return results;
   }
@@ -105,37 +103,37 @@ class SKUGenerator {
    */
   generateDirectTrilogy(originalCode, filterType = "OIL") {
     console.log(`🎯 Generando TRILOGY DIRECTO para: ${originalCode}`);
-
+    
     const results = [
       this.generateDirect(originalCode, filterType, "STANDARD"),
       this.generateDirect(originalCode, filterType, "PERFORMANCE"),
       this.generateDirect(originalCode, filterType, "ELITE")
     ];
-
+    
+    // Los 3 SKUs tienen el mismo número, pero diferentes variantes
     console.log(`   ✅ TRILOGY DIRECTO: ${results.length} variantes del SKU ${results[0].sku}`);
     return results;
   }
 
   /**
-   * Obtiene prefijo según tipo de filtro (ACTUALIZADO para usar config)
+   * Obtiene prefijo según tipo de filtro
    */
   getPrefix(filterType) {
-    const type = filterType.toUpperCase().replace(/\s+/g, '_');
-    
-    // Buscar en la configuración
-    const prefixInfo = this.prefixes[type];
-    
-    if (prefixInfo) {
-      return prefixInfo;
-    }
-    
-    // Fallback al prefijo por defecto
-    console.warn(`⚠️ Tipo de filtro desconocido: ${filterType}, usando prefijo por defecto`);
-    return {
-      code: prefixesConfig.defaultPrefix,
-      technology: "SYNTRAX™",
-      duty: "HD/LD"
+    const typeToPrefix = {
+      OIL: "EL8",
+      LUBE: "EL8",
+      AIR: "EA1",
+      FUEL: "EF9",
+      HYDRAULIC: "EH6",
+      CABIN: "EC1",
+      MARINE: "EM9",
+      TURBINE: "ET9",
+      FUEL_SEPARATOR: "ES9",
+      COOLANT: "EW7",
+      AIR_DRYER: "ED4"
     };
+    
+    return typeToPrefix[filterType.toUpperCase()] || "EL8";
   }
 
   /**
@@ -152,3 +150,4 @@ class SKUGenerator {
 }
 
 module.exports = new SKUGenerator();
+

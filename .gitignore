@@ -11,3 +11,7 @@ test-groq.js
 **/google-credentials.json
 **/*credentials*.json
 test-groq.js
+
+# Backups con secretos
+*.env.backup
+BACKUP_ELIMFILTERS_*/
