@@ -35,7 +35,7 @@ class ClassifierService {
     return { name: 'Generic', tier: null, aliases: [], confidence: 'low' };
   }
 
-  async classifyFilter(filterCode) {
+  async processFilter(filterCode) {
     try {
       console.log(`🔍 Clasificando: ${filterCode}`);
       
@@ -82,3 +82,4 @@ class ClassifierService {
 }
 
 module.exports = new ClassifierService();
+
