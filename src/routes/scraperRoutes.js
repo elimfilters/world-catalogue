@@ -47,7 +47,6 @@ router.post('/donaldson/batch', async (req, res) => {
     }
     
     const results = await Promise.allSettled(codes.map(async (code) => {
-      // Detectar turbina para cada código
       const turbineCheck = detectTurbineCode(code);
       if (turbineCheck.isTurbine) {
         const turbineResult = getTurbineProduct(turbineCheck.elimSku, code);
@@ -55,8 +54,6 @@ router.post('/donaldson/batch', async (req, res) => {
           return { success: true, source: 'turbine_catalog', data: turbineResult };
         }
       }
-      
-      // Si NO es turbina, scrapear
       return await scrapeDonaldson(code);
     }));
     
