@@ -8,22 +8,22 @@ Marine manufacturers: RACOR, SIERRA, VOLVO PENTA, CAT MARINE, MERCURY, YAMAHA, K
 HD (Heavy Duty) - Industrial/Construction Equipment
 ===============================================================
 REAL EXAMPLES:
-AF25964 -> HD (industrial)
-26510380 -> HD (industrial)
-1N0726 -> HD (Caterpillar construction)
-1R0735 -> HD (Caterpillar fuel)
-6I2503 -> HD (Caterpillar oil)
+P559000 -> HD (Donaldson oil filter) -> SKU: EL89000
+AF25964 -> HD (industrial air) -> SKU: EA15964
+26510380 -> HD (industrial) -> SKU: EL80380
+1N0726 -> HD (Caterpillar construction) -> SKU: EL80726
+1R0735 -> HD (Caterpillar fuel) -> SKU: EF90735
 PATTERN: Pure numbers, alphanumeric WITHOUT dashes, Caterpillar codes
 APPLICATION: Construction equipment, mining, diesel engines, heavy trucks
 ===============================================================
 LD (Light Duty) - Automotive/Passenger Vehicles
 ===============================================================
 REAL EXAMPLES:
-15400-PLM-A01 -> LD (Honda OEM)
-04152-YZZA1 -> LD (Toyota OEM)
-90915-YZZF2 -> LD (Toyota OEM)
-26300-35503 -> LD (Hyundai/Kia OEM)
-HU719/7X -> LD (Mann automotive)
+15400-PLM-A01 -> LD (Honda OEM oil) -> SKU: EL8MA01
+04152-YZZA6 -> LD (Toyota OEM oil) -> SKU: EL8YZZA6
+90915-YZZF2 -> LD (Toyota OEM oil) -> SKU: EL8YZZF2
+26300-35503 -> LD (Hyundai/Kia OEM oil) -> SKU: EL85503
+HU719/7X -> LD (Mann automotive oil) -> SKU: EL8197X
 PATTERN: OEM codes WITH dashes (15400-XXX-XX), Toyota 04152/90915 format
 APPLICATION: Cars, SUVs, light trucks, gasoline engines, passenger vehicles
 ===============================================================
@@ -38,28 +38,35 @@ REAL EXAMPLES:
 MANUFACTURERS: RACOR, PARKER, SIERRA, VOLVO PENTA, CAT MARINE, MERCURY, YAMAHA, KAWASAKI, SEA-DOO, MERCRUISER, ONAN, SUZUKI, EVINRUDE, BOMBARDIER
 APPLICATION: Marine diesel, outboard motors, jetski, boat engines
 ===============================================================
-DECISION RULES (Apply in order):
+SKU GENERATION RULES:
 ===============================================================
-1. Volvo Penta (7 digits like 3847644)? -> Marine manufacturer: "Volvo Penta"
-2. Cat Marine (XXX-XXXX like 389-0434)? -> Marine manufacturer: "Cat Marine"  
-3. RACOR (pure digits like 2332, RXXXX, BXXXX)? -> Marine manufacturer: "RACOR"
-4. SIERRA (XX-XXXX like 18-7844)? -> Marine manufacturer: "SIERRA"
-5. Mercury (XX-XXXXXXX like 35-884380T)? -> Marine manufacturer: "Mercury"
-6. Has dash separator (15400-PLM-A01)? -> LD
-7. Starts with 04152 or 90915 (Toyota)? -> LD
-8. Starts with 26300 (Hyundai/Kia)? -> LD
-9. Pure numbers only (26510380)? -> HD
-10. Alphanumeric no dashes (AF25964)? -> HD
-11. Caterpillar pattern (1N, 1R, 6I)? -> HD
+1. Oil filters -> Prefix: EL8
+2. Fuel filters -> Prefix: EF9
+3. Air filters -> Prefix: EA1
+4. Cabin air -> Prefix: EC1
+5. Hydraulic -> Prefix: EH6
+6. Coolant -> Prefix: ED4
+7. Water separator -> Prefix: EW7
+
+SKU FORMAT: PREFIX + last 4-5 alphanumeric characters from original code
+Examples:
+- P559000 -> EL89000 (oil, last 4 digits)
+- 04152-YZZA6 -> EL8YZZA6 (oil, last 5 chars)
+- AF25964 -> EA15964 (air, last 4 digits)
+- 1R0735 -> EF90735 (fuel, last 4 digits)
+===============================================================
 OUTPUT FORMAT (JSON only, no markdown):
 {
-  "manufacturer": "Volvo Penta",
+  "manufacturer": "Donaldson",
   "filterType": "OIL",
   "duty": "HD",
   "elimfiltersPrefix": "EL8",
-  "elimfiltersSKU": "EL87644",
+  "elimfiltersSKU": "EL89000",
   "confidence": "high"
 }
-IMPORTANT: If marine manufacturer detected, include full manufacturer name (Volvo Penta, Cat Marine, RACOR, SIERRA, Mercury, etc.)`;
+IMPORTANT: 
+- Always generate elimfiltersSKU using the rules above
+- For marine manufacturers, include full name (Volvo Penta, Cat Marine, RACOR, SIERRA, Mercury)
+- elimfiltersPrefix must match filterType (OIL=EL8, FUEL=EF9, AIR=EA1)`;
 }
 module.exports = { buildImprovedPrompt };
