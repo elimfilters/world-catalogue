@@ -1,6 +1,6 @@
 ﻿const express = require('express');
 const router = express.Router();
-const classifierService = require('../services/classifier.service');
+const classifierService = require('../services/classification.service');
 const { detectTurbineCode } = require('../src/utils/turbineDetector');
 const { getTurbineProduct } = require('../src/services/turbineService');
 
@@ -113,3 +113,4 @@ router.post('/search-sheets', async (req, res) => {
 });
 
 module.exports = router;
+
