@@ -1,52 +1,52 @@
-﻿function buildImprovedPrompt(filterCode) {
+﻿function buildImprovedPrompt(filterCode, detectedManufacturer) {
+  const mfg = detectedManufacturer ? `Fabricante detectado: ${detectedManufacturer.name}` : '';
+  
   return `CLASSIFY FILTER: "${filterCode}"
+${mfg}
 
-⚠️ CRITICAL: Output ONLY "HD" or "LD" for duty field. NEVER "HD/LD".
+⚠️ CRITICAL: Output ONLY "HD" or "LD" for duty. NEVER "HD/LD".
 
 ═══════════════════════════════════════════════════════════
-HD (Heavy Duty) - Construction/Industrial Equipment
+HD (Heavy Duty) - Industrial/Construction Equipment
 ═══════════════════════════════════════════════════════════
-For: Diesel engines, construction equipment, heavy trucks, mining, industrial machinery
+REAL EXAMPLES FROM INVENTORY:
+✓ AF25964 → HD (industrial)
+✓ 26510380 → HD (industrial)
+✓ 51970 → HD (industrial)
+✓ 5801364481 → HD (industrial)
+✓ DBC4081 → HD (industrial)
+✓ 84AB9150AA → HD (industrial)
+✓ 1N0726 → HD (Caterpillar construction)
+✓ 1R0735 → HD (Caterpillar fuel)
+✓ 6I2503 → HD (Caterpillar oil)
 
-REAL HD EXAMPLES:
-✓ AF25964 → HD
-✓ 26510380 → HD
-✓ 51970 → HD
-✓ 5801364481 → HD
-✓ DBC4081 → HD
-✓ 84AB9150AA → HD
-✓ 1N0726 (Caterpillar) → HD
-✓ 1R0735 (Caterpillar) → HD
-✓ 6I2503 (Caterpillar) → HD
-
-PATTERN: Usually numeric codes, Caterpillar codes (1N, 1R, 6I), industrial part numbers
+PATTERN: Pure numbers, alphanumeric WITHOUT dashes, Caterpillar codes
+APPLICATION: Construction equipment, mining, diesel engines, heavy trucks
 
 ═══════════════════════════════════════════════════════════
 LD (Light Duty) - Automotive/Passenger Vehicles
 ═══════════════════════════════════════════════════════════
-For: Cars, SUVs, light trucks, gasoline engines, passenger vehicles
+REAL EXAMPLES FROM INVENTORY:
+✓ 15400-PLM-A01 → LD (Honda OEM)
+✓ 04152-YZZA1 → LD (Toyota OEM)
+✓ 90915-YZZF2 → LD (Toyota OEM)
+✓ 26300-35503 → LD (Hyundai/Kia OEM)
+✓ HU719/7X → LD (Mann automotive)
 
-REAL LD EXAMPLES:
-✓ 15400-PLM-A01 → LD (Honda format)
-✓ 04152-YZZA1 → LD (Toyota format)
-✓ 90915-YZZF2 → LD (Toyota format)
-✓ 26300-35503 → LD (Hyundai/Kia format)
-✓ HU719/7X → LD (Mann filter automotive)
-
-PATTERN: OEM codes with dashes (15400-PLM-A01), Toyota 04152/90915 format, automotive brand codes
+PATTERN: OEM codes WITH dashes (15400-XXX-XX), Toyota 04152/90915 format
+APPLICATION: Cars, SUVs, light trucks, gasoline engines, passenger vehicles
 
 ═══════════════════════════════════════════════════════════
-DECISION RULES:
+DECISION RULES (Apply in order):
 ═══════════════════════════════════════════════════════════
-1. Has dashes (15400-PLM-A01, 04152-YZZA1)? → LD (OEM automotive format)
-2. Starts 04152/90915 (Toyota)? → LD
-3. Starts 26300 (Hyundai/Kia)? → LD
-4. Format like HU719/7X (Mann automotive)? → LD
-5. Caterpillar (1N, 1R, 6I)? → HD
-6. Pure numeric (26510380, 5801364481)? → HD
-7. Alphanumeric no dashes (AF25964, DBC4081)? → HD
+1. Has dash separator (15400-PLM-A01, 04152-YZZA1)? → LD
+2. Starts with 04152 or 90915 (Toyota format)? → LD
+3. Starts with 26300 (Hyundai/Kia format)? → LD
+4. Pure numbers only (26510380, 5801364481)? → HD
+5. Alphanumeric no dashes (AF25964, DBC4081)? → HD
+6. Caterpillar pattern (1N, 1R, 6I prefix)? → HD
 
-OUTPUT JSON ONLY:
+OUTPUT FORMAT (JSON only, no markdown):
 {
   "manufacturer": "Honda",
   "filterType": "OIL",
@@ -56,7 +56,7 @@ OUTPUT JSON ONLY:
   "confidence": "high"
 }
 
-⚠️ REMINDER: duty accepts ONLY "HD" or "LD". Never "HD/LD".`;
+⚠️ FINAL REMINDER: duty field must be exactly "HD" or "LD". Never "HD/LD".`;
 }
 
 module.exports = { buildImprovedPrompt };
