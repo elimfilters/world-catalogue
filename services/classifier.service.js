@@ -231,10 +231,8 @@ Responde JSON exacto. Sin markdown.`;
       console.log(`?? Fabricante detectado: ${detectedManufacturer?.name || 'Ninguno'}\n`);
 
       const strategies = [
-        { name: 'Detallado', fn: this.strategy1.bind(this) },
-        { name: 'Simplificado', fn: this.strategy2.bind(this) },
-        { name: 'Por Ejemplos', fn: this.strategy3.bind(this) }
-      ];
+          { name: 'Detallado', fn: this.strategy1.bind(this) }
+        ];
 
       for (const strategy of strategies) {
         try {
@@ -520,6 +518,7 @@ Responde JSON exacto. Sin markdown.`;
 }
 
 module.exports = new ClassifierService();
+
 
 
 
