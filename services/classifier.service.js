@@ -1,28 +1,38 @@
 ﻿const Groq = require('groq-sdk');
-const patterns = require('../data/manufacturer_patterns');
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
 
 class ClassifierService {
   constructor() {
     this.groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    this.patterns = patterns;
   }
 
   detectManufacturer(filterCode) {
-    const code = filterCode.trim();
-    for (const manufacturer of patterns.allManufacturers) {
-      for (const pattern of manufacturer.patterns) {
+    const code = filterCode.trim().toUpperCase();
+    
+    // Patterns básicos embebidos
+    const manufacturers = [
+      { name: 'Caterpillar', patterns: [/^[1-9][A-Z]\d{4}$/], tier: 'OEM' },
+      { name: 'Fleetguard', patterns: [/^[A-Z]{2}\d{4}/], tier: 1 },
+      { name: 'Honda', patterns: [/^\d{5}-[A-Z0-9]{3}-[A-Z0-9]{3}$/], tier: 'OEM' },
+      { name: 'Toyota', patterns: [/^(04152|90915)-/], tier: 'OEM' },
+      { name: 'Hyundai', patterns: [/^26300-/], tier: 'OEM' },
+      { name: 'Mann', patterns: [/^[A-Z]{2}\d{3}\/\d{1}[A-Z]?$/], tier: 1 }
+    ];
+    
+    for (const mfg of manufacturers) {
+      for (const pattern of mfg.patterns) {
         if (pattern.test(code)) {
           return {
-            name: manufacturer.name,
-            tier: manufacturer.tier || null,
-            aliases: manufacturer.aliases,
+            name: mfg.name,
+            tier: mfg.tier,
+            aliases: [mfg.name],
             confidence: 'high'
           };
         }
       }
     }
-    return null;
+    
+    return { name: 'Generic', tier: null, aliases: [], confidence: 'low' };
   }
 
   async classifyFilter(filterCode) {
@@ -30,9 +40,8 @@ class ClassifierService {
       console.log(`🔍 Clasificando: ${filterCode}`);
       
       const detectedManufacturer = this.detectManufacturer(filterCode);
-      console.log(`Fabricante detectado: ${detectedManufacturer?.name || 'Desconocido'}`);
+      console.log(`Fabricante detectado: ${detectedManufacturer.name}`);
 
-      // USAR SOLO buildImprovedPrompt - Una sola estrategia
       const prompt = buildImprovedPrompt(filterCode, detectedManufacturer);
 
       const completion = await this.groq.chat.completions.create({
@@ -45,7 +54,6 @@ class ClassifierService {
       const content = completion.choices[0]?.message?.content || '{}';
       console.log(`📥 Respuesta GROQ: ${content.substring(0, 200)}...`);
 
-      // Extraer JSON
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No se encontró JSON en respuesta');
@@ -53,13 +61,12 @@ class ClassifierService {
 
       const result = JSON.parse(jsonMatch[0]);
 
-      // Validar que duty sea HD o LD solamente
       if (!['HD', 'LD'].includes(result.duty)) {
-        console.log(`⚠️ GROQ retornó duty inválido: ${result.duty}, rechazando`);
-        throw new Error(`Duty inválido: ${result.duty}. Solo se acepta HD o LD`);
+        console.log(`⚠️ Duty inválido: ${result.duty}`);
+        throw new Error(`Duty inválido: ${result.duty}`);
       }
 
-      console.log(`✅ Clasificación exitosa: ${result.duty}`);
+      console.log(`✅ Clasificado como: ${result.duty}`);
 
       return {
         ...result,
@@ -68,7 +75,7 @@ class ClassifierService {
       };
 
     } catch (error) {
-      console.error('❌ Error en clasificación:', error.message);
+      console.error('❌ Error:', error.message);
       throw error;
     }
   }
