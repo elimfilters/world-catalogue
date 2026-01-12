@@ -1,8 +1,8 @@
 ﻿const express = require('express');
 const router = express.Router();
 const classifierService = require('../services/classifier.service');
-const { detectTurbineCode } = require('../utils/turbineDetector');
-const { getTurbineProduct } = require('../services/turbineService');
+const { detectTurbineCode } = require('../src/utils/turbineDetector');
+const { getTurbineProduct } = require('../src/services/turbineService');
 
 router.post('/classify', async (req, res) => {
   try {
