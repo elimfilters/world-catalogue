@@ -3,6 +3,7 @@ const { buildImprovedPrompt } = require('./improved_groq_prompt');
 const { isMarineManufacturer, generateMarineSKU } = require('../src/utils/marineDetector');
 const kitService = require('./kitService');
 const donaldsonKitScraper = require('./donaldsonKitScraper');
+const framKitScraper = require('./framKitScraper');
 
 class ClassifierService {
   constructor() {
@@ -114,5 +115,20 @@ class ClassifierService {
     }
   }
 }
+      // Buscar kit asociado para LD
+      if (result.duty === 'LD' && result.elimfiltersSKU) {
+        try {
+          const framCode = result.elimfiltersSKU.replace('EL8', 'PH').replace('EF9', 'FT').replace('EA1', 'CA');
+          const kit = await kitService.findKitByFilter(framCode, 'LD');
+          
+          if (kit) {
+            finalResult.maintenanceKit = kit;
+            console.log('[Kit] Found LD kit for filter:', kit.kit_sku);
+          }
+        } catch (error) {
+          console.error('[Kit] Error finding LD kit:', error.message);
+        }
+      }
 
 module.exports = new ClassifierService();
+
