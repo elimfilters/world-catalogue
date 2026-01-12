@@ -92,21 +92,6 @@ class ClassifierService {
         confidence: result.confidence || 'high'
       };
 
-      // Buscar kit asociado para HD
-      if (result.duty === 'HD' && result.elimfiltersSKU) {
-        try {
-          const donaldsonCode = result.elimfiltersSKU.replace('EL8', 'P55').replace('EF9', 'P55').replace('EA1', 'P');
-          const kit = await kitService.findKitByFilter(donaldsonCode);
-          
-          if (kit) {
-            finalResult.maintenanceKit = kit;
-            console.log('[Kit] Found kit for filter:', kit.kit_sku);
-          }
-        } catch (error) {
-          console.error('[Kit] Error finding kit:', error.message);
-        }
-      }
-
       return finalResult;
 
     } catch (error) {
@@ -114,21 +99,35 @@ class ClassifierService {
       throw error;
     }
   }
-}
-      // Buscar kit asociado para LD
-      if (result.duty === 'LD' && result.elimfiltersSKU) {
-        try {
-          const framCode = result.elimfiltersSKU.replace('EL8', 'PH').replace('EF9', 'FT').replace('EA1', 'CA');
-          const kit = await kitService.findKitByFilter(framCode, 'LD');
-          
-          if (kit) {
-            finalResult.maintenanceKit = kit;
-            console.log('[Kit] Found LD kit for filter:', kit.kit_sku);
-          }
-        } catch (error) {
-          console.error('[Kit] Error finding LD kit:', error.message);
+
+  async findKitForFilter(filterCode, duty, elimfiltersSKU) {
+    try {
+      if (duty === 'HD' && elimfiltersSKU) {
+        const donaldsonCode = elimfiltersSKU.replace('EL8', 'P55').replace('EF9', 'P55').replace('EA1', 'P');
+        const kit = await kitService.findKitByFilter(donaldsonCode, 'HD');
+        
+        if (kit) {
+          console.log('[Kit] Found HD kit for filter:', kit.kit_sku);
+          return kit;
         }
       }
 
-module.exports = new ClassifierService();
+      if (duty === 'LD' && elimfiltersSKU) {
+        const framCode = elimfiltersSKU.replace('EL8', 'PH').replace('EF9', 'FT').replace('EA1', 'CA');
+        const kit = await kitService.findKitByFilter(framCode, 'LD');
+        
+        if (kit) {
+          console.log('[Kit] Found LD kit for filter:', kit.kit_sku);
+          return kit;
+        }
+      }
 
+      return null;
+    } catch (error) {
+      console.error('[Kit] Error finding kit:', error.message);
+      return null;
+    }
+  }
+}
+
+module.exports = new ClassifierService();
