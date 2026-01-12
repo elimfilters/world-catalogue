@@ -1,6 +1,6 @@
 ﻿const express = require('express');
 const router = express.Router();
-const classifierService = require('../services/classification.service');
+const classifierService = require('../services/classifier.service');
 const { detectTurbineCode } = require('../src/utils/turbineDetector');
 const { getTurbineProduct } = require('../src/services/turbineService');
 
@@ -30,7 +30,7 @@ router.post('/classify', async (req, res) => {
       }
     }
     
-    const result = await classifierService.classifyFilter(filterCode, manufacturerHint, searchContext || 'individual');
+    const result = await classifierService.processFilter(filterCode, manufacturerHint, searchContext || 'individual');
     res.json(result);
   } catch (error) {
     console.error('[Error] /classify:', error);
@@ -62,7 +62,7 @@ router.post('/batch', async (req, res) => {
           };
         }
       }
-      return await classifierService.classifyFilter(filterCode);
+      return await classifierService.processFilter(filterCode);
     }));
     
     res.json({ success: true, results });
@@ -113,5 +113,6 @@ router.post('/search-sheets', async (req, res) => {
 });
 
 module.exports = router;
+
 
 
