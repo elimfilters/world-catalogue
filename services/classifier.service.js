@@ -58,7 +58,7 @@ class ClassifierService {
       details.validType = true;
     }
 
-    if (['HD', 'LD', 'HD/LD'].includes(result.duty)) {
+    if (['HD', 'LD'].includes(result.duty)) {
       score += 15;
       details.validDuty = true;
     }
@@ -520,5 +520,6 @@ Responde JSON exacto. Sin markdown.`;
 }
 
 module.exports = new ClassifierService();
+
 
 
