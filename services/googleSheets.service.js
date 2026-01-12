@@ -37,11 +37,11 @@ class GoogleSheetsService {
 
   async searchInMasterUnified(filterCode) {
     await this.initialize();
-    
+
     try {
       console.log(`🔍 Buscando "${filterCode}" en MASTER_UNIFIED_V5...`);
       const range = 'MASTER_UNIFIED_V5!A:Z';
-      
+
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.SPREADSHEET_ID,
         range
@@ -56,9 +56,8 @@ class GoogleSheetsService {
       const headerRow = rows[0];
       const dataRows = rows.slice(1);
 
-      // Buscar el código en cualquier columna
       const resultIndex = dataRows.findIndex(row => {
-        return row.some(cell => 
+        return row.some(cell =>
           cell && cell.toString().trim().toUpperCase() === filterCode.toUpperCase()
         );
       });
@@ -70,13 +69,13 @@ class GoogleSheetsService {
 
       const result = dataRows[resultIndex];
       const mapped = {};
-      
+
       headerRow.forEach((header, index) => {
         mapped[header] = result[index] || '';
       });
-      
+
       console.log(`✅ ENCONTRADO en MASTER_UNIFIED_V5 (fila ${resultIndex + 2})`);
-      
+
       return {
         source: 'MASTER_UNIFIED_V5',
         rowNumber: resultIndex + 2,
@@ -91,11 +90,11 @@ class GoogleSheetsService {
 
   async searchInMasterKits(searchValue, searchType = 'VIN') {
     await this.initialize();
-    
+
     try {
       console.log(`🔍 Buscando "${searchValue}" en MASTER_KITS_V1 (${searchType})...`);
       const range = 'MASTER_KITS_V1!A:Z';
-      
+
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.SPREADSHEET_ID,
         range
@@ -110,10 +109,14 @@ class GoogleSheetsService {
       const headerRow = rows[0];
       const dataRows = rows.slice(1);
 
-      // Buscar columna según tipo
-      const searchColumns = searchType === 'VIN' 
-        ? headerRow.map((h, i) => h.toLowerCase().includes('vin') ? i : -1).filter(i => i !== -1)
-        : headerRow.map((h, i) => h.toLowerCase().includes('equipment') ? i : -1).filter(i => i !== -1);
+      let searchColumns;
+      if (searchType === 'VIN') {
+        searchColumns = headerRow.map((h, i) => h.toLowerCase().includes('vin') ? i : -1).filter(i => i !== -1);
+      } else if (searchType === 'EQUIPMENT') {
+        searchColumns = headerRow.map((h, i) => h.toLowerCase().includes('equipment') ? i : -1).filter(i => i !== -1);
+      } else if (searchType === 'FILTER') {
+        searchColumns = headerRow.map((h, i) => h.toLowerCase().includes('normsku_base') ? i : -1).filter(i => i !== -1);
+      }
 
       if (searchColumns.length === 0) {
         console.log(`⚠️  No se encontró columna ${searchType} en MASTER_KITS_V1`);
@@ -121,8 +124,8 @@ class GoogleSheetsService {
       }
 
       const resultIndex = dataRows.findIndex(row => {
-        return searchColumns.some(colIndex => 
-          row[colIndex] && 
+        return searchColumns.some(colIndex =>
+          row[colIndex] &&
           row[colIndex].toString().trim().toUpperCase() === searchValue.toUpperCase()
         );
       });
@@ -134,13 +137,13 @@ class GoogleSheetsService {
 
       const result = dataRows[resultIndex];
       const mapped = {};
-      
+
       headerRow.forEach((header, index) => {
         mapped[header] = result[index] || '';
       });
-      
+
       console.log(`✅ ENCONTRADO en MASTER_KITS_V1 (fila ${resultIndex + 2})`);
-      
+
       return {
         source: 'MASTER_KITS_V1',
         searchType,
@@ -160,23 +163,22 @@ class GoogleSheetsService {
 
       if (searchContext === 'individual' || searchContext === 'part_number') {
         return await this.searchInMasterUnified(filterCode);
-      } 
-      
+      }
+
       if (searchContext === 'vin') {
         return await this.searchInMasterKits(filterCode, 'VIN');
-      } 
-      
+      }
+
       if (searchContext === 'equipment') {
         return await this.searchInMasterKits(filterCode, 'EQUIPMENT');
       }
 
-      // Búsqueda completa si no se especifica contexto
       let result = await this.searchInMasterUnified(filterCode);
-      
+
       if (!result) {
         result = await this.searchInMasterKits(filterCode, 'VIN');
       }
-      
+
       if (!result) {
         result = await this.searchInMasterKits(filterCode, 'EQUIPMENT');
       }
@@ -190,10 +192,10 @@ class GoogleSheetsService {
 
   async appendToMasterUnified(data) {
     await this.initialize();
-    
+
     try {
       const range = 'MASTER_UNIFIED_V5!A:Z';
-      
+
       const response = await this.sheets.spreadsheets.values.append({
         spreadsheetId: this.SPREADSHEET_ID,
         range,
@@ -207,6 +209,29 @@ class GoogleSheetsService {
       return response.data;
     } catch (error) {
       console.error('Error agregando a MASTER_UNIFIED_V5:', error.message);
+      throw error;
+    }
+  }
+
+  async appendToMasterKits(data) {
+    await this.initialize();
+
+    try {
+      const range = 'MASTER_KITS_V1!A:Z';
+
+      const response = await this.sheets.spreadsheets.values.append({
+        spreadsheetId: this.SPREADSHEET_ID,
+        range,
+        valueInputOption: 'USER_ENTERED',
+        resource: {
+          values: [data]
+        }
+      });
+
+      console.log(`✅ Datos agregados a MASTER_KITS_V1`);
+      return response.data;
+    } catch (error) {
+      console.error('Error agregando a MASTER_KITS_V1:', error.message);
       throw error;
     }
   }
