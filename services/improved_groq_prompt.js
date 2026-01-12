@@ -1,44 +1,37 @@
 ﻿function buildImprovedPrompt(filterCode) {
-  return `Analyze this filter code: "${filterCode}"
+  return `Analyze filter code: "${filterCode}"
 
-CRITICAL CLASSIFICATION RULES:
+DUTY CLASSIFICATION (MUST be either "HD" or "LD", NEVER "HD/LD"):
 
-1. DUTY MUST BE EITHER "HD" OR "LD" - NEVER "HD/LD"
+HD (Heavy Duty) → Search in Donaldson:
+- Diesel engines (any size)
+- Construction equipment (excavators, loaders, bulldozers, graders)
+- Mining equipment
+- Industrial machinery
+- Heavy trucks (Class 7-8)
+- Heavy equipment hydraulic systems
+- Agricultural tractors and harvesters
 
-2. HD (Heavy Duty) - Search in Donaldson:
-   - Diesel engines (trucks, construction, mining, industrial)
-   - Hydraulic systems in HEAVY EQUIPMENT (excavators, loaders, dozers)
-   - Caterpillar hydraulic filters → HD
-   - Examples: 1N0726, 1R0735, 1R0750, P550162, HF6555
+LD (Light Duty) → Search in FRAM:
+- Gasoline engines
+- Passenger cars
+- SUVs
+- Light pickup trucks (Class 1-3)
+- Automotive hydraulic systems (power steering)
+- Marine recreational vehicles
+- Small generators
 
-3. LD (Light Duty) - Search in FRAM:
-   - Gasoline engines (cars, SUVs, light pickups)
-   - Small hydraulic systems (automotive power steering)
-   - Examples: CH10358, PH3593A, XG7317
+DETECTION RULES:
+1. Caterpillar codes → Construction/mining → HD
+2. Filter prefix analysis:
+   - 1N, 1W, 7W, 9Y (oil) → Usually HD if for diesel
+   - 1R, 3I, 4I, 9T (hydraulic) → HD if heavy equipment, LD if automotive
+3. Check manufacturer typical application
 
-4. CATERPILLAR FILTER PREFIXES:
-   - 1N, 1W, 7W, 9Y → OIL → HD
-   - 1R, 3I, 4I, 9T → HYDRAULIC → HD (heavy equipment hydraulics)
-   - All Caterpillar → HD (construction/mining equipment)
+RESPOND ONLY JSON:
+{"manufacturer":"Caterpillar","tier":"OEM","duty":"HD","region":"GLOBAL","confidence":"HIGH"}
 
-5. MANUFACTURER DETECTION:
-   - Caterpillar/CAT → OEM → HD → GLOBAL
-   - Donaldson → TIER 1 AFTERMARKET → HD
-   - FRAM → TIER 1 AFTERMARKET → LD
-
-RESPOND ONLY WITH JSON:
-{
-  "manufacturer": "Caterpillar",
-  "tier": "OEM",
-  "duty": "HD",
-  "region": "GLOBAL",
-  "confidence": "HIGH"
-}
-
-REMEMBER: 
-- duty must be "HD" or "LD", NEVER "HD/LD"
-- All Caterpillar filters → HD
-- Hydraulic filters in heavy equipment → HD`;
+CRITICAL: duty must be "HD" or "LD" only, based on APPLICATION not just manufacturer`;
 }
 
 module.exports = { buildImprovedPrompt };

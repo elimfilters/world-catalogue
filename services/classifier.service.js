@@ -108,7 +108,7 @@ TIPOS VÁLIDOS:
 OIL, AIR, CABIN, FUEL, HYDRO, COOLANT, MARINE, TURBINE, AIR_DRYER, AIR_HOUSING, FUEL_SEPARATOR, KIT
 
 Responde SOLO JSON válido:
-{"filterType":"OIL","duty":"HD/LD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high","reasoning":"breve"}`;
+{"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high","reasoning":"breve"}`;
 
     const completion = await this.groq.chat.completions.create({
       messages: [
@@ -130,7 +130,7 @@ ${detectedManufacturer ? `Marca: ${detectedManufacturer.name}` : ''}
 Clasifica usando ELIMFILTERS:
 
 filterType: OIL | AIR | CABIN | FUEL | HYDRO | COOLANT | MARINE | TURBINE | AIR_DRYER | AIR_HOUSING | FUEL_SEPARATOR | KIT
-duty: HD | LD | HD/LD
+duty: HD | LD
 
 Mapeo:
 - EL8 (SYNTRAX™) ? Oil
@@ -173,13 +173,13 @@ EJEMPLOS ELIMFILTERS:
 
 Oil:
 - 1R1808 (CAT) ? {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
-- P551329 (Donaldson) ? {"filterType":"OIL","duty":"HD/LD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
+- P551329 (Donaldson) ? {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
 
 Air:
 - P181050 (Donaldson) ? {"filterType":"AIR","duty":"HD","elimfiltersPrefix":"EA1","technology":"MACROCORE™","confidence":"high"}
 
 Fuel:
-- FS19532 (Fleetguard) ? {"filterType":"FUEL","duty":"HD/LD","elimfiltersPrefix":"EF9","technology":"NANOFORCE™","confidence":"high"}
+- FS19532 (Fleetguard) ? {"filterType":"FUEL","duty":"HD","elimfiltersPrefix":"EF9","technology":"NANOFORCE™","confidence":"high"}
 
 Fuel Separator:
 - FS19765 (Fleetguard) ? {"filterType":"FUEL_SEPARATOR","duty":"HD","elimfiltersPrefix":"ES9","technology":"AQUAGUARD™","confidence":"high"}
@@ -520,4 +520,5 @@ Responde JSON exacto. Sin markdown.`;
 }
 
 module.exports = new ClassifierService();
+
 
