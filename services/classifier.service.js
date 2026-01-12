@@ -2,6 +2,10 @@
 const FilterClassification = require('../models/FilterClassification');
 const patterns = require('./patterns');
 const googleSheetsService = require('./googleSheets.service');
+const donaldsonScraper = require('./scrapers/donaldson.scraper');
+const { scrapeFRAM } = require('./scrapers/fram.scraper');
+const skuGenerator = require('./sku.generator');
+const { buildImprovedPrompt } = require('./improved_groq_prompt');
 
 class ClassifierService {
   constructor() {
@@ -31,10 +35,10 @@ class ClassifierService {
     const details = {};
 
     const validPrefixes = [
-      'EA1', 'EA2', 'EF9', 'ES9', 'EC1', 'EH6', 
+      'EA1', 'EA2', 'EF9', 'ES9', 'EC1', 'EH6',
       'EL8', 'EW7', 'EM9', 'ET9', 'ED4', 'EK5', 'EK3'
     ];
-    
+
     if (validPrefixes.includes(result.elimfiltersPrefix)) {
       score += 40;
       details.validPrefix = true;
@@ -45,10 +49,10 @@ class ClassifierService {
 
     const validTypes = [
       'OIL', 'AIR', 'CABIN', 'FUEL', 'HYDRO', 'COOLANT',
-      'MARINE', 'TURBINE', 'AIR_DRYER', 'AIR_HOUSING', 
+      'MARINE', 'TURBINE', 'AIR_DRYER', 'AIR_HOUSING',
       'FUEL_SEPARATOR', 'KIT'
     ];
-    
+
     if (validTypes.includes(result.filterType)) {
       score += 20;
       details.validType = true;
@@ -86,17 +90,17 @@ DUTY:
 
 PREFIJOS Y TECNOLOGÍAS (13 Series):
 
-1. EA1 - Air (HD/LD) → MACROCORE™
+1. EA1 - Air (HD/LD) ? MACROCORE™
 2. EA2 - Air Filter Housings (HD)
-3. EF9 - Fuel (HD/LD) → NANOFORCE™
-4. ES9 - Fuel/Water Separator (HD) → AQUAGUARD™
-5. EC1 - Cabin (HD/LD) → MICROKAPPA™
-6. EH6 - Hydraulic (HD) → SYNTEPORE™
-7. EL8 - Oil (HD/LD) → SYNTRAX™
-8. EW7 - Coolant (HD) → COOLTECH™
-9. EM9 - Marina (HD/LD) → MARINEGUARD™
-10. ET9 - Turbines (HD) → TURBOSHIELD™
-11. ED4 - Air Dryer (HD) → DRYCORE™
+3. EF9 - Fuel (HD/LD) ? NANOFORCE™
+4. ES9 - Fuel/Water Separator (HD) ? AQUAGUARD™
+5. EC1 - Cabin (HD/LD) ? MICROKAPPA™
+6. EH6 - Hydraulic (HD) ? SYNTEPORE™
+7. EL8 - Oil (HD/LD) ? SYNTRAX™
+8. EW7 - Coolant (HD) ? COOLTECH™
+9. EM9 - Marina (HD/LD) ? MARINEGUARD™
+10. ET9 - Turbines (HD) ? TURBOSHIELD™
+11. ED4 - Air Dryer (HD) ? DRYCORE™
 12. EK5 - Filter Kits (HD)
 13. EK3 - Filter Kits (LD)
 
@@ -129,19 +133,19 @@ filterType: OIL | AIR | CABIN | FUEL | HYDRO | COOLANT | MARINE | TURBINE | AIR_
 duty: HD | LD | HD/LD
 
 Mapeo:
-- EL8 (SYNTRAX™) → Oil
-- EA1 (MACROCORE™) → Air  
-- EA2 → Air Filter Housing
-- EF9 (NANOFORCE™) → Fuel
-- ES9 (AQUAGUARD™) → Fuel/Water Separator
-- EC1 (MICROKAPPA™) → Cabin
-- EH6 (SYNTEPORE™) → Hydraulic
-- EW7 (COOLTECH™) → Coolant
-- EM9 (MARINEGUARD™) → Marine
-- ET9 (TURBOSHIELD™) → Turbine
-- ED4 (DRYCORE™) → Air Dryer
-- EK5 → Filter Kits HD
-- EK3 → Filter Kits LD
+- EL8 (SYNTRAX™) ? Oil
+- EA1 (MACROCORE™) ? Air
+- EA2 ? Air Filter Housing
+- EF9 (NANOFORCE™) ? Fuel
+- ES9 (AQUAGUARD™) ? Fuel/Water Separator
+- EC1 (MICROKAPPA™) ? Cabin
+- EH6 (SYNTEPORE™) ? Hydraulic
+- EW7 (COOLTECH™) ? Coolant
+- EM9 (MARINEGUARD™) ? Marine
+- ET9 (TURBOSHIELD™) ? Turbine
+- ED4 (DRYCORE™) ? Air Dryer
+- EK5 ? Filter Kits HD
+- EK3 ? Filter Kits LD
 
 Responde JSON:
 {"filterType":"...","duty":"...","elimfiltersPrefix":"...","technology":"...","confidence":"high/medium/low","reasoning":"..."}
@@ -168,32 +172,32 @@ ${detectedManufacturer ? `Fabricante: ${detectedManufacturer.name}` : ''}
 EJEMPLOS ELIMFILTERS:
 
 Oil:
-- 1R1808 (CAT) → {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
-- P551329 (Donaldson) → {"filterType":"OIL","duty":"HD/LD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
+- 1R1808 (CAT) ? {"filterType":"OIL","duty":"HD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
+- P551329 (Donaldson) ? {"filterType":"OIL","duty":"HD/LD","elimfiltersPrefix":"EL8","technology":"SYNTRAX™","confidence":"high"}
 
 Air:
-- P181050 (Donaldson) → {"filterType":"AIR","duty":"HD","elimfiltersPrefix":"EA1","technology":"MACROCORE™","confidence":"high"}
+- P181050 (Donaldson) ? {"filterType":"AIR","duty":"HD","elimfiltersPrefix":"EA1","technology":"MACROCORE™","confidence":"high"}
 
 Fuel:
-- FS19532 (Fleetguard) → {"filterType":"FUEL","duty":"HD/LD","elimfiltersPrefix":"EF9","technology":"NANOFORCE™","confidence":"high"}
+- FS19532 (Fleetguard) ? {"filterType":"FUEL","duty":"HD/LD","elimfiltersPrefix":"EF9","technology":"NANOFORCE™","confidence":"high"}
 
 Fuel Separator:
-- FS19765 (Fleetguard) → {"filterType":"FUEL_SEPARATOR","duty":"HD","elimfiltersPrefix":"ES9","technology":"AQUAGUARD™","confidence":"high"}
+- FS19765 (Fleetguard) ? {"filterType":"FUEL_SEPARATOR","duty":"HD","elimfiltersPrefix":"ES9","technology":"AQUAGUARD™","confidence":"high"}
 
 MAPEO:
-Oil → EL8 (SYNTRAX™)
-Air → EA1 (MACROCORE™)
-Air Housing → EA2
-Fuel → EF9 (NANOFORCE™)
-Fuel Separator → ES9 (AQUAGUARD™)
-Cabin → EC1 (MICROKAPPA™)
-Hydraulic → EH6 (SYNTEPORE™)
-Coolant → EW7 (COOLTECH™)
-Marine → EM9 (MARINEGUARD™)
-Turbine → ET9 (TURBOSHIELD™)
-Air Dryer → ED4 (DRYCORE™)
-Kit HD → EK5
-Kit LD → EK3
+Oil ? EL8 (SYNTRAX™)
+Air ? EA1 (MACROCORE™)
+Air Housing ? EA2
+Fuel ? EF9 (NANOFORCE™)
+Fuel Separator ? ES9 (AQUAGUARD™)
+Cabin ? EC1 (MICROKAPPA™)
+Hydraulic ? EH6 (SYNTEPORE™)
+Coolant ? EW7 (COOLTECH™)
+Marine ? EM9 (MARINEGUARD™)
+Turbine ? ET9 (TURBOSHIELD™)
+Air Dryer ? ED4 (DRYCORE™)
+Kit HD ? EK5
+Kit LD ? EK3
 
 Responde JSON exacto. Sin markdown.`;
 
@@ -223,8 +227,8 @@ Responde JSON exacto. Sin markdown.`;
       const detectedManufacturer = this.detectManufacturer(filterCode);
       const results = [];
 
-      console.log(`\n🎯 Clasificando: ${filterCode}`);
-      console.log(`📍 Fabricante detectado: ${detectedManufacturer?.name || 'Ninguno'}\n`);
+      console.log(`\n?? Clasificando: ${filterCode}`);
+      console.log(`?? Fabricante detectado: ${detectedManufacturer?.name || 'Ninguno'}\n`);
 
       const strategies = [
         { name: 'Detallado', fn: this.strategy1.bind(this) },
@@ -234,20 +238,20 @@ Responde JSON exacto. Sin markdown.`;
 
       for (const strategy of strategies) {
         try {
-          console.log(`⚙️  Ejecutando estrategia: ${strategy.name}...`);
+          console.log(`??  Ejecutando estrategia: ${strategy.name}...`);
           const result = await strategy.fn(filterCode, detectedManufacturer);
           const evaluation = this.evaluateClassification(result, detectedManufacturer);
-          
+
           results.push({
             strategy: strategy.name,
             result,
             evaluation,
             score: evaluation.score
           });
-          
+
           console.log(`   Score: ${evaluation.score}/100`);
         } catch (error) {
-          console.log(`   ❌ Error: ${error.message}`);
+          console.log(`   ? Error: ${error.message}`);
           results.push({
             strategy: strategy.name,
             error: error.message,
@@ -259,7 +263,7 @@ Responde JSON exacto. Sin markdown.`;
       results.sort((a, b) => b.score - a.score);
       const best = results[0];
 
-      console.log(`\n🏆 Mejor resultado: ${best.strategy} (${best.score}/100)\n`);
+      console.log(`\n?? Mejor resultado: ${best.strategy} (${best.score}/100)\n`);
 
       if (best.score < 50) {
         throw new Error('Todos los intentos obtuvieron score bajo (<50)');
@@ -286,11 +290,82 @@ Responde JSON exacto. Sin markdown.`;
     }
   }
 
-  generateSKU(classification) {
-    const prefix = classification.elimfiltersPrefix;
-    const timestamp = Date.now().toString().slice(-6);
-    const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
-    return `${prefix}-${timestamp}${randomSuffix}`;
+  async generateSKUWithCrossReference(classification, originalCode) {
+    try {
+      const duty = classification.duty;
+      const filterType = classification.filterType;
+
+      console.log(`\n?? Iniciando cross-reference para: ${originalCode}`);
+      console.log(`   Duty: ${duty}`);
+      console.log(`   Filter Type: ${filterType}`);
+
+      let crossReferenceCode = null;
+      let scraperResult = null;
+
+      // PASO 1: Hacer cross-reference según DUTY
+      // Si incluye HD (HD o HD/LD), buscar en Donaldson primero
+      if (duty.includes('HD')) {
+        console.log('   ?? Cross-reference con Donaldson (HD)...');
+        scraperResult = await donaldsonScraper(originalCode);
+        
+        if (scraperResult && !scraperResult.error && scraperResult.idReal) {
+          crossReferenceCode = scraperResult.idReal;
+          console.log(`   ? Donaldson code: ${crossReferenceCode}`);
+        }
+      }
+      
+      // Si incluye LD (LD o HD/LD) y NO encontró en Donaldson, buscar en FRAM
+      if (duty.includes('LD') && !crossReferenceCode) {
+        console.log('   ?? Cross-reference con FRAM (LD)...');
+        scraperResult = await scrapeFRAM(originalCode);
+        
+        if (scraperResult && scraperResult.success) {
+          // FRAM puede retornar el código en diferentes campos
+          crossReferenceCode = scraperResult.code || scraperResult.sku || originalCode;
+          console.log(`   ? FRAM code: ${crossReferenceCode}`);
+        }
+      }
+
+      // PASO 2: Generar SKU usando el código de cross-reference
+      if (crossReferenceCode) {
+        const skuData = skuGenerator.generate(crossReferenceCode, filterType, 'PERFORMANCE');
+        console.log(`   ? SKU generado: ${skuData.sku}`);
+        
+        return {
+          sku: skuData.sku,
+          technology: skuData.technology,
+          crossReferenceCode: crossReferenceCode,
+          crossReferences: scraperResult.alternativos || scraperResult.competitors || [],
+          source: 'CROSS_REFERENCE'
+        };
+      } else {
+        // Fallback: generar SKU directo si no hay cross-reference
+        console.log('   ?? No se encontró cross-reference, generando SKU directo...');
+        const skuData = skuGenerator.generateDirect(originalCode, filterType, 'STANDARD');
+        
+        return {
+          sku: skuData.sku,
+          technology: skuData.technology,
+          crossReferenceCode: null,
+          crossReferences: [],
+          source: 'DIRECT'
+        };
+      }
+
+    } catch (error) {
+      console.error('? Error en generateSKUWithCrossReference:', error.message);
+      // Fallback en caso de error
+      const prefix = classification.elimfiltersPrefix;
+      const timestamp = Date.now().toString().slice(-6);
+      const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+      return {
+        sku: `${prefix}-${timestamp}${randomSuffix}`,
+        technology: classification.technology,
+        crossReferenceCode: null,
+        crossReferences: [],
+        source: 'FALLBACK_ERROR'
+      };
+    }
   }
 
   async saveClassification(classificationData) {
@@ -306,17 +381,17 @@ Responde JSON exacto. Sin markdown.`;
 
   async processFilter(filterCode, manufacturerHint = null, searchContext = 'individual') {
     try {
-      console.log(`\n═══════════════════════════════════════════════`);
-      console.log(`🎯 PROCESANDO FILTRO: ${filterCode}`);
-      console.log(`📍 Contexto: ${searchContext}`);
-      console.log(`═══════════════════════════════════════════════\n`);
-      
-      // 🔍 PASO 1: Buscar en Google Sheets
-      console.log('📊 PASO 1: Buscando en Google Sheets...');
+      console.log(`\n-----------------------------------------------`);
+      console.log(`?? PROCESANDO FILTRO: ${filterCode}`);
+      console.log(`?? Contexto: ${searchContext}`);
+      console.log(`-----------------------------------------------\n`);
+
+      // ?? PASO 1: Buscar en Google Sheets
+      console.log('?? PASO 1: Buscando en Google Sheets...');
       const sheetsResult = await googleSheetsService.searchFilter(filterCode, searchContext);
-      
+
       if (sheetsResult) {
-        console.log(`\n✅ ¡ENCONTRADO EN GOOGLE SHEETS!`);
+        console.log(`\n? ¡ENCONTRADO EN GOOGLE SHEETS!`);
         console.log(`   Fuente: ${sheetsResult.source}`);
         console.log(`   Fila: ${sheetsResult.rowNumber}`);
         return {
@@ -329,14 +404,14 @@ Responde JSON exacto. Sin markdown.`;
         };
       }
 
-      // 🗄️ PASO 2: Buscar en MongoDB
-      console.log('\n🗄️  PASO 2: Buscando en MongoDB...');
-      const existingClassification = await FilterClassification.findOne({ 
-        originalCode: filterCode 
+      // ??? PASO 2: Buscar en MongoDB
+      console.log('\n???  PASO 2: Buscando en MongoDB...');
+      const existingClassification = await FilterClassification.findOne({
+        originalCode: filterCode
       });
 
       if (existingClassification) {
-        console.log(`\n✅ ¡ENCONTRADO EN MONGODB!`);
+        console.log(`\n? ¡ENCONTRADO EN MONGODB!`);
         return {
           success: true,
           source: 'mongodb',
@@ -345,20 +420,22 @@ Responde JSON exacto. Sin markdown.`;
         };
       }
 
-      // 🤖 PASO 3: Generar clasificación automática
-      console.log('\n🤖 PASO 3: No encontrado. Generando clasificación automática...');
-      
+      // ?? PASO 3: Generar clasificación automática
+      console.log('\n?? PASO 3: No encontrado. Generando clasificación automática...');
+
       const classification = await this.classifyWithMatrix(filterCode, manufacturerHint);
-      const elimfiltersSKU = this.generateSKU(classification);
-      
+      const skuResult = await this.generateSKUWithCrossReference(classification, filterCode);
+
       const fullClassification = {
         originalCode: filterCode,
         manufacturer: classification.manufacturer,
         filterType: classification.filterType,
         duty: classification.duty,
         elimfiltersPrefix: classification.elimfiltersPrefix,
-        elimfiltersSKU,
-        technology: classification.technology,
+        elimfiltersSKU: skuResult.sku,
+        technology: skuResult.technology,
+        crossReferenceCode: skuResult.crossReferenceCode,
+        crossReferences: skuResult.crossReferences,
         confidence: classification.confidence,
         reasoning: classification.reasoning,
         detectedManufacturer: classification.detectedManufacturer,
@@ -366,22 +443,23 @@ Responde JSON exacto. Sin markdown.`;
         selectedStrategy: classification.selectedStrategy,
         finalScore: classification.finalScore
       };
-      
+
       const saved = await this.saveClassification(fullClassification);
-      
-      console.log(`\n✅ CLASIFICACIÓN GENERADA Y GUARDADA`);
-      console.log(`   SKU: ${elimfiltersSKU}`);
+
+      console.log(`\n? CLASIFICACIÓN GENERADA Y GUARDADA`);
+      console.log(`   SKU: ${skuResult.sku}`);
       console.log(`   Prefijo: ${classification.elimfiltersPrefix}`);
       console.log(`   Tipo: ${classification.filterType}`);
-      
-      return { 
-        success: true, 
+      console.log(`   Cross-Ref: ${skuResult.crossReferenceCode || 'N/A'}`);
+
+      return {
+        success: true,
         source: 'new_classification',
         classification: saved,
         exists: false
       };
     } catch (error) {
-      console.error('\n❌ ERROR procesando filtro:', error.message);
+      console.error('\n? ERROR procesando filtro:', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -426,13 +504,13 @@ Responde JSON exacto. Sin markdown.`;
         { $sort: { count: -1 } },
         { $limit: 20 }
       ]);
-      return { 
-        total, 
-        byDuty, 
-        byType, 
-        byPrefix, 
-        byTechnology, 
-        topManufacturers: byManufacturer 
+      return {
+        total,
+        byDuty,
+        byType,
+        byPrefix,
+        byTechnology,
+        topManufacturers: byManufacturer
       };
     } catch (error) {
       console.error('Error obteniendo estadísticas:', error);
@@ -442,3 +520,4 @@ Responde JSON exacto. Sin markdown.`;
 }
 
 module.exports = new ClassifierService();
+
