@@ -1,7 +1,7 @@
 ﻿function buildImprovedPrompt(filterCode, detectedManufacturer) {
-  const mfg = detectedManufacturer ? `Fabricante detectado: `` : '';
-  return `CLASSIFY FILTER: "``"
-``
+  const mfg = detectedManufacturer ? `Fabricante detectado: ${detectedManufacturer.name}` : '';
+  return `CLASSIFY FILTER: "${filterCode}"
+${mfg}
 CRITICAL: Output ONLY "HD", "LD", or identify marine manufacturers.
 Marine manufacturers: RACOR, SIERRA, VOLVO PENTA, CAT MARINE, MERCURY, YAMAHA, KAWASAKI, SEA-DOO, MERCRUISER, ONAN, SUZUKI, EVINRUDE, BOMBARDIER
 ===============================================================
