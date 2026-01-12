@@ -1,4 +1,4 @@
-const Groq = require('groq-sdk');
+﻿const Groq = require('groq-sdk');
 const FilterClassification = require('../models/FilterClassification');
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
 
@@ -229,7 +229,7 @@ class ClassifierService {
     try {
       const cached = await FilterClassification.findOne({ filterCode });
       if (cached) {
-        console.log(`✅ Cache hit: ${filterCode}`);
+        console.log(`âœ… Cache hit: ${filterCode}`);
         return {
           manufacturer: cached.manufacturer,
           tier: cached.tier,
@@ -241,22 +241,22 @@ class ClassifierService {
         };
       }
 
-      console.log(`🔍 Classifying: ${filterCode}`);
+      console.log(`ðŸ” Classifying: ${filterCode}`);
       let classification = this.patternMatch(filterCode);
 
       if (classification.manufacturer === 'UNKNOWN') {
-        console.log(`🤖 Using GROQ AI for: ${filterCode}`);
+        console.log(`ðŸ¤– Using GROQ AI for: ${filterCode}`);
         classification = await this.classifyWithGroq(filterCode);
       }
 
       if (classification.confidence !== 'LOW') {
         await FilterClassification.create({ filterCode, ...classification });
-        console.log(`💾 Cached: ${filterCode}`);
+        console.log(`ðŸ’¾ Cached: ${filterCode}`);
       }
 
       return { ...classification, cached: false };
     } catch (error) {
-      console.error('❌ Classification error:', error);
+      console.error('âŒ Classification error:', error);
       throw error;
     }
   }
@@ -287,18 +287,7 @@ class ClassifierService {
 
   async classifyWithGroq(filterCode) {
     try {
-      const prompt = `Analyze filter code: "${filterCode}"
-
-Identify manufacturer (Caterpillar, John Deere, Donaldson, FRAM, Komatsu, Volvo, etc.)
-Determine tier (OEM, TIER 1-3 AFTERMARKET)
-Classify duty (HEAVY DUTY (HD) or LIGHT DUTY (LD))
-Region (NORTH AMERICA, EUROPE, ASIA, GLOBAL)
-
-HD manufacturers: CAT, Komatsu, John Deere, Donaldson, Fleetguard, Baldwin, Cummins
-LD manufacturers: Ford, Toyota, Honda, BMW, FRAM, Purolator
-
-JSON only:
-{"manufacturer":"Name","tier":"OEM/TIER X","duty":"HD/LD","region":"Region","confidence":"HIGH/MEDIUM/LOW"}`;
+      const prompt = buildImprovedPrompt(filterCode);
 
       const completion = await this.groq.chat.completions.create({
         messages: [{ role: 'user', content: prompt }],
@@ -316,7 +305,7 @@ JSON only:
       const result = JSON.parse(jsonMatch[0]);
       return { ...result, method: 'GROQ_AI' };
     } catch (error) {
-      console.error('❌ GROQ error:', error.message);
+      console.error('âŒ GROQ error:', error.message);
       return {
         manufacturer: 'UNKNOWN',
         tier: 'UNKNOWN',
@@ -364,4 +353,6 @@ JSON only:
 }
 
 module.exports = new ClassifierService();
+
+
 
