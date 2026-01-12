@@ -1,6 +1,6 @@
 ﻿const Groq = require('groq-sdk');
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
-const { isMarineManufacturer, generateMarineSKU } = require('../utils/marineDetector');
+const { isMarineManufacturer, generateMarineSKU } = require('../src/utils/marineDetector');
 
 class ClassifierService {
   constructor() {
@@ -42,7 +42,6 @@ class ClassifierService {
       const detectedManufacturer = this.detectManufacturer(filterCode);
       console.log('[Classifier] Manufacturer:', detectedManufacturer.name);
 
-      // ⭐ DETECTAR MARINO ANTES DE GROQ
       if (isMarineManufacturer(detectedManufacturer.name)) {
         console.log('[Marine] Detected marine manufacturer');
         const marineSKU = generateMarineSKU(filterCode);
