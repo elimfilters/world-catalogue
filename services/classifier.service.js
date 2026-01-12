@@ -40,22 +40,7 @@ class ClassifierService {
       console.log('[Classifier] Processing:', filterCode);
 
       const detectedManufacturer = this.detectManufacturer(filterCode);
-      console.log('[Classifier] Manufacturer:', detectedManufacturer.name);
-
-      if (isMarineManufacturer(detectedManufacturer.name)) {
-        console.log('[Marine] Detected marine manufacturer');
-        const marineSKU = generateMarineSKU(filterCode);
-        return {
-          manufacturer: detectedManufacturer.name,
-          filterType: 'Marine',
-          duty: 'Marine',
-          elimfiltersPrefix: 'EM9',
-          elimfiltersSKU: marineSKU,
-          confidence: 'high',
-          detectedManufacturer,
-          source: 'marine_classification'
-        };
-      }
+      console.log('[Classifier] Initial detection:', detectedManufacturer.name);
 
       const prompt = buildImprovedPrompt(filterCode, detectedManufacturer);
 
@@ -75,6 +60,22 @@ class ClassifierService {
       }
 
       const result = JSON.parse(jsonMatch[0]);
+
+      // ⭐ DETECTAR MARINO DESPUÉS DE GROQ
+      if (isMarineManufacturer(result.manufacturer)) {
+        console.log('[Marine] Detected:', result.manufacturer);
+        const marineSKU = generateMarineSKU(filterCode);
+        return {
+          manufacturer: result.manufacturer,
+          filterType: result.filterType || 'Marine',
+          duty: 'Marine',
+          elimfiltersPrefix: 'EM9',
+          elimfiltersSKU: marineSKU,
+          confidence: 'high',
+          detectedManufacturer: result.detectedManufacturer || detectedManufacturer,
+          source: 'marine_classification'
+        };
+      }
 
       if (!['HD', 'LD'].includes(result.duty)) {
         console.log('[Warning] Invalid duty:', result.duty);
