@@ -1,5 +1,6 @@
 ﻿const Groq = require('groq-sdk');
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
+const { isMarineManufacturer, generateMarineSKU } = require('../utils/marineDetector');
 
 class ClassifierService {
   constructor() {
@@ -8,8 +9,7 @@ class ClassifierService {
 
   detectManufacturer(filterCode) {
     const code = filterCode.trim().toUpperCase();
-    
-    // Patterns básicos embebidos
+
     const manufacturers = [
       { name: 'Caterpillar', patterns: [/^[1-9][A-Z]\d{4}$/], tier: 'OEM' },
       { name: 'Fleetguard', patterns: [/^[A-Z]{2}\d{4}/], tier: 1 },
@@ -18,7 +18,7 @@ class ClassifierService {
       { name: 'Hyundai', patterns: [/^26300-/], tier: 'OEM' },
       { name: 'Mann', patterns: [/^[A-Z]{2}\d{3}\/\d{1}[A-Z]?$/], tier: 1 }
     ];
-    
+
     for (const mfg of manufacturers) {
       for (const pattern of mfg.patterns) {
         if (pattern.test(code)) {
@@ -31,16 +31,32 @@ class ClassifierService {
         }
       }
     }
-    
+
     return { name: 'Generic', tier: null, aliases: [], confidence: 'low' };
   }
 
   async processFilter(filterCode) {
     try {
-      console.log(`🔍 Clasificando: ${filterCode}`);
-      
+      console.log('[Classifier] Processing:', filterCode);
+
       const detectedManufacturer = this.detectManufacturer(filterCode);
-      console.log(`Fabricante detectado: ${detectedManufacturer.name}`);
+      console.log('[Classifier] Manufacturer:', detectedManufacturer.name);
+
+      // ⭐ DETECTAR MARINO ANTES DE GROQ
+      if (isMarineManufacturer(detectedManufacturer.name)) {
+        console.log('[Marine] Detected marine manufacturer');
+        const marineSKU = generateMarineSKU(filterCode);
+        return {
+          manufacturer: detectedManufacturer.name,
+          filterType: 'Marine',
+          duty: 'Marine',
+          elimfiltersPrefix: 'EM9',
+          elimfiltersSKU: marineSKU,
+          confidence: 'high',
+          detectedManufacturer,
+          source: 'marine_classification'
+        };
+      }
 
       const prompt = buildImprovedPrompt(filterCode, detectedManufacturer);
 
@@ -52,21 +68,21 @@ class ClassifierService {
       });
 
       const content = completion.choices[0]?.message?.content || '{}';
-      console.log(`📥 Respuesta GROQ: ${content.substring(0, 200)}...`);
+      console.log('[GROQ] Response received');
 
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No se encontró JSON en respuesta');
+        throw new Error('No JSON found in response');
       }
 
       const result = JSON.parse(jsonMatch[0]);
 
       if (!['HD', 'LD'].includes(result.duty)) {
-        console.log(`⚠️ Duty inválido: ${result.duty}`);
-        throw new Error(`Duty inválido: ${result.duty}`);
+        console.log('[Warning] Invalid duty:', result.duty);
+        throw new Error('Invalid duty: ' + result.duty);
       }
 
-      console.log(`✅ Clasificado como: ${result.duty}`);
+      console.log('[Classifier] Classified as:', result.duty);
 
       return {
         ...result,
@@ -75,11 +91,10 @@ class ClassifierService {
       };
 
     } catch (error) {
-      console.error('❌ Error:', error.message);
+      console.error('[Error] Classifier:', error.message);
       throw error;
     }
   }
 }
 
 module.exports = new ClassifierService();
-
