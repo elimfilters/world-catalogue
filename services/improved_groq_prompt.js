@@ -1,7 +1,7 @@
 ﻿function buildImprovedPrompt(filterCode, detectedManufacturer) {
-  const mfg = detectedManufacturer ? 'Fabricante detectado: ' + detectedManufacturer.name : '';
-  return 'CLASSIFY FILTER: "' + filterCode + '"
-' + mfg + '
+  const mfg = detectedManufacturer ? `Fabricante detectado: `` : '';
+  return `CLASSIFY FILTER: "``"
+``
 CRITICAL: Output ONLY "HD", "LD", or identify marine manufacturers.
 Marine manufacturers: RACOR, SIERRA, VOLVO PENTA, CAT MARINE, MERCURY, YAMAHA, KAWASAKI, SEA-DOO, MERCRUISER, ONAN, SUZUKI, EVINRUDE, BOMBARDIER
 ===============================================================
@@ -60,6 +60,6 @@ OUTPUT FORMAT (JSON only, no markdown):
   "elimfiltersSKU": "EL87644",
   "confidence": "high"
 }
-IMPORTANT: If marine manufacturer detected, include full manufacturer name (Volvo Penta, Cat Marine, RACOR, SIERRA, Mercury, etc.)';
+IMPORTANT: If marine manufacturer detected, include full manufacturer name (Volvo Penta, Cat Marine, RACOR, SIERRA, Mercury, etc.)`;
 }
 module.exports = { buildImprovedPrompt };
