@@ -1,11 +1,12 @@
 ﻿const googleSheetsService = require('./googleSheets.service');
 
 class KitService {
-  async findKitByFilter(filterCode, duty = 'HD') {
+  async findKitByFilter(donaldsonCode) {
     try {
-      console.log('[Kit] Searching for kit associated with:', filterCode, 'Duty:', duty);
+      console.log('[Kit] Searching for kit associated with:', donaldsonCode);
       
-      const result = await googleSheetsService.searchInMasterKits(filterCode, 'FILTER');
+      // Buscar en MASTER_KITS_V1 por normsku_base
+      const result = await googleSheetsService.searchInMasterKits(donaldsonCode, 'FILTER');
       
       if (result && result.data) {
         return this.parseKitData(result.data);
