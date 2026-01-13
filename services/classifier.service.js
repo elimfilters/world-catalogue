@@ -2,7 +2,6 @@
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
 const { isMarineManufacturer, generateMarineSKU } = require('../src/utils/marineDetector');
 const { performCrossReference } = require('./crossReference.service');
-const housingDetector = require('../src/utils/housingDetector');
 
 class ClassifierService {
   constructor() {
@@ -41,31 +40,6 @@ class ClassifierService {
     try {
       console.log('[Classifier] Processing:', filterCode);
 
-      // 1. DETECTAR HOUSING/CARCASA PRIMERO (EA2)
-      const housingResult = housingDetector.detectHousing(filterCode);
-      if (housingResult.isHousing) {
-        console.log('[Housing] Detected EA2:', filterCode);
-        return {
-          manufacturer: housingResult.manufacturer,
-          filterType: 'AIR',
-          duty: housingResult.duty,
-          elimfiltersPrefix: 'EA2',
-          elimfiltersSKU: `EA2${filterCode.replace(/[^0-9]/g, '').slice(-4)}`,
-          confidence: housingResult.confidence,
-          detectedManufacturer: {
-            name: housingResult.manufacturer,
-            tier: housingResult.tier,
-            aliases: [],
-            confidence: housingResult.confidence
-          },
-          crossReferenceCode: filterCode,
-          elimfiltersSeries: 'HOUSING',
-          alternativeSKUs: [],
-          crossReferences: {}
-        };
-      }
-
-      // 2. CONTINUAR CON DETECCIÓN NORMAL
       const detectedManufacturer = this.detectManufacturer(filterCode);
       console.log('[Classifier] Initial detection:', detectedManufacturer.name);
 
@@ -88,7 +62,6 @@ class ClassifierService {
 
       const result = JSON.parse(jsonMatch[0]);
 
-      // 3. DETECTAR MARINE (EM9)
       if (isMarineManufacturer(result.manufacturer)) {
         console.log('[Marine] Detected:', result.manufacturer);
         const marineSKU = generateMarineSKU(filterCode);
@@ -101,6 +74,20 @@ class ClassifierService {
           confidence: 'high',
           detectedManufacturer: result.detectedManufacturer || detectedManufacturer,
           source: 'marine_classification'
+        };
+      }
+
+      // EA2 HOUSING - GROQ handles this now via prompt
+      if (result.elimfiltersPrefix === 'EA2') {
+        console.log('[Housing] EA2 detected:', filterCode);
+        return {
+          ...result,
+          detectedManufacturer,
+          confidence: result.confidence || 'high',
+          crossReferenceCode: filterCode,
+          elimfiltersSeries: result.elimfiltersSeries || 'HOUSING',
+          alternativeSKUs: [],
+          crossReferences: {}
         };
       }
 
