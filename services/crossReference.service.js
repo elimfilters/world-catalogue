@@ -1,93 +1,143 @@
-﻿const db = require('../config/db');
+﻿const FilterClassification = require('../models/FilterClassification');
+const path = require('path');
+const fs = require('fs').promises;
+const donaldsonCrossRefScraper = require('./scrapers/donaldson.crossref.scraper');
+const framCrossRefScraper = require('./scrapers/fram.crossref.scraper');
 
-const ELIMFILTERS_PREFIX_MAP = {
-  'OIL': 'EO5',
-  'AIR': 'EA2',
-  'FUEL': 'EF3',
-  'CABIN': 'EC1',
-  'HYDRAULIC': 'EH6',
-  'COOLANT': 'EW7',
-  'TRANSMISSION': 'ET8',
-  'AIR_DRYER': 'ED4',
-  'FUEL_SEPARATOR': 'ES9',
-  'AIR_HOUSING': 'EA2'
+// Mapeo de códigos FRAM a Series ELIMFILTERS
+const FRAM_SERIES_MAP = {
+    'CH': 'STANDARD',
+    'FE': 'PROSYNTHETIC',
+    'FS': 'TITANIUM MAX',
+    'XG': 'ULTRA PERFORMANCE',
+    'FF': 'FORCE GUARD',
+    'TG': 'DUTY PLUS',
+    'FD': 'PREMIUM DRIVE'
 };
 
-async function findCrossReference(filterCode, filterType, dutyType) {
-  try {
-    const cleanCode = filterCode.trim().toUpperCase();
-    
-    const query = `
-      SELECT 
-        donaldson_code,
-        fleetguard_code,
-        wix_code,
-        fram_code,
-        baldwin_code,
-        filter_type,
-        duty_type
-      FROM cross_reference_master
-      WHERE (
-        UPPER(TRIM(donaldson_code)) = $1 OR
-        UPPER(TRIM(fleetguard_code)) = $1 OR
-        UPPER(TRIM(wix_code)) = $1 OR
-        UPPER(TRIM(fram_code)) = $1 OR
-        UPPER(TRIM(baldwin_code)) = $1
-      )
-      AND UPPER(filter_type) = $2
-      AND UPPER(duty_type) = $3
-      LIMIT 1
-    `;
-
-    const result = await db.query(query, [cleanCode, filterType.toUpperCase(), dutyType.toUpperCase()]);
-    
-    if (result.rows.length > 0) {
-      const row = result.rows[0];
-      return {
-        donaldsonCode: row.donaldson_code,
-        fleetguardCode: row.fleetguard_code,
-        wixCode: row.wix_code,
-        framCode: row.fram_code,
-        baldwinCode: row.baldwin_code
-      };
+async function crossReferenceToDonaldson(filterCode, filterType, duty) {
+    try {
+        console.log('[CrossRef] Scraping Donaldson for:', filterCode);
+        const result = await donaldsonCrossRefScraper(filterCode);
+        
+        if (result && result.idReal) {
+            console.log('[CrossRef] Found Donaldson code:', result.idReal);
+            return result;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('[CrossRef] Error with Donaldson:', error.message);
+        return null;
     }
-    
-    return null;
-  } catch (error) {
-    console.error('Cross-reference lookup error:', error);
-    return null;
-  }
 }
 
-function generateElimfiltersSKU(filterType, dutyType, crossReference, originalCode) {
-  const prefix = ELIMFILTERS_PREFIX_MAP[filterType];
-  
-  if (!prefix) {
-    console.warn(`Unknown filter type: ${filterType}`);
-    return null;
-  }
-
-  let donaldsonNumber = null;
-
-  if (crossReference && crossReference.donaldsonCode) {
-    donaldsonNumber = crossReference.donaldsonCode.replace(/^P/, '');
-  } else {
-    const cleanOriginal = originalCode.trim().toUpperCase();
-    if (cleanOriginal.startsWith('P') && /^P\d+$/.test(cleanOriginal)) {
-      donaldsonNumber = cleanOriginal.replace(/^P/, '');
-    } else {
-      console.warn(`No Donaldson code available for ${originalCode}`);
-      return null;
+async function crossReferenceToFRAM(filterCode, filterType, duty) {
+    try {
+        console.log('[CrossRef] Scraping FRAM for:', filterCode);
+        const result = await framCrossRefScraper(filterCode);
+        
+        if (result && result.idReal) {
+            console.log('[CrossRef] Found FRAM codes:', result.idReal, 
+                       'Alternatives:', result.alternativeCodes?.length || 0);
+            return result;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('[CrossRef] Error with FRAM:', error.message);
+        return null;
     }
-  }
+}
 
-  const sku = `${prefix}${donaldsonNumber}`;
-  
-  return sku;
+function generateElimfiltersSKU(referenceCode, filterType, duty) {
+    if (!referenceCode) return null;
+
+    const ldPrefixMap = {
+        'AIR': 'EA1',
+        'OIL': 'EL8',
+        'FUEL': 'EF9',
+        'CABIN': 'EC1'
+    };
+
+    const prefix = ldPrefixMap[filterType] || 'EL8';
+    const cleaned = referenceCode.replace(/[^A-Z0-9]/gi, '');
+    const last4 = cleaned.slice(-4);
+
+    return ``;
+}
+
+function getElimfiltersSeries(framCode) {
+    const framPrefix = framCode.match(/^([A-Z]{2})/)?.[1] || '';
+    return FRAM_SERIES_MAP[framPrefix] || 'STANDARD';
+}
+
+async function performCrossReference(filterCode, filterType, duty) {
+    console.log('[CrossRef] Starting for:', filterCode, '| Type:', filterType, '| Duty:', duty);
+
+    let result = null;
+    let elimfiltersSKU = null;
+    let elimfiltersSeries = null;
+    let alternativeSKUs = [];
+
+    try {
+        if (duty === 'HD') {
+            result = await crossReferenceToDonaldson(filterCode, filterType, 'HD');
+            if (result && result.idReal) {
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'HD');
+                elimfiltersSeries = 'STANDARD';
+                console.log('[CrossRef] Generated HD SKU:', elimfiltersSKU);
+            }
+        }
+        else if (duty === 'LD') {
+            result = await crossReferenceToFRAM(filterCode, filterType, 'LD');
+            if (result && result.idReal) {
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'LD');
+                elimfiltersSeries = getElimfiltersSeries(result.idReal);
+                console.log('[CrossRef] Generated LD SKU:', elimfiltersSKU, '| Series:', elimfiltersSeries);
+                
+                if (result.alternativeCodes && result.alternativeCodes.length > 0) {
+                    alternativeSKUs = result.alternativeCodes.map(code => ({
+                        framCode: code,
+                        elimfiltersSKU: generateElimfiltersSKU(code, filterType, 'LD'),
+                        elimfiltersSeries: getElimfiltersSeries(code)
+                    }));
+                    console.log('[CrossRef] Generated', alternativeSKUs.length, 'alternative SKUs with ELIMFILTERS series');
+                }
+            }
+        }
+
+        const referenceCode = result?.idReal || null;
+        
+        return {
+            crossReferenceCode: referenceCode,
+            elimfiltersSKU: elimfiltersSKU,
+            elimfiltersSeries: elimfiltersSeries,
+            alternativeSKUs: alternativeSKUs,
+            crossReferences: referenceCode ? [{
+                manufacturer: duty === 'HD' ? 'Donaldson' : 'FRAM',
+                code: referenceCode,
+                duty: duty
+            }] : [],
+            scrapedData: result
+        };
+
+    } catch (error) {
+        console.error('[CrossRef] Error:', error.message);
+        return {
+            crossReferenceCode: null,
+            elimfiltersSKU: null,
+            elimfiltersSeries: null,
+            alternativeSKUs: [],
+            crossReferences: []
+        };
+    }
 }
 
 module.exports = {
-  findCrossReference,
-  generateElimfiltersSKU,
-  ELIMFILTERS_PREFIX_MAP
+    performCrossReference,
+    crossReferenceToDonaldson,
+    crossReferenceToFRAM,
+    generateElimfiltersSKU,
+    getElimfiltersSeries
 };
