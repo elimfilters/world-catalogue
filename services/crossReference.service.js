@@ -39,10 +39,9 @@ async function crossReferenceToFRAM(filterCode, filterType, duty) {
     }
 }
 
-function generateElimfiltersSKU(referenceCode, filterType, duty) {
+function generateElimfiltersSKU(referenceCode, filterType, duty, addSuffix = false) {
     if (!referenceCode) return null;
 
-    // LD solo tiene 4 prefijos
     const ldPrefixMap = {
         'AIR': 'EA1',
         'OIL': 'EL8',
@@ -51,11 +50,16 @@ function generateElimfiltersSKU(referenceCode, filterType, duty) {
     };
 
     const prefix = ldPrefixMap[filterType] || 'EL8';
-
     const cleaned = referenceCode.replace(/[^A-Z0-9]/gi, '');
     const last4 = cleaned.slice(-4);
+    
+    // Extraer prefijo FRAM (FE, FS, XG, FF, TG, CH, FD)
+    const framPrefix = referenceCode.match(/^([A-Z]{2})/)?.[1] || '';
+    
+    // Si es alternativo y NO es CH, agregar sufijo
+    const suffix = (addSuffix && framPrefix && framPrefix !== 'CH') ? `-${framPrefix}` : '';
 
-    return `${prefix}${last4}`;
+    return `${prefix}${last4}${suffix}`;
 }
 
 async function performCrossReference(filterCode, filterType, duty) {
@@ -69,25 +73,25 @@ async function performCrossReference(filterCode, filterType, duty) {
         if (duty === 'HD') {
             result = await crossReferenceToDonaldson(filterCode, filterType, 'HD');
             if (result && result.idReal) {
-                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'HD');
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'HD', false);
                 console.log('[CrossRef] Generated HD SKU:', elimfiltersSKU);
             }
         }
         else if (duty === 'LD') {
             result = await crossReferenceToFRAM(filterCode, filterType, 'LD');
             if (result && result.idReal) {
-                // SKU principal (CH - Extra Guard)
-                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'LD');
+                // SKU principal (CH - Extra Guard) SIN sufijo
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'LD', false);
                 console.log('[CrossRef] Generated LD SKU:', elimfiltersSKU);
                 
-                // SKUs alternativos (FE, FS, XG, FF, TG, FD)
+                // SKUs alternativos CON sufijos (-FE, -FS, -XG, etc.)
                 if (result.alternativeCodes && result.alternativeCodes.length > 0) {
                     alternativeSKUs = result.alternativeCodes.map(code => ({
                         framCode: code,
-                        elimfiltersSKU: generateElimfiltersSKU(code, filterType, 'LD'),
-                        technology: 'Alternative'
+                        elimfiltersSKU: generateElimfiltersSKU(code, filterType, 'LD', true),
+                        technology: code.match(/^([A-Z]{2})/)?.[1] || 'Alternative'
                     }));
-                    console.log('[CrossRef] Generated', alternativeSKUs.length, 'alternative SKUs');
+                    console.log('[CrossRef] Generated', alternativeSKUs.length, 'alternative SKUs with suffixes');
                 }
             }
         }
