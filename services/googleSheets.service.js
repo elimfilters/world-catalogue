@@ -213,3 +213,67 @@ class GoogleSheetsService {
 }
 
 module.exports = new GoogleSheetsService();
+
+// Buscar filtro existente por código
+async function searchFilterByCode(filterCode) {
+  try {
+    const sheets = await authenticate();
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: SHEET_ID,
+      range: 'MASTER_UNIFIED_V5!A:C'
+    });
+
+    const rows = response.data.values || [];
+    
+    // Buscar en columna A (Input Code)
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][0] === filterCode) {
+        return {
+          filterCode: rows[i][0],
+          elimfiltersSKU: rows[i][1],
+          description: rows[i][2]
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[Sheets] Search error:', error.message);
+    return null;
+  }
+}
+
+// Guardar nuevo filtro
+async function saveFilter(filterCode, classificationResult) {
+  try {
+    const sheets = await authenticate();
+    
+    const row = [
+      filterCode,
+      classificationResult.elimfiltersSKU || '',
+      classificationResult.description || '',
+      classificationResult.filterType || '',
+      classificationResult.elimfiltersPrefix || '',
+      classificationResult.duty || ''
+    ];
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: SHEET_ID,
+      range: 'MASTER_UNIFIED_V5!A:F',
+      valueInputOption: 'USER_ENTERED',
+      resource: { values: [row] }
+    });
+
+    console.log('[Sheets] Filter saved successfully');
+    return true;
+  } catch (error) {
+    console.error('[Sheets] Save error:', error.message);
+    return false;
+  }
+}
+
+module.exports = {
+  authenticate,
+  searchFilterByCode,
+  saveFilter
+};
