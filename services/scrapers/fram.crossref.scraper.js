@@ -1,116 +1,146 @@
 ﻿const axios = require("axios");
 const cheerio = require("cheerio");
+const puppeteer = require("puppeteer");
 
 module.exports = async function framCrossRefScraper(code) {
     const cleanCode = code.replace(/\s+/g, '');
-    const headers = { 
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    };
     
+    let browser;
     try {
-        console.log('[FRAM CrossRef] Step 1: Searching partFinder for:', cleanCode);
+        console.log('[FRAM] Step 1: Launching browser for:', cleanCode);
         
-        // PASO 1: Buscar en partFinder
-        const searchUrl = `https://www.fram.com/partFinder/page/index/?q=${cleanCode}`;
-        const { data: htmlSearch } = await axios.get(searchUrl, { 
-            headers, 
-            timeout: 20000,
-            maxRedirects: 5
+        browser = await puppeteer.launch({
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
         
-        const $ = cheerio.load(htmlSearch);
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
         
-        // PASO 2: Extraer los 6 códigos FRAM
-        const framCodes = [];
+        // PASO 1: Ir a partFinder
+        const searchUrl = `https://www.fram.com/partFinder/page/index/?q=${cleanCode}`;
+        console.log('[FRAM] Step 2: Navigating to:', searchUrl);
         
-        // Buscar elementos que contengan códigos FRAM (FE, FS, XG, FF, TG, CH, FD seguidos de números)
-        $('body').find('*').each((i, el) => {
-            const text = $(el).text();
-            const matches = text.match(/\b([A-Z]{2}\d{5,})\b/g);
+        await page.goto(searchUrl, { 
+            waitUntil: 'networkidle2',
+            timeout: 30000 
+        });
+        
+        // PASO 2: Extraer los 7 códigos FRAM de la página
+        const framCodes = await page.evaluate(() => {
+            const codes = [];
+            const regex = /\b(FE|FS|XG|FF|TG|CH|FD)\d{5,}\b/g;
+            const bodyText = document.body.innerText;
+            const matches = bodyText.match(regex);
+            
             if (matches) {
                 matches.forEach(match => {
-                    if (/^(FE|FS|XG|FF|TG|CH|FD)\d+$/.test(match) && !framCodes.includes(match)) {
-                        framCodes.push(match);
+                    if (!codes.includes(match)) {
+                        codes.push(match);
                     }
                 });
             }
+            
+            return codes;
         });
         
-        console.log('[FRAM CrossRef] Step 2: Found codes:', framCodes);
+        console.log('[FRAM] Step 3: Found codes:', framCodes);
         
         if (framCodes.length === 0) {
-            console.log('[FRAM CrossRef] No FRAM codes found');
+            console.log('[FRAM] No codes found');
+            await browser.close();
             return null;
         }
         
-        // PASO 3: Buscar CH (FRAM Extra Guard) como principal
-        let mainCode = framCodes.find(code => code.startsWith('CH'));
-        if (!mainCode) {
-            mainCode = framCodes[0]; // Fallback
-        }
+        // PASO 3: Seleccionar CH (Extra Guard)
+        const mainCode = framCodes.find(c => c.startsWith('CH')) || framCodes[0];
+        console.log('[FRAM] Step 4: Selected CH code:', mainCode);
         
-        console.log('[FRAM CrossRef] Step 3: Main code (CH):', mainCode);
+        // PASO 4: Ir a la página del producto
+        const productUrl = `https://www.fram.com/fram-extra-guard-oil-filter-cartridge-${mainCode.toLowerCase()}`;
+        console.log('[FRAM] Step 5: Navigating to product:', productUrl);
         
-        // PASO 4: Acceder a la página del producto principal
-        const productUrl = `https://www.fram.com/products/${mainCode.toLowerCase()}`;
-        console.log('[FRAM CrossRef] Step 4: Accessing product page:', productUrl);
-        
-        const { data: htmlProduct } = await axios.get(productUrl, { 
-            headers, 
-            timeout: 20000 
+        await page.goto(productUrl, { 
+            waitUntil: 'networkidle2',
+            timeout: 30000 
         });
-        const $p = cheerio.load(htmlProduct);
         
         // PASO 5: Extraer información de las 3 pestañas
-        const title = $p('h1, .product-name').first().text().trim();
-        const description = $p('.product-description, p').first().text().trim();
         
-        // Tab 1: VIEW DETAILS (especificaciones)
-        const specs = {};
-        $p('table tr, .specifications tr, .specs tr').each((i, el) => {
-            const key = $p(el).find('td, th').eq(0).text().trim();
-            const val = $p(el).find('td').eq(1).text().trim();
-            if (key && val) specs[key] = val;
+        // Tab 1: Description
+        const description = await page.evaluate(() => {
+            return document.querySelector('.product-description, .description, p')?.innerText?.trim() || '';
         });
         
-        // Tab 2: APPLICATIONS
-        const applications = [];
-        $p('.applications li, [class*="application"] li').each((i, el) => {
-            const app = $p(el).text().trim();
-            if (app) applications.push(app);
-        });
+        // Tab 2: Applications (pulsar tab si existe)
+        let applications = [];
+        try {
+            await page.click('a:has-text("Applications")');
+            await page.waitForTimeout(1000);
+            
+            applications = await page.evaluate(() => {
+                const apps = [];
+                document.querySelectorAll('.applications li, [class*="application"] li').forEach(el => {
+                    const text = el.innerText.trim();
+                    if (text) apps.push(text);
+                });
+                return apps;
+            });
+        } catch (e) {
+            console.log('[FRAM] Applications tab not found or error:', e.message);
+        }
         
-        // Tab 3: COMPARISON (OEM + Cross References)
-        const oemCodes = [];
-        const crossRefCodes = [];
+        // Tab 3: Comparison (pulsar tab)
+        let oemCodes = [];
+        let crossRefCodes = [];
         
-        $p('.oem-codes li, [class*="oem"] li').each((i, el) => {
-            const oem = $p(el).text().trim();
-            if (oem) oemCodes.push(oem);
-        });
+        try {
+            await page.click('a:has-text("Comparison")');
+            await page.waitForTimeout(1000);
+            
+            const comparisonData = await page.evaluate(() => {
+                const oem = [];
+                const cross = [];
+                
+                // OEM Codes
+                document.querySelectorAll('.oem-codes li, [class*="oem"] li').forEach(el => {
+                    const text = el.innerText.trim();
+                    if (text) oem.push(text);
+                });
+                
+                // Cross Reference Codes
+                document.querySelectorAll('.cross-reference li, [class*="cross"] li').forEach(el => {
+                    const text = el.innerText.trim();
+                    if (text) cross.push(text);
+                });
+                
+                return { oem, cross };
+            });
+            
+            oemCodes = comparisonData.oem;
+            crossRefCodes = comparisonData.cross;
+        } catch (e) {
+            console.log('[FRAM] Comparison tab not found or error:', e.message);
+        }
         
-        $p('.cross-reference li, [class*="cross"] li').each((i, el) => {
-            const cross = $p(el).text().trim();
-            if (cross) crossRefCodes.push(cross);
-        });
+        await browser.close();
         
         return {
             skuBuscado: cleanCode,
             idReal: mainCode,
-            descripcion: description || title,
-            especificaciones: specs,
+            descripcion: description,
             applications: applications,
             oemCodes: oemCodes,
             crossReferences: crossRefCodes,
-            alternativeCodes: framCodes.filter(code => code !== mainCode),
+            alternativeCodes: framCodes.filter(c => c !== mainCode),
             urlFinal: productUrl,
             timestamp: new Date().toISOString(),
-            v: "FRAM_CROSSREF_v3"
+            v: "FRAM_CROSSREF_PUPPETEER_v1"
         };
         
     } catch (error) {
-        console.error('[FRAM CrossRef] Error:', error.message);
-        console.error('[FRAM CrossRef] Stack:', error.stack);
+        if (browser) await browser.close();
+        console.error('[FRAM] Error:', error.message);
         return null;
     }
 };
