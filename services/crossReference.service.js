@@ -1,4 +1,4 @@
-﻿const FilterClassification = require('../models/FilterClassification');
+const FilterClassification = require('../models/FilterClassification');
 const path = require('path');
 const fs = require('fs').promises;
 const donaldsonCrossRefScraper = require('./scrapers/donaldson.crossref.scraper');
@@ -76,7 +76,7 @@ function generateElimfiltersSKU(referenceCode, filterType, duty) {
     const cleaned = referenceCode.replace(/[^A-Z0-9]/gi, '');
     const last4 = cleaned.slice(-4);
 
-    return ``;
+    return ';
 }
 
 function getElimfiltersSeries(framCode) {
