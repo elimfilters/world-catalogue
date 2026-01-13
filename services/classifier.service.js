@@ -84,7 +84,6 @@ class ClassifierService {
 
       console.log('[Classifier] Classified as:', result.duty);
 
-      // CROSS-REFERENCE para HD y LD
       const crossRef = await performCrossReference(
         filterCode,
         result.filterType || 'OIL',
@@ -98,6 +97,8 @@ class ClassifierService {
         crossReferenceCode: crossRef.crossReferenceCode,
         elimfiltersSKU: crossRef.elimfiltersSKU || result.elimfiltersSKU,
         elimfiltersPrefix: this.getPrefixFromSKU(crossRef.elimfiltersSKU || result.elimfiltersSKU),
+        elimfiltersSeries: crossRef.elimfiltersSeries || 'STANDARD',
+        alternativeSKUs: crossRef.alternativeSKUs || [],
         crossReferences: crossRef.crossReferences
       };
 
