@@ -4,7 +4,6 @@ const fs = require('fs').promises;
 const donaldsonCrossRefScraper = require('./scrapers/donaldson.crossref.scraper');
 const framCrossRefScraper = require('./scrapers/fram.crossref.scraper');
 
-// Mapeo de códigos FRAM a Series ELIMFILTERS
 const FRAM_SERIES_MAP = {
     'CH': 'STANDARD',
     'FE': 'PROSYNTHETIC',
@@ -53,6 +52,18 @@ async function crossReferenceToFRAM(filterCode, filterType, duty) {
 function generateElimfiltersSKU(referenceCode, filterType, duty) {
     if (!referenceCode) return null;
 
+    // HD - Todos los prefijos
+    const hdPrefixMap = {
+        'AIR': 'EA1',
+        'OIL': 'EL8',
+        'FUEL': 'EF9',
+        'HYDRAULIC': 'EH6',
+        'COOLANT': 'EW7',
+        'AIR_DRYER': 'ED4',
+        'HOUSING': 'EA2'
+    };
+
+    // LD - Solo 4 prefijos
     const ldPrefixMap = {
         'AIR': 'EA1',
         'OIL': 'EL8',
@@ -60,7 +71,8 @@ function generateElimfiltersSKU(referenceCode, filterType, duty) {
         'CABIN': 'EC1'
     };
 
-    const prefix = ldPrefixMap[filterType] || 'EL8';
+    const prefixMap = duty === 'LD' ? ldPrefixMap : hdPrefixMap;
+    const prefix = prefixMap[filterType] || 'EL8';
     const cleaned = referenceCode.replace(/[^A-Z0-9]/gi, '');
     const last4 = cleaned.slice(-4);
 
