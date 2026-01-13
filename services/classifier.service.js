@@ -1,6 +1,7 @@
 ﻿const Groq = require('groq-sdk');
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
 const { isMarineManufacturer, generateMarineSKU } = require('../src/utils/marineDetector');
+const { performCrossReference } = require('./crossReference.service');
 
 class ClassifierService {
   constructor() {
@@ -61,7 +62,6 @@ class ClassifierService {
 
       const result = JSON.parse(jsonMatch[0]);
 
-      // ⭐ DETECTAR MARINO DESPUÉS DE GROQ
       if (isMarineManufacturer(result.manufacturer)) {
         console.log('[Marine] Detected:', result.manufacturer);
         const marineSKU = generateMarineSKU(filterCode);
@@ -84,16 +84,33 @@ class ClassifierService {
 
       console.log('[Classifier] Classified as:', result.duty);
 
+      // CROSS-REFERENCE para HD y LD
+      const crossRef = await performCrossReference(
+        filterCode,
+        result.filterType || 'OIL',
+        result.duty
+      );
+
       return {
         ...result,
         detectedManufacturer,
-        confidence: result.confidence || 'high'
+        confidence: result.confidence || 'high',
+        crossReferenceCode: crossRef.crossReferenceCode,
+        elimfiltersSKU: crossRef.elimfiltersSKU || result.elimfiltersSKU,
+        elimfiltersPrefix: this.getPrefixFromSKU(crossRef.elimfiltersSKU || result.elimfiltersSKU),
+        crossReferences: crossRef.crossReferences
       };
 
     } catch (error) {
       console.error('[Error] Classifier:', error.message);
       throw error;
     }
+  }
+
+  getPrefixFromSKU(sku) {
+    if (!sku) return '';
+    const match = sku.match(/^([A-Z]+\d)/);
+    return match ? match[1] : '';
   }
 }
 
