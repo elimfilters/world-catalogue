@@ -1,6 +1,7 @@
 ﻿const Groq = require('groq-sdk');
 const { buildImprovedPrompt } = require('./improved_groq_prompt');
 const { isMarineManufacturer, generateMarineSKU } = require('../src/utils/marineDetector');
+const { isHousingCode, generateEA2SKU } = require('../src/utils/housingDetector');
 const { performCrossReference } = require('./crossReference.service');
 
 class ClassifierService {
@@ -40,6 +41,26 @@ class ClassifierService {
     try {
       console.log('[Classifier] Processing:', filterCode);
 
+      // DETECTAR EA2 (CARCASAS)
+      if (isHousingCode(filterCode)) {
+        console.log('[Housing] Detected EA2 housing:', filterCode);
+        const ea2SKU = generateEA2SKU(filterCode);
+        
+        return {
+          manufacturer: 'Donaldson',
+          filterType: 'HOUSING',
+          duty: 'HD',
+          elimfiltersPrefix: 'EA2',
+          elimfiltersSKU: ea2SKU,
+          confidence: 'high',
+          detectedManufacturer: { name: 'Donaldson', tier: 'Tier 1', aliases: ['Donaldson'], confidence: 'high' },
+          source: 'housing_detection',
+          ea2Flag: true,
+          primaryAirFilters: [],
+          secondaryAirFilters: []
+        };
+      }
+
       const detectedManufacturer = this.detectManufacturer(filterCode);
       console.log('[Classifier] Initial detection:', detectedManufacturer.name);
 
@@ -74,20 +95,6 @@ class ClassifierService {
           confidence: 'high',
           detectedManufacturer: result.detectedManufacturer || detectedManufacturer,
           source: 'marine_classification'
-        };
-      }
-
-      // EA2 HOUSING - GROQ handles this now via prompt
-      if (result.elimfiltersPrefix === 'EA2') {
-        console.log('[Housing] EA2 detected:', filterCode);
-        return {
-          ...result,
-          detectedManufacturer,
-          confidence: result.confidence || 'high',
-          crossReferenceCode: filterCode,
-          elimfiltersSeries: result.elimfiltersSeries || 'HOUSING',
-          alternativeSKUs: [],
-          crossReferences: {}
         };
       }
 
