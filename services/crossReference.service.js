@@ -4,6 +4,17 @@ const fs = require('fs').promises;
 const donaldsonCrossRefScraper = require('./scrapers/donaldson.crossref.scraper');
 const framCrossRefScraper = require('./scrapers/fram.crossref.scraper');
 
+// Mapeo de códigos FRAM a Series ELIMFILTERS
+const FRAM_SERIES_MAP = {
+    'CH': 'STANDARD',
+    'FE': 'PROSYNTHETIC',
+    'FS': 'TITANIUM MAX',
+    'XG': 'ULTRA PERFORMANCE',
+    'FF': 'FORCE GUARD',
+    'TG': 'DUTY PLUS',
+    'FD': 'PREMIUM DRIVE'
+};
+
 async function crossReferenceToDonaldson(filterCode, filterType, duty) {
     try {
         console.log('[CrossRef] Scraping Donaldson for:', filterCode);
@@ -39,7 +50,7 @@ async function crossReferenceToFRAM(filterCode, filterType, duty) {
     }
 }
 
-function generateElimfiltersSKU(referenceCode, filterType, duty, addSuffix = false) {
+function generateElimfiltersSKU(referenceCode, filterType, duty) {
     if (!referenceCode) return null;
 
     const ldPrefixMap = {
@@ -52,14 +63,13 @@ function generateElimfiltersSKU(referenceCode, filterType, duty, addSuffix = fal
     const prefix = ldPrefixMap[filterType] || 'EL8';
     const cleaned = referenceCode.replace(/[^A-Z0-9]/gi, '');
     const last4 = cleaned.slice(-4);
-    
-    // Extraer prefijo FRAM (FE, FS, XG, FF, TG, CH, FD)
-    const framPrefix = referenceCode.match(/^([A-Z]{2})/)?.[1] || '';
-    
-    // Si es alternativo y NO es CH, agregar sufijo
-    const suffix = (addSuffix && framPrefix && framPrefix !== 'CH') ? `-${framPrefix}` : '';
 
-    return `${prefix}${last4}${suffix}`;
+    return `${prefix}${last4}`;
+}
+
+function getElimfiltersSeries(framCode) {
+    const framPrefix = framCode.match(/^([A-Z]{2})/)?.[1] || '';
+    return FRAM_SERIES_MAP[framPrefix] || 'STANDARD';
 }
 
 async function performCrossReference(filterCode, filterType, duty) {
@@ -67,31 +77,34 @@ async function performCrossReference(filterCode, filterType, duty) {
 
     let result = null;
     let elimfiltersSKU = null;
+    let elimfiltersSeries = null;
     let alternativeSKUs = [];
 
     try {
         if (duty === 'HD') {
             result = await crossReferenceToDonaldson(filterCode, filterType, 'HD');
             if (result && result.idReal) {
-                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'HD', false);
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'HD');
+                elimfiltersSeries = 'STANDARD';
                 console.log('[CrossRef] Generated HD SKU:', elimfiltersSKU);
             }
         }
         else if (duty === 'LD') {
             result = await crossReferenceToFRAM(filterCode, filterType, 'LD');
             if (result && result.idReal) {
-                // SKU principal (CH - Extra Guard) SIN sufijo
-                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'LD', false);
-                console.log('[CrossRef] Generated LD SKU:', elimfiltersSKU);
+                // SKU principal (CH - Extra Guard → STANDARD)
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'LD');
+                elimfiltersSeries = getElimfiltersSeries(result.idReal);
+                console.log('[CrossRef] Generated LD SKU:', elimfiltersSKU, '| Series:', elimfiltersSeries);
                 
-                // SKUs alternativos CON sufijos (-FE, -FS, -XG, etc.)
+                // SKUs alternativos con series ELIMFILTERS
                 if (result.alternativeCodes && result.alternativeCodes.length > 0) {
                     alternativeSKUs = result.alternativeCodes.map(code => ({
                         framCode: code,
-                        elimfiltersSKU: generateElimfiltersSKU(code, filterType, 'LD', true),
-                        technology: code.match(/^([A-Z]{2})/)?.[1] || 'Alternative'
+                        elimfiltersSKU: generateElimfiltersSKU(code, filterType, 'LD'),
+                        elimfiltersSeries: getElimfiltersSeries(code)
                     }));
-                    console.log('[CrossRef] Generated', alternativeSKUs.length, 'alternative SKUs with suffixes');
+                    console.log('[CrossRef] Generated', alternativeSKUs.length, 'alternative SKUs with ELIMFILTERS series');
                 }
             }
         }
@@ -101,6 +114,7 @@ async function performCrossReference(filterCode, filterType, duty) {
         return {
             crossReferenceCode: referenceCode,
             elimfiltersSKU: elimfiltersSKU,
+            elimfiltersSeries: elimfiltersSeries,
             alternativeSKUs: alternativeSKUs,
             crossReferences: referenceCode ? [{
                 manufacturer: duty === 'HD' ? 'Donaldson' : 'FRAM',
@@ -115,6 +129,7 @@ async function performCrossReference(filterCode, filterType, duty) {
         return {
             crossReferenceCode: null,
             elimfiltersSKU: null,
+            elimfiltersSeries: null,
             alternativeSKUs: [],
             crossReferences: []
         };
@@ -125,5 +140,6 @@ module.exports = {
     performCrossReference,
     crossReferenceToDonaldson,
     crossReferenceToFRAM,
-    generateElimfiltersSKU
+    generateElimfiltersSKU,
+    getElimfiltersSeries
 };
