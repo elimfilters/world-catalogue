@@ -4,9 +4,6 @@ const fs = require('fs').promises;
 const donaldsonCrossRefScraper = require('./scrapers/donaldson.crossref.scraper');
 const framCrossRefScraper = require('./scrapers/fram.crossref.scraper');
 
-/**
- * Cross-reference con Donaldson (solo para HD)
- */
 async function crossReferenceToDonaldson(filterCode, filterType, duty) {
     try {
         console.log('[CrossRef] Scraping Donaldson for:', filterCode);
@@ -14,10 +11,9 @@ async function crossReferenceToDonaldson(filterCode, filterType, duty) {
         
         if (result && result.idReal) {
             console.log('[CrossRef] Found Donaldson code:', result.idReal);
-            return result.idReal;
+            return result;
         }
         
-        console.log('[CrossRef] No Donaldson code found');
         return null;
     } catch (error) {
         console.error('[CrossRef] Error with Donaldson:', error.message);
@@ -25,20 +21,17 @@ async function crossReferenceToDonaldson(filterCode, filterType, duty) {
     }
 }
 
-/**
- * Cross-reference con FRAM (solo para LD)
- */
 async function crossReferenceToFRAM(filterCode, filterType, duty) {
     try {
         console.log('[CrossRef] Scraping FRAM for:', filterCode);
         const result = await framCrossRefScraper(filterCode);
         
         if (result && result.idReal) {
-            console.log('[CrossRef] Found FRAM code:', result.idReal);
-            return result.idReal;
+            console.log('[CrossRef] Found FRAM codes:', result.idReal, 
+                       'Alternatives:', result.alternativeCodes?.length || 0);
+            return result;
         }
         
-        console.log('[CrossRef] No FRAM code found');
         return null;
     } catch (error) {
         console.error('[CrossRef] Error with FRAM:', error.message);
@@ -46,21 +39,8 @@ async function crossReferenceToFRAM(filterCode, filterType, duty) {
     }
 }
 
-/**
- * Genera el SKU de Elimfilters basado en el código de referencia
- */
 function generateElimfiltersSKU(referenceCode, filterType, duty) {
     if (!referenceCode) return null;
-
-    // HD tiene todos los prefijos
-    const hdPrefixMap = {
-        'AIR': 'EA1',
-        'OIL': 'EL8',
-        'FUEL': 'EF9',
-        'HYDRAULIC': 'EH6',
-        'COOLANT': 'ED4',
-        'WATER': 'EW7'
-    };
 
     // LD solo tiene 4 prefijos
     const ldPrefixMap = {
@@ -70,53 +50,60 @@ function generateElimfiltersSKU(referenceCode, filterType, duty) {
         'CABIN': 'EC1'
     };
 
-    const prefixMap = duty === 'LD' ? ldPrefixMap : hdPrefixMap;
-    const prefix = prefixMap[filterType] || 'EL8';
+    const prefix = ldPrefixMap[filterType] || 'EL8';
 
-    // Extraer últimos 4 caracteres alfanuméricos
     const cleaned = referenceCode.replace(/[^A-Z0-9]/gi, '');
     const last4 = cleaned.slice(-4);
 
     return `${prefix}${last4}`;
 }
 
-/**
- * Realiza cross-reference según el duty detectado
- */
 async function performCrossReference(filterCode, filterType, duty) {
     console.log('[CrossRef] Starting for:', filterCode, '| Type:', filterType, '| Duty:', duty);
 
-    let donaldsonCode = null;
-    let framCode = null;
+    let result = null;
     let elimfiltersSKU = null;
-    let finalDuty = duty;
+    let alternativeSKUs = [];
 
     try {
         if (duty === 'HD') {
-            donaldsonCode = await crossReferenceToDonaldson(filterCode, filterType, 'HD');
-            if (donaldsonCode) {
-                elimfiltersSKU = generateElimfiltersSKU(donaldsonCode, filterType, 'HD');
+            result = await crossReferenceToDonaldson(filterCode, filterType, 'HD');
+            if (result && result.idReal) {
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'HD');
                 console.log('[CrossRef] Generated HD SKU:', elimfiltersSKU);
             }
         }
         else if (duty === 'LD') {
-            framCode = await crossReferenceToFRAM(filterCode, filterType, 'LD');
-            if (framCode) {
-                elimfiltersSKU = generateElimfiltersSKU(framCode, filterType, 'LD');
+            result = await crossReferenceToFRAM(filterCode, filterType, 'LD');
+            if (result && result.idReal) {
+                // SKU principal (CH - Extra Guard)
+                elimfiltersSKU = generateElimfiltersSKU(result.idReal, filterType, 'LD');
                 console.log('[CrossRef] Generated LD SKU:', elimfiltersSKU);
+                
+                // SKUs alternativos (FE, FS, XG, FF, TG, FD)
+                if (result.alternativeCodes && result.alternativeCodes.length > 0) {
+                    alternativeSKUs = result.alternativeCodes.map(code => ({
+                        framCode: code,
+                        elimfiltersSKU: generateElimfiltersSKU(code, filterType, 'LD'),
+                        technology: 'Alternative'
+                    }));
+                    console.log('[CrossRef] Generated', alternativeSKUs.length, 'alternative SKUs');
+                }
             }
         }
 
-        const referenceCode = donaldsonCode || framCode;
+        const referenceCode = result?.idReal || null;
         
         return {
             crossReferenceCode: referenceCode,
             elimfiltersSKU: elimfiltersSKU,
+            alternativeSKUs: alternativeSKUs,
             crossReferences: referenceCode ? [{
-                manufacturer: donaldsonCode ? 'Donaldson' : 'FRAM',
+                manufacturer: duty === 'HD' ? 'Donaldson' : 'FRAM',
                 code: referenceCode,
-                duty: finalDuty
-            }] : []
+                duty: duty
+            }] : [],
+            scrapedData: result
         };
 
     } catch (error) {
@@ -124,6 +111,7 @@ async function performCrossReference(filterCode, filterType, duty) {
         return {
             crossReferenceCode: null,
             elimfiltersSKU: null,
+            alternativeSKUs: [],
             crossReferences: []
         };
     }
