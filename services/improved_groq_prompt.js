@@ -1,118 +1,122 @@
-﻿function buildImprovedPrompt(filterCode, detectedManufacturer) {
-  const mfg = detectedManufacturer ? `Fabricante detectado: ${detectedManufacturer.name}` : '';
-  return `CLASSIFY FILTER: "${filterCode}"
-${mfg}
-CRITICAL: Output ONLY "HD", "LD", or identify marine manufacturers.
-Marine manufacturers: RACOR, SIERRA, VOLVO PENTA, CAT MARINE, MERCURY, YAMAHA, KAWASAKI, SEA-DOO, MERCRUISER, ONAN, SUZUKI, EVINRUDE, BOMBARDIER
-===============================================================
-EA2 (HOUSING/CARCASA) - Air Filter Housing Assemblies
-===============================================================
-REAL EXAMPLES - HOUSING ASSEMBLIES:
-G082527 -> EA2 (Donaldson complete housing) -> SKU: EA22527
-G082525 -> EA2 (Donaldson complete housing) -> SKU: EA22525
-RE504836 -> EA2 (John Deere housing assembly) -> SKU: EA24836
-RE63660 -> EA2 (John Deere housing assembly) -> SKU: EA23660
-P534048 -> EA2 (Donaldson cover assembly) -> SKU: EA24048
+﻿const Groq = require('groq-sdk');
 
-NOT EA2 - REGULAR FILTER ELEMENTS:
-P828889 -> EA1 (primary air filter element)
-P829333 -> EA1 (safety air filter element)
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
 
-PATTERNS: G0xxxxx, RExxxxxx, P5xxxxx
-KEYWORDS: housing, assembly, complete, carcasa, bowl, canister, cover
-MANUFACTURERS: Donaldson, John Deere, Fleetguard
+const DETECTION_PROMPT = `You are an expert filter classification system for ELIMFILTERS. Your task is to analyze filter codes and classify them accurately.
 
-EA2 DECISION RULES:
-1. Starts with G0 (like G082527) -> EA2
-2. Starts with RE (like RE504836, RE63660) -> EA2  
-3. Starts with P5 (like P534048) -> EA2
-4. Starts with P8 (like P828889, P829333) -> EA1 (filter element, NOT housing)
-===============================================================
-HD (Heavy Duty) - Industrial/Construction Equipment
-===============================================================
-REAL EXAMPLES:
-P559000 -> HD (Donaldson oil filter) -> SKU: EL89000
-AF25964 -> HD (industrial air) -> SKU: EA15964
-26510380 -> HD (industrial) -> SKU: EL80380
-1N0726 -> HD (Caterpillar construction) -> SKU: EL80726
-1R0735 -> HD (Caterpillar fuel) -> SKU: EF90735
-PATTERN: Pure numbers, alphanumeric WITHOUT dashes, Caterpillar codes
-APPLICATION: Construction equipment, mining, diesel engines, heavy trucks
-===============================================================
-LD (Light Duty) - Automotive/Passenger Vehicles
-===============================================================
-REAL EXAMPLES - OEM:
-15400-PLM-A01 -> LD (Honda OEM oil) -> SKU: EL8MA01
-04152-YZZA6 -> LD (Toyota OEM oil) -> SKU: EL8YZZA6
-90915-YZZF2 -> LD (Toyota OEM oil) -> SKU: EL8YZZF2
-26300-35503 -> LD (Hyundai/Kia OEM oil) -> SKU: EL85503
-11-42-7-848-321 -> LD (BMW OEM oil) -> SKU: EL88321
-000-180-29-09 -> LD (Mercedes OEM oil) -> SKU: EL82909
-8200768927 -> LD (Renault OEM oil) -> SKU: EL88927
-5W30-AV6-507 -> LD (Ford OEM oil) -> SKU: EL8AV6507
-12605566 -> LD (Chevrolet/GM OEM oil) -> SKU: EL85566
-15208-65F0A -> LD (Nissan OEM oil) -> SKU: EL865F0A
-1230A046 -> LD (Mitsubishi OEM oil) -> SKU: EL8A046
-16510-61A31 -> LD (Suzuki OEM oil) -> SKU: EL861A31
+FILTER TYPES AND PREFIXES:
+1. OIL filters → EO5 prefix
+2. AIR filters → EA2 prefix  
+3. FUEL filters → EF3 prefix
+4. CABIN filters → EC1 prefix
+5. HYDRAULIC filters → EH6 prefix
+6. COOLANT filters → EW7 prefix
+7. TRANSMISSION filters → ET8 prefix
+8. AIR_DRYER filters → ED4 prefix
+9. FUEL_SEPARATOR filters → ES9 prefix
 
-REAL EXAMPLES - AFTERMARKET:
-HU719/7X -> LD (Mann automotive oil) -> SKU: EL8197X
-W719/45 -> LD (Mann automotive oil) -> SKU: EL81945
-PF48 -> LD (Purolator oil) -> SKU: EL8PF48
-51515 -> LD (WIX oil) -> SKU: EL81515
-F026407124 -> LD (Bosch oil) -> SKU: EL87124
-L319 -> LD (Mahle oil) -> SKU: EL8L319
-LS489 -> LD (Purflux oil) -> SKU: EL8S489
+DUTY TYPES:
+- HD (Heavy Duty): Commercial vehicles, trucks, construction equipment
+- LD (Light Duty): Passenger cars, light trucks, SUVs
 
-PATTERN: OEM codes WITH dashes (15400-XXX, 11-42-7-XXX, 000-XXX-XX), Aftermarket alphanumeric codes
-APPLICATION: Cars, SUVs, light trucks, gasoline engines, passenger vehicles, minivans
-===============================================================
-MARINE FILTERS - Marine/Jetski/Boat Engines
-===============================================================
-REAL EXAMPLES:
-3847644 -> MARINE (Volvo Penta)
-389-0434 -> MARINE (Cat Marine)
-2332 -> MARINE (RACOR)
-18-7844 -> MARINE (SIERRA)
-35-884380T -> MARINE (Mercury)
-MANUFACTURERS: RACOR, PARKER, SIERRA, VOLVO PENTA, CAT MARINE, MERCURY, YAMAHA, KAWASAKI, SEA-DOO, MERCRUISER, ONAN, SUZUKI, EVINRUDE, BOMBARDIER
-APPLICATION: Marine diesel, outboard motors, jetski, boat engines
-===============================================================
-DECISION RULES (Apply in order):
-===============================================================
-1. Starts with G0 (G082xxx)? -> EA2 HOUSING
-2. Starts with RE (RExxxxxx)? -> EA2 HOUSING
-3. Starts with P5 (P5xxxxx)? -> EA2 HOUSING (cover assemblies)
-4. Starts with P8 (P8xxxxx)? -> EA1 (filter element, NOT housing)
-5. Volvo Penta (7 digits like 3847644)? -> Marine manufacturer: "Volvo Penta"
-6. Cat Marine (XXX-XXXX like 389-0434)? -> Marine manufacturer: "Cat Marine"
-7. RACOR (pure digits like 2332, RXXXX, BXXXX)? -> Marine manufacturer: "RACOR"
-8. SIERRA (XX-XXXX like 18-7844)? -> Marine manufacturer: "SIERRA"
-9. Mercury (XX-XXXXXXX like 35-884380T)? -> Marine manufacturer: "Mercury"
-10. Has dash separator (15400-PLM-A01, 11-42-7-XXX)? -> LD
-11. Starts with 04152 or 90915 (Toyota)? -> LD
-12. Starts with 26300 (Hyundai/Kia)? -> LD
-13. Starts with 11- or 000- (BMW/Mercedes)? -> LD
-14. Aftermarket pattern (HU, W, PF, F0, L, LS + numbers)? -> LD
-15. Pure numbers only (26510380)? -> HD
-16. Alphanumeric no dashes (AF25964)? -> HD
-17. Caterpillar pattern (1N, 1R, 6I)? -> HD
-OUTPUT FORMAT (JSON only, no markdown):
+CROSS-REFERENCE EXAMPLES:
+
+EC1 (CABIN) Examples:
+- AF55839 (Fleetguard) → P640110 (Donaldson) → EC10110
+- CF10727 (FRAM) → stays CF10727 → EC10727
+- 68079487AA (Mopar) → P640110 (Donaldson) → EC10110
+
+ED4 (AIR DRYER) Examples:
+- P781466 (Donaldson) → stays P781466 → ED41466
+- 4324102227 (Wabco) → P781466 (Donaldson) → ED41466
+- AD-IS-4324102202 (Generic) → P781466 (Donaldson) → ED41466
+
+EH6 (HYDRAULIC) Examples:
+- RE27284 (John Deere) → P566922 (Donaldson) → EH66922
+- 84036444 (Case IH) → P566922 (Donaldson) → EH66922
+- HF35360 (Fleetguard) → P566922 (Donaldson) → EH66922
+
+EW7 (COOLANT) Examples:
+- 24070 (Freightliner) → P554685 (Donaldson) → EW74685
+- WF2075 (Wix) → P554685 (Donaldson) → EW74685
+- 3823194C1 (Navistar) → P554685 (Donaldson) → EW74685
+
+ES9 (FUEL SEPARATOR) Examples:
+- 3935274 (Cummins) → P551329 (Donaldson) → ES91329
+- FS19551 (Fleetguard) → P551329 (Donaldson) → ES91329
+- 84278975 (Case IH) → P551329 (Donaldson) → ES91329
+
+EA2 (AIR) Examples:
+- 46588 (WIX) → P606120 (Donaldson) → EA26120
+- CA10190 (FRAM) → P608666 (Donaldson) → EA28666
+- AF27873 (Fleetguard) → P181059 (Donaldson) → EA21059
+
+EO5 (OIL) Examples:
+- 51516 (WIX) → P554005 (Donaldson) → EO54005
+- PH3614 (FRAM) → P554005 (Donaldson) → EO54005
+- LF3000 (Fleetguard) → P554005 (Donaldson) → EO54005
+
+EF3 (FUEL) Examples:
+- 33525 (WIX) → P550440 (Donaldson) → EF30440
+- FF5421 (Fleetguard) → P550440 (Donaldson) → EF30440
+- TP1234 (Baldwin) → P550440 (Donaldson) → EF30440
+
+DECISION RULES:
+1. Analyze the filter code structure and cross-reference database
+2. Identify the filter type based on code patterns and specifications
+3. Determine duty type (HD for commercial/industrial, LD for passenger vehicles)
+4. DO NOT generate SKU - only classify type and duty
+5. Return ONLY the JSON response
+
+Analyze this filter code and respond with ONLY this JSON format (no explanation):
 {
-  "manufacturer": "Donaldson",
-  "filterType": "AIR",
-  "duty": "HD",
-  "elimfiltersPrefix": "EA2",
-  "elimfiltersSKU": "EA22527",
-  "elimfiltersSeries": "HOUSING",
-  "confidence": "high"
+  "filterType": "TYPE",
+  "dutyType": "HD or LD"
+}`;
+
+async function detectFilterWithGroq(filterCode) {
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'system',
+          content: DETECTION_PROMPT
+        },
+        {
+          role: 'user',
+          content: `Filter code: ${filterCode}`
+        }
+      ],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.1,
+      max_tokens: 150,
+      response_format: { type: 'json_object' }
+    });
+
+    const response = completion.choices[0]?.message?.content;
+    if (!response) {
+      throw new Error('Empty response from Groq');
+    }
+
+    const result = JSON.parse(response);
+    
+    if (!result.filterType || !result.dutyType) {
+      throw new Error('Invalid response structure from Groq');
+    }
+
+    return {
+      filterType: result.filterType,
+      dutyType: result.dutyType,
+      confidence: 'high',
+      source: 'groq-llama-3.3-70b'
+    };
+
+  } catch (error) {
+    console.error('Groq detection error:', error);
+    throw new Error(`Groq AI detection failed: ${error.message}`);
+  }
 }
-IMPORTANT:
-- EA2 gets elimfiltersSeries: "HOUSING"
-- EA1 gets elimfiltersSeries: "STANDARD" or technology name
-- Always generate elimfiltersSKU using last 4-5 alphanumeric characters
-- For marine manufacturers, include full name
-- elimfiltersPrefix must match filterType (OIL=EL8, FUEL=EF9, AIR=EA1/EA2, CABIN=EC1)
-- LD includes ALL passenger vehicles: cars, SUVs, minivans, light trucks`;
-}
-module.exports = { buildImprovedPrompt };
+
+module.exports = { detectFilterWithGroq };
