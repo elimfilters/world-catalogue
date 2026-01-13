@@ -41,7 +41,6 @@ class ClassifierService {
     try {
       console.log('[Classifier] Processing:', filterCode);
 
-      // DETECTAR EA2 (CARCASAS)
       if (isHousingCode(filterCode)) {
         console.log('[Housing] Detected EA2 housing:', filterCode);
         const ea2SKU = generateEA2SKU(filterCode);
@@ -116,8 +115,8 @@ class ClassifierService {
         detectedManufacturer,
         confidence: result.confidence || 'high',
         crossReferenceCode: crossRef.crossReferenceCode,
-        elimfiltersSKU: crossRef.elimfiltersSKU || result.elimfiltersSKU,
-        elimfiltersPrefix: this.getPrefixFromSKU(crossRef.elimfiltersSKU || result.elimfiltersSKU),
+        elimfiltersSKU: crossRef.elimfiltersSKU,
+        elimfiltersPrefix: this.getPrefixFromSKU(crossRef.elimfiltersSKU),
         elimfiltersSeries: crossRef.elimfiltersSeries || 'STANDARD',
         alternativeSKUs: crossRef.alternativeSKUs || [],
         crossReferences: crossRef.crossReferences
