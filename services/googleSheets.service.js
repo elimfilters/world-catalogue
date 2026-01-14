@@ -212,7 +212,11 @@ class GoogleSheetsService {
   }
 }
 
-module.exports = new GoogleSheetsService();
+const instance = new GoogleSheetsService();
+module.exports = {
+  searchFilterByCode: (code) => instance.searchFilterByCode(code),
+  saveFilter: (code, result) => instance.saveFilter(code, result)
+};
 
 // Buscar filtro existente por código
 async function searchFilterByCode(filterCode) {
@@ -272,4 +276,9 @@ async function saveFilter(filterCode, classificationResult) {
   }
 }
 
-module.exports = new GoogleSheetsService();
+const instance = new GoogleSheetsService();
+module.exports = {
+  searchFilterByCode: (code) => instance.searchFilterByCode(code),
+  saveFilter: (code, result) => instance.saveFilter(code, result)
+};
+
