@@ -6,14 +6,27 @@ class GoogleSheetsService {
     this.sheet = null;
     this.isInitialized = false;
     this.SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
-    this.API_KEY = process.env.GOOGLE_SHEETS_API_KEY;
+    this.SERVICE_ACCOUNT = null;
+    
+    try {
+      const serviceAccountJson = process.env.GOOGLE_SHEETS_API_KEY;
+      this.SERVICE_ACCOUNT = JSON.parse(serviceAccountJson);
+    } catch (error) {
+      console.error('[Sheets] Error parsing service account:', error.message);
+    }
   }
 
   async initialize() {
     if (this.isInitialized) return;
 
     try {
-      this.doc = new GoogleSpreadsheet(this.SPREADSHEET_ID, { apiKey: this.API_KEY });
+      this.doc = new GoogleSpreadsheet(this.SPREADSHEET_ID);
+      
+      await this.doc.useServiceAccountAuth({
+        client_email: this.SERVICE_ACCOUNT.client_email,
+        private_key: this.SERVICE_ACCOUNT.private_key,
+      });
+
       await this.doc.loadInfo();
       this.sheet = this.doc.sheetsByTitle['MASTER_UNIFIED_V5'];
       
