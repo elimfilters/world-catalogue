@@ -28,257 +28,72 @@ class GoogleSheetsService {
 
       this.sheets = google.sheets({ version: 'v4', auth: this.auth });
       this.initialized = true;
-      console.log('✅ Google Sheets API inicializada');
+      console.log('[Sheets] API initialized');
     } catch (error) {
-      console.error('❌ Error inicializando Google Sheets:', error.message);
+      console.error('[Sheets] Init error:', error.message);
       throw error;
     }
   }
 
-  async searchInMasterUnified(filterCode) {
+  async searchFilterByCode(filterCode) {
     await this.initialize();
     
     try {
-      console.log(`🔍 Buscando "${filterCode}" en MASTER_UNIFIED_V5...`);
-      const range = 'MASTER_UNIFIED_V5!A:Z';
+      console.log('[Sheets] Searching for:', filterCode);
       
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.SPREADSHEET_ID,
-        range
+        range: 'MASTER_UNIFIED_V5!A:C'
       });
 
-      const rows = response.data.values;
-      if (!rows || rows.length === 0) {
-        console.log('⚠️  MASTER_UNIFIED_V5 está vacía');
-        return null;
-      }
-
-      const headerRow = rows[0];
-      const dataRows = rows.slice(1);
-
-      // Buscar el código en cualquier columna
-      const resultIndex = dataRows.findIndex(row => {
-        return row.some(cell => 
-          cell && cell.toString().trim().toUpperCase() === filterCode.toUpperCase()
-        );
-      });
-
-      if (resultIndex === -1) {
-        console.log(`❌ No encontrado en MASTER_UNIFIED_V5`);
-        return null;
-      }
-
-      const result = dataRows[resultIndex];
-      const mapped = {};
+      const rows = response.data.values || [];
       
-      headerRow.forEach((header, index) => {
-        mapped[header] = result[index] || '';
-      });
-      
-      console.log(`✅ ENCONTRADO en MASTER_UNIFIED_V5 (fila ${resultIndex + 2})`);
-      
-      return {
-        source: 'MASTER_UNIFIED_V5',
-        rowNumber: resultIndex + 2,
-        data: mapped,
-        rawRow: result
-      };
-    } catch (error) {
-      console.error('Error buscando en MASTER_UNIFIED_V5:', error.message);
-      return null;
-    }
-  }
-
-  async searchInMasterKits(searchValue, searchType = 'VIN') {
-    await this.initialize();
-    
-    try {
-      console.log(`🔍 Buscando "${searchValue}" en MASTER_KITS_V1 (${searchType})...`);
-      const range = 'MASTER_KITS_V1!A:Z';
-      
-      const response = await this.sheets.spreadsheets.values.get({
-        spreadsheetId: this.SPREADSHEET_ID,
-        range
-      });
-
-      const rows = response.data.values;
-      if (!rows || rows.length === 0) {
-        console.log('⚠️  MASTER_KITS_V1 está vacía');
-        return null;
-      }
-
-      const headerRow = rows[0];
-      const dataRows = rows.slice(1);
-
-      // Buscar columna según tipo
-      const searchColumns = searchType === 'VIN' 
-        ? headerRow.map((h, i) => h.toLowerCase().includes('vin') ? i : -1).filter(i => i !== -1)
-        : headerRow.map((h, i) => h.toLowerCase().includes('equipment') ? i : -1).filter(i => i !== -1);
-
-      if (searchColumns.length === 0) {
-        console.log(`⚠️  No se encontró columna ${searchType} en MASTER_KITS_V1`);
-        return null;
-      }
-
-      const resultIndex = dataRows.findIndex(row => {
-        return searchColumns.some(colIndex => 
-          row[colIndex] && 
-          row[colIndex].toString().trim().toUpperCase() === searchValue.toUpperCase()
-        );
-      });
-
-      if (resultIndex === -1) {
-        console.log(`❌ No encontrado en MASTER_KITS_V1`);
-        return null;
-      }
-
-      const result = dataRows[resultIndex];
-      const mapped = {};
-      
-      headerRow.forEach((header, index) => {
-        mapped[header] = result[index] || '';
-      });
-      
-      console.log(`✅ ENCONTRADO en MASTER_KITS_V1 (fila ${resultIndex + 2})`);
-      
-      return {
-        source: 'MASTER_KITS_V1',
-        searchType,
-        rowNumber: resultIndex + 2,
-        data: mapped,
-        rawRow: result
-      };
-    } catch (error) {
-      console.error('Error buscando en MASTER_KITS_V1:', error.message);
-      return null;
-    }
-  }
-
-  async searchFilter(filterCode, searchContext = 'individual') {
-    try {
-      console.log(`\n🎯 Búsqueda en Google Sheets: "${filterCode}" (contexto: ${searchContext})`);
-
-      if (searchContext === 'individual' || searchContext === 'part_number') {
-        return await this.searchInMasterUnified(filterCode);
-      } 
-      
-      if (searchContext === 'vin') {
-        return await this.searchInMasterKits(filterCode, 'VIN');
-      } 
-      
-      if (searchContext === 'equipment') {
-        return await this.searchInMasterKits(filterCode, 'EQUIPMENT');
-      }
-
-      // Búsqueda completa si no se especifica contexto
-      let result = await this.searchInMasterUnified(filterCode);
-      
-      if (!result) {
-        result = await this.searchInMasterKits(filterCode, 'VIN');
-      }
-      
-      if (!result) {
-        result = await this.searchInMasterKits(filterCode, 'EQUIPMENT');
-      }
-
-      return result;
-    } catch (error) {
-      console.error('Error en búsqueda de filtro:', error.message);
-      return null;
-    }
-  }
-
-  async appendToMasterUnified(data) {
-    await this.initialize();
-    
-    try {
-      const range = 'MASTER_UNIFIED_V5!A:Z';
-      
-      const response = await this.sheets.spreadsheets.values.append({
-        spreadsheetId: this.SPREADSHEET_ID,
-        range,
-        valueInputOption: 'USER_ENTERED',
-        resource: {
-          values: [data]
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i][0] === filterCode) {
+          console.log('[Sheets] Found in row', i + 1);
+          return {
+            filterCode: rows[i][0],
+            elimfiltersSKU: rows[i][1],
+            description: rows[i][2]
+          };
         }
+      }
+
+      console.log('[Sheets] Not found');
+      return null;
+    } catch (error) {
+      console.error('[Sheets] Search error:', error.message);
+      return null;
+    }
+  }
+
+  async saveFilter(filterCode, classificationResult) {
+    await this.initialize();
+    
+    try {
+      const row = [
+        filterCode,
+        classificationResult.elimfiltersSKU || '',
+        classificationResult.description || '',
+        classificationResult.filterType || '',
+        classificationResult.elimfiltersPrefix || '',
+        classificationResult.duty || ''
+      ];
+
+      await this.sheets.spreadsheets.values.append({
+        spreadsheetId: this.SPREADSHEET_ID,
+        range: 'MASTER_UNIFIED_V5!A:F',
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [row] }
       });
 
-      console.log(`✅ Datos agregados a MASTER_UNIFIED_V5`);
-      return response.data;
+      console.log('[Sheets] Filter saved');
+      return true;
     } catch (error) {
-      console.error('Error agregando a MASTER_UNIFIED_V5:', error.message);
-      throw error;
+      console.error('[Sheets] Save error:', error.message);
+      return false;
     }
   }
 }
 
-const instance = new GoogleSheetsService();
-module.exports = {
-  searchFilterByCode: (code) => instance.searchFilterByCode(code),
-  saveFilter: (code, result) => instance.saveFilter(code, result)
-};
-
-// Buscar filtro existente por código
-async function searchFilterByCode(filterCode) {
-  try {
-    const sheets = await authenticate();
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: 'MASTER_UNIFIED_V5!A:C'
-    });
-
-    const rows = response.data.values || [];
-    
-    // Buscar en columna A (Input Code)
-    for (let i = 1; i < rows.length; i++) {
-      if (rows[i][0] === filterCode) {
-        return {
-          filterCode: rows[i][0],
-          elimfiltersSKU: rows[i][1],
-          description: rows[i][2]
-        };
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error('[Sheets] Search error:', error.message);
-    return null;
-  }
-}
-
-// Guardar nuevo filtro
-async function saveFilter(filterCode, classificationResult) {
-  try {
-    const sheets = await authenticate();
-    
-    const row = [
-      filterCode,
-      classificationResult.elimfiltersSKU || '',
-      classificationResult.description || '',
-      classificationResult.filterType || '',
-      classificationResult.elimfiltersPrefix || '',
-      classificationResult.duty || ''
-    ];
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: 'MASTER_UNIFIED_V5!A:F',
-      valueInputOption: 'USER_ENTERED',
-      resource: { values: [row] }
-    });
-
-    console.log('[Sheets] Filter saved successfully');
-    return true;
-  } catch (error) {
-    console.error('[Sheets] Save error:', error.message);
-    return false;
-  }
-}
-
-const instance = new GoogleSheetsService();
-module.exports = {
-  searchFilterByCode: (code) => instance.searchFilterByCode(code),
-  saveFilter: (code, result) => instance.saveFilter(code, result)
-};
-
+module.exports = new GoogleSheetsService();
