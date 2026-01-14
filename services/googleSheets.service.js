@@ -1,4 +1,5 @@
 ﻿const { GoogleSpreadsheet } = require("google-spreadsheet");
+const { JWT } = require("google-auth-library");
 
 class GoogleSheetsService {
   constructor() {
@@ -13,23 +14,26 @@ class GoogleSheetsService {
   async initialize() {
     if (this.isInitialized) return;
     if (!this.CLIENT_EMAIL || !this.PRIVATE_KEY) {
-      throw new Error("Service account credentials not configured");
+      throw new Error("Service account not configured");
     }
-    this.doc = new GoogleSpreadsheet(this.SPREADSHEET_ID);
-    await this.doc.useServiceAccountAuth({
-      client_email: this.CLIENT_EMAIL,
-      private_key: this.PRIVATE_KEY.replace(/\\n/g, "\n"),
+
+    const serviceAccountAuth = new JWT({
+      email: this.CLIENT_EMAIL,
+      key: this.PRIVATE_KEY.replace(/\\n/g, "\n"),
+      scopes: ["https://www.googleapis.com/auth/spreadsheets"],
     });
+
+    this.doc = new GoogleSpreadsheet(this.SPREADSHEET_ID, serviceAccountAuth);
     await this.doc.loadInfo();
     this.sheet = this.doc.sheetsByTitle["MASTER_UNIFIED_V5"];
-    if (!this.sheet) throw new Error("Sheet MASTER_UNIFIED_V5 not found");
+    if (!this.sheet) throw new Error("Sheet not found");
     this.isInitialized = true;
-    console.log("[Sheets] API initialized successfully");
+    console.log("[Sheets] Initialized");
   }
 
   async searchFilterByCode(filterCode) {
     await this.initialize();
-    console.log("[Sheets] Searching for:", filterCode);
+    console.log("[Sheets] Searching:", filterCode);
     const rows = await this.sheet.getRows();
     for (let i = 0; i < rows.length; i++) {
       if (rows[i].get("filterCode") === filterCode) {
@@ -59,7 +63,7 @@ class GoogleSheetsService {
       duty: classificationResult.duty || ""
     };
     await this.sheet.addRow(row);
-    console.log("[Sheets] Filter saved");
+    console.log("[Sheets] Saved");
     return true;
   }
 }
