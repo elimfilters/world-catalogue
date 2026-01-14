@@ -1,36 +1,43 @@
-﻿const { google } = require('googleapis');
+﻿const { GoogleSpreadsheet } = require('google-spreadsheet');
 
 class GoogleSheetsService {
   constructor() {
-    this.SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || '1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U';
-    this.auth = null;
-    this.sheets = null;
-    this.initialized = false;
+    this.doc = null;
+    this.sheet = null;
+    this.isInitialized = false;
+    this.SPREADSHEET_ID = process.env.GOOGLE_SHEET_ID;
+    this.SERVICE_ACCOUNT = null;
+    
+    try {
+      const serviceAccountJson = process.env.GOOGLE_SHEETS_API_KEY;
+      this.SERVICE_ACCOUNT = JSON.parse(serviceAccountJson);
+    } catch (error) {
+      console.error('[Sheets] Error parsing service account:', error.message);
+    }
   }
 
   async initialize() {
-    if (this.initialized) return;
+    if (this.isInitialized) return;
 
     try {
-      const credentials = {
-        client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n')
-      };
-
-      if (!credentials.client_email || !credentials.private_key) {
-        throw new Error('Credenciales de Google Sheets no configuradas');
-      }
-
-      this.auth = new google.auth.GoogleAuth({
-        credentials,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+      this.doc = new GoogleSpreadsheet(this.SPREADSHEET_ID);
+      
+      await this.doc.useServiceAccountAuth({
+        client_email: this.SERVICE_ACCOUNT.client_email,
+        private_key: this.SERVICE_ACCOUNT.private_key,
       });
 
-      this.sheets = google.sheets({ version: 'v4', auth: this.auth });
-      this.initialized = true;
+      await this.doc.loadInfo();
+      this.sheet = this.doc.sheetsByTitle['MASTER_UNIFIED_V5'];
+      
+      if (!this.sheet) {
+        throw new Error('Sheet MASTER_UNIFIED_V5 not found');
+      }
+
+      this.isInitialized = true;
       console.log('[Sheets] API initialized');
     } catch (error) {
-      console.error('[Sheets] Init error:', error.message);
+      console.error('[Sheets] Initialization error:', error.message);
       throw error;
     }
   }
@@ -40,25 +47,22 @@ class GoogleSheetsService {
     
     try {
       console.log('[Sheets] Searching for:', filterCode);
+      const rows = await this.sheet.getRows();
       
-      const response = await this.sheets.spreadsheets.values.get({
-        spreadsheetId: this.SPREADSHEET_ID,
-        range: 'MASTER_UNIFIED_V5!A:C'
-      });
-
-      const rows = response.data.values || [];
-      
-      for (let i = 1; i < rows.length; i++) {
-        if (rows[i][0] === filterCode) {
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].get('filterCode') === filterCode) {
           console.log('[Sheets] Found in row', i + 1);
           return {
-            filterCode: rows[i][0],
-            elimfiltersSKU: rows[i][1],
-            description: rows[i][2]
+            filterCode: rows[i].get('filterCode'),
+            elimfiltersSKU: rows[i].get('elimfiltersSKU'),
+            description: rows[i].get('description'),
+            filterType: rows[i].get('filterType'),
+            elimfiltersPrefix: rows[i].get('elimfiltersPrefix'),
+            duty: rows[i].get('duty')
           };
         }
       }
-
+      
       console.log('[Sheets] Not found');
       return null;
     } catch (error) {
@@ -69,23 +73,18 @@ class GoogleSheetsService {
 
   async saveFilter(filterCode, classificationResult) {
     await this.initialize();
-    
-    try {
-      const row = [
-        filterCode,
-        classificationResult.elimfiltersSKU || '',
-        classificationResult.description || '',
-        classificationResult.filterType || '',
-        classificationResult.elimfiltersPrefix || '',
-        classificationResult.duty || ''
-      ];
 
-      await this.sheets.spreadsheets.values.append({
-        spreadsheetId: this.SPREADSHEET_ID,
-        range: 'MASTER_UNIFIED_V5!A:F',
-        valueInputOption: 'USER_ENTERED',
-        resource: { values: [row] }
-      });
+    try {
+      const row = {
+        filterCode: filterCode,
+        elimfiltersSKU: classificationResult.elimfiltersSKU || '',
+        description: classificationResult.description || '',
+        filterType: classificationResult.filterType || '',
+        elimfiltersPrefix: classificationResult.elimfiltersPrefix || '',
+        duty: classificationResult.duty || ''
+      };
+
+      await this.sheet.addRow(row);
 
       console.log('[Sheets] Filter saved');
       return true;
