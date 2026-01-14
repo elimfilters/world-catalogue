@@ -272,8 +272,4 @@ async function saveFilter(filterCode, classificationResult) {
   }
 }
 
-module.exports = {
-  authenticate,
-  searchFilterByCode,
-  saveFilter
-};
+module.exports = new GoogleSheetsService();
