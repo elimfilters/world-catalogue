@@ -7,6 +7,20 @@ const { performCrossReference } = require('./crossReference.service');
 class ClassifierService {
   constructor() {
     this.groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    
+    // 🎯 TABLA DE PREFIJOS ELIMFILTERS
+    this.prefixMap = {
+      'AIR': 'EA1',
+      'FUEL': 'EF9',
+      'CABIN': 'EC1',
+      'HYDRAULIC': 'EH6',
+      'OIL': 'EL8',
+      'LUBE': 'EL8',
+      'COOLANT': 'EW7',
+      'MARINE': 'EM9',
+      'TURBINE': 'ET9',
+      'AIR_DRYER': 'ED4'
+    };
   }
 
   detectManufacturer(filterCode) {
@@ -37,6 +51,29 @@ class ClassifierService {
     return { name: 'Generic', tier: null, aliases: [], confidence: 'low' };
   }
 
+  // 🎯 NUEVA FUNCIÓN: Generar SKU desde código cross-reference
+  generateElimfiltersSKU(crossRefCode, filterType) {
+    if (!crossRefCode) return '';
+    
+    // Extraer últimos 4 dígitos del código (ej: P551808 → 1808)
+    const digitsOnly = crossRefCode.replace(/\D/g, '');
+    const last4 = digitsOnly.slice(-4);
+    
+    if (!last4 || last4.length < 4) return '';
+    
+    // Obtener prefix según tipo de filtro
+    const prefix = this.prefixMap[filterType.toUpperCase()] || '';
+    
+    if (!prefix) {
+      console.log('[SKU] Unknown filter type:', filterType);
+      return '';
+    }
+    
+    const sku = `${prefix}${last4}`;
+    console.log('[SKU] Generated:', sku, 'from', crossRefCode);
+    return sku;
+  }
+
   async processFilter(filterCode) {
     try {
       console.log('[Classifier] Processing:', filterCode);
@@ -44,7 +81,7 @@ class ClassifierService {
       if (isHousingCode(filterCode)) {
         console.log('[Housing] Detected EA2 housing:', filterCode);
         const ea2SKU = generateEA2SKU(filterCode);
-        
+
         return {
           manufacturer: 'Donaldson',
           filterType: 'HOUSING',
@@ -104,19 +141,28 @@ class ClassifierService {
 
       console.log('[Classifier] Classified as:', result.duty);
 
+      // 🎯 HACER CROSS-REFERENCE
       const crossRef = await performCrossReference(
         filterCode,
         result.filterType || 'OIL',
         result.duty
       );
 
+      // 🎯 GENERAR SKU desde el código cross-reference obtenido
+      const elimfiltersSKU = this.generateElimfiltersSKU(
+        crossRef.crossReferenceCode, 
+        result.filterType
+      );
+      
+      const elimfiltersPrefix = elimfiltersSKU ? elimfiltersSKU.match(/^([A-Z]+\d)/)?.[1] || '' : '';
+
       return {
         ...result,
         detectedManufacturer,
         confidence: result.confidence || 'high',
         crossReferenceCode: crossRef.crossReferenceCode,
-        elimfiltersSKU: crossRef.elimfiltersSKU,
-        elimfiltersPrefix: this.getPrefixFromSKU(crossRef.elimfiltersSKU),
+        elimfiltersSKU: elimfiltersSKU,
+        elimfiltersPrefix: elimfiltersPrefix,
         elimfiltersSeries: crossRef.elimfiltersSeries || 'STANDARD',
         alternativeSKUs: crossRef.alternativeSKUs || [],
         crossReferences: crossRef.crossReferences
@@ -126,12 +172,6 @@ class ClassifierService {
       console.error('[Error] Classifier:', error.message);
       throw error;
     }
-  }
-
-  getPrefixFromSKU(sku) {
-    if (!sku) return '';
-    const match = sku.match(/^([A-Z]+\d)/);
-    return match ? match[1] : '';
   }
 }
 
