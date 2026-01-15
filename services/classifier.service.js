@@ -5,18 +5,18 @@ const groq = new Groq({
 });
 
 const FILTER_CATEGORIES = {
-  AIR: { prefix: 'EA1', pattern: /air|intake|cabin air|engine air/i, duties: ['HD', 'LD'] },
-  FUEL: { prefix: 'EF9', pattern: /fuel|diesel|gasoline|petrol/i, duties: ['HD', 'LD'] },
-  CABIN: { prefix: 'EC1', pattern: /cabin|hvac|interior/i, duties: ['HD', 'LD'] },
-  HYDRAULIC: { prefix: 'EH6', pattern: /hydraulic|hyd|transmission oil/i, duties: ['HD'] },
-  OIL: { prefix: 'EL8', pattern: /oil|lube|lubricant|engine oil/i, duties: ['HD', 'LD'] },
-  COOLANT: { prefix: 'EW7', pattern: /coolant|water|radiator/i, duties: ['HD'] },
-  MARINE: { prefix: 'EM9', pattern: /marine|marina|boat|naval/i, duties: ['HD', 'LD'] },
-  TURBINE: { prefix: 'ET9', pattern: /turbine|turbina|turbo/i, duties: ['HD'] },
-  AIR_DRYER: { prefix: 'ED4', pattern: /air dryer|dryer|brake air|compressed air/i, duties: ['HD'] },
-  FUEL_SEPARATOR: { prefix: 'ES9', pattern: /fuel separator|water separator|fuel water/i, duties: ['HD'] },
-  KIT_HD: { prefix: 'EK5', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['HD'] },
-  KIT_LD: { prefix: 'EK3', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['LD'] }
+  AIR: { prefix: 'EA1', pattern: /air|intake|cabin air|engine air/i, duties: ['HD', 'LD'], tech: 'MACROCORE' },
+  FUEL: { prefix: 'EF9', pattern: /fuel|diesel|gasoline|petrol/i, duties: ['HD', 'LD'], tech: 'NANOFORCE' },
+  CABIN: { prefix: 'EC1', pattern: /cabin|hvac|interior/i, duties: ['HD', 'LD'], tech: 'MICROKAPPA' },
+  HYDRAULIC: { prefix: 'EH6', pattern: /hydraulic|hyd|transmission oil/i, duties: ['HD'], tech: 'SYNTEPORE' },
+  OIL: { prefix: 'EL8', pattern: /oil|lube|lubricant|engine oil/i, duties: ['HD', 'LD'], tech: 'SYNTRAX' },
+  COOLANT: { prefix: 'EW7', pattern: /coolant|water|radiator/i, duties: ['HD'], tech: 'COOLTECH' },
+  MARINE: { prefix: 'EM9', pattern: /marine|marina|boat|naval/i, duties: ['HD', 'LD'], tech: 'MARINEGUARD' },
+  TURBINE: { prefix: 'ET9', pattern: /turbine|turbina|turbo/i, duties: ['HD'], tech: 'AQUAGUARD' },
+  AIR_DRYER: { prefix: 'ED4', pattern: /air dryer|dryer|brake air|compressed air/i, duties: ['HD'], tech: 'DRYCORE' },
+  FUEL_SEPARATOR: { prefix: 'ES9', pattern: /fuel separator|water separator|fuel water/i, duties: ['HD'], tech: 'AQUAGUARD' },
+  KIT_HD: { prefix: 'EK5', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['HD'], tech: 'DURATECH' },
+  KIT_LD: { prefix: 'EK3', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['LD'], tech: 'DURATECH' }
 };
 
 class ClassifierService {
@@ -43,7 +43,7 @@ class ClassifierService {
   quickClassify(filterCode, context) {
     const searchText = (filterCode + ' ' + (context.description || '') + ' ' + (context.application || '')).toLowerCase();
     
-    let bestMatch = { type: 'OIL', confidence: 0.3, duty: 'HD', prefix: 'EL8' };
+    let bestMatch = { type: 'OIL', confidence: 0.3, duty: 'HD', prefix: 'EL8', tech: 'SYNTRAX' };
     
     for (const [type, config] of Object.entries(FILTER_CATEGORIES)) {
       if (config.pattern.test(searchText)) {
@@ -53,7 +53,8 @@ class ClassifierService {
             type,
             confidence,
             duty: config.duties[0],
-            prefix: config.prefix
+            prefix: config.prefix,
+            tech: config.tech
           };
         }
       }
@@ -63,7 +64,7 @@ class ClassifierService {
   }
 
   async groqClassify(filterCode, context) {
-    const prompt = 'Classify this filter code: ' + filterCode + '\n\nContext: ' + JSON.stringify(context) + '\n\nCategories:\n- AIR (EA1): Air filters\n- FUEL (EF9): Fuel filters\n- CABIN (EC1): Cabin filters\n- HYDRAULIC (EH6): Hydraulic filters\n- OIL (EL8): Oil filters\n- COOLANT (EW7): Coolant filters\n- MARINE (EM9): Marine filters\n- TURBINE (ET9): Turbine filters\n- AIR_DRYER (ED4): Air dryer filters\n- FUEL_SEPARATOR (ES9): Fuel separators\n- KIT_HD (EK5): HD maintenance kits\n- KIT_LD (EK3): LD maintenance kits\n\nRespond with JSON only:\n{\n  "type": "category name",\n  "confidence": 0.0-1.0,\n  "duty": "HD or LD",\n  "reasoning": "brief explanation"\n}';
+    const prompt = 'Classify this filter code: ' + filterCode + '\n\nContext: ' + JSON.stringify(context) + '\n\nCategories:\n- AIR (EA1): Air filters - MACROCORE\n- FUEL (EF9): Fuel filters - NANOFORCE\n- CABIN (EC1): Cabin filters - MICROKAPPA\n- HYDRAULIC (EH6): Hydraulic filters - SYNTEPORE\n- OIL (EL8): Oil filters - SYNTRAX\n- COOLANT (EW7): Coolant filters - COOLTECH\n- MARINE (EM9): Marine filters - MARINEGUARD\n- TURBINE (ET9): Turbine filters - AQUAGUARD\n- AIR_DRYER (ED4): Air dryer filters - DRYCORE\n- FUEL_SEPARATOR (ES9): Fuel separators - AQUAGUARD\n- KIT_HD (EK5): HD maintenance kits - DURATECH\n- KIT_LD (EK3): LD maintenance kits - DURATECH\n\nRespond with JSON only:\n{\n  "type": "category name",\n  "confidence": 0.0-1.0,\n  "duty": "HD or LD",\n  "reasoning": "brief explanation"\n}';
 
     const response = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
@@ -80,6 +81,7 @@ class ClassifierService {
       confidence: result.confidence,
       duty: result.duty,
       prefix: category.prefix,
+      tech: category.tech,
       reasoning: result.reasoning
     };
   }
@@ -95,6 +97,7 @@ class ClassifierService {
       confidence: 0.3,
       duty: 'HD',
       prefix: 'EL8',
+      tech: 'SYNTRAX',
       reasoning: 'Default classification'
     };
   }
