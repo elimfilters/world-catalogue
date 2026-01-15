@@ -1,17 +1,18 @@
-﻿const Filter = require("../models/filter.model");
+﻿const mongoose = require("mongoose");
 
 class GoogleSheetsService {
   async initialize() {
-    console.log("[Cache] Using MongoDB instead of Google Sheets");
+    console.log("[Cache] Using MongoDB cache");
   }
 
   async searchFilterByCode(filterCode) {
     try {
-      console.log("[Cache] Searching MongoDB for:", filterCode);
+      console.log("[Cache] Searching MongoDB:", filterCode);
+      const Filter = mongoose.model("Filter");
       const filter = await Filter.findOne({ filterCode });
       
       if (filter) {
-        console.log("[Cache] ✅ Found in MongoDB");
+        console.log("[Cache] ✅ Found");
         return {
           filterCode: filter.filterCode,
           elimfiltersSKU: filter.elimfiltersSKU,
@@ -22,25 +23,25 @@ class GoogleSheetsService {
         };
       }
       
-      console.log("[Cache] Not found in MongoDB");
       return null;
     } catch (error) {
-      console.error("[Cache] Search error:", error.message);
+      console.error("[Cache] Error:", error.message);
       return null;
     }
   }
 
   async saveFilter(filterCode, classificationResult) {
     try {
+      const Filter = mongoose.model("Filter");
       await Filter.findOneAndUpdate(
         { filterCode },
         classificationResult,
         { upsert: true, new: true }
       );
-      console.log("[Cache] ✅ Saved to MongoDB");
+      console.log("[Cache] ✅ Saved");
       return true;
     } catch (error) {
-      console.error("[Cache] Save error:", error.message);
+      console.error("[Cache] Error:", error.message);
       return false;
     }
   }
