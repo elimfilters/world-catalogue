@@ -1,7 +1,11 @@
 ﻿const { google } = require('googleapis');
 
 const auth = new google.auth.GoogleAuth({
-  credentials: JSON.parse(process.env.GOOGLE_CREDENTIALS),
+  credentials: {
+    type: 'service_account',
+    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    private_key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+  },
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
 });
 
@@ -12,7 +16,7 @@ class GoogleSheetsService {
   async searchInSheets(filterCode) {
     try {
       console.log('[Sheets] Searching for:', filterCode);
-
+      
       const result = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: 'MASTER_UNIFIED_V5!A:Z'
@@ -51,7 +55,6 @@ class GoogleSheetsService {
 
       console.log('[Sheets] Not found in Google Sheets');
       return null;
-
     } catch (error) {
       console.error('[Sheets] Error:', error.message);
       throw error;
