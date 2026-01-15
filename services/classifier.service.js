@@ -22,16 +22,16 @@ const FILTER_CATEGORIES = {
 class ClassifierService {
   async classifyFilter(filterCode, context = {}) {
     try {
-      console.log([Classifier] Processing: );
+      console.log('[Classifier] Processing:', filterCode);
 
       const quickMatch = this.quickClassify(filterCode, context);
       if (quickMatch.confidence > 0.7) {
-        console.log([Classifier] Quick match:  ());
+        console.log('[Classifier] Quick match:', quickMatch.type, quickMatch.confidence);
         return quickMatch;
       }
 
       const groqResult = await this.groqClassify(filterCode, context);
-      console.log([Classifier] GROQ result:  ());
+      console.log('[Classifier] GROQ result:', groqResult.type, groqResult.confidence);
       
       return groqResult;
     } catch (error) {
@@ -41,7 +41,7 @@ class ClassifierService {
   }
 
   quickClassify(filterCode, context) {
-    const searchText = ${filterCode}  .toLowerCase();
+    const searchText = (filterCode + ' ' + (context.description || '') + ' ' + (context.application || '')).toLowerCase();
     
     let bestMatch = { type: 'OIL', confidence: 0.3, duty: 'HD', prefix: 'EL8' };
     
@@ -63,31 +63,7 @@ class ClassifierService {
   }
 
   async groqClassify(filterCode, context) {
-    const prompt = Classify this filter code: 
-
-Context: 
-
-Categories:
-- AIR (EA1): Air filters, intake filters
-- FUEL (EF9): Fuel filters, diesel filters
-- CABIN (EC1): Cabin air filters, HVAC filters
-- HYDRAULIC (EH6): Hydraulic filters, transmission filters
-- OIL (EL8): Oil filters, lube filters
-- COOLANT (EW7): Coolant filters, water filters
-- MARINE (EM9): Marine filters
-- TURBINE (ET9): Turbine filters
-- AIR_DRYER (ED4): Air dryer filters
-- FUEL_SEPARATOR (ES9): Fuel/water separators
-- KIT_HD (EK5): Heavy duty maintenance kits
-- KIT_LD (EK3): Light duty maintenance kits
-
-Respond with JSON only:
-{
-  "type": "category name",
-  "confidence": 0.0-1.0,
-  "duty": "HD or LD",
-  "reasoning": "brief explanation"
-};
+    const prompt = 'Classify this filter code: ' + filterCode + '\n\nContext: ' + JSON.stringify(context) + '\n\nCategories:\n- AIR (EA1): Air filters\n- FUEL (EF9): Fuel filters\n- CABIN (EC1): Cabin filters\n- HYDRAULIC (EH6): Hydraulic filters\n- OIL (EL8): Oil filters\n- COOLANT (EW7): Coolant filters\n- MARINE (EM9): Marine filters\n- TURBINE (ET9): Turbine filters\n- AIR_DRYER (ED4): Air dryer filters\n- FUEL_SEPARATOR (ES9): Fuel separators\n- KIT_HD (EK5): HD maintenance kits\n- KIT_LD (EK3): LD maintenance kits\n\nRespond with JSON only:\n{\n  "type": "category name",\n  "confidence": 0.0-1.0,\n  "duty": "HD or LD",\n  "reasoning": "brief explanation"\n}';
 
     const response = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
