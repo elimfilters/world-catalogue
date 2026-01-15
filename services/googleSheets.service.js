@@ -7,15 +7,49 @@ class GoogleSheetsService {
     this.auth = null;
     this.spreadsheetId = '1ZYI5c0enkuvWAveu8HMaCUk1cek_VDrX8GtgKW7VP6U';
     this.MongoFilter = null;
+    
+    // Mapeo de tipos de Google Sheets a tipos del sistema
+    this.typeMapping = {
+      'Air': 'AIR',
+      'Fuel': 'FUEL',
+      'Cabin': 'CABIN',
+      'Hidraulic': 'HYDRAULIC',
+      'Hydraulic': 'HYDRAULIC',
+      'Oíl': 'OIL',
+      'Oil': 'OIL',
+      'Coolant': 'COOLANT',
+      'Marina': 'MARINE',
+      'Turbinas': 'TURBINE',
+      'Turbine': 'TURBINE',
+      'Air Dryer': 'AIR_DRYER',
+      'Fuel Separator': 'FUEL_SEPARATOR',
+      'Maintenance Kits HD': 'KIT_HD',
+      'Maintenance Kits LD': 'KIT_LD',
+      'Maintenance Kit HD': 'KIT_HD',
+      'Maintenance Kit LD': 'KIT_LD'
+    };
+    
+    this.prefixMap = {
+      'AIR': 'EA1',
+      'FUEL': 'EF9',
+      'CABIN': 'EC1',
+      'HYDRAULIC': 'EH6',
+      'OIL': 'EL8',
+      'COOLANT': 'EW7',
+      'MARINE': 'EM9',
+      'TURBINE': 'ET9',
+      'AIR_DRYER': 'ED4',
+      'FUEL_SEPARATOR': 'ES9',
+      'KIT_HD': 'EK5',
+      'KIT_LD': 'EK3'
+    };
   }
 
   async initialize() {
     try {
-      // Initialize MongoDB
       this.MongoFilter = require('../models/FilterClassification');
       console.log('[Cache] MongoDB ready');
 
-      // Initialize Google Sheets API
       const credentialsPath = path.join(__dirname, '..', 'google-credentials.json');
       this.auth = new google.auth.GoogleAuth({
         keyFile: credentialsPath,
@@ -37,7 +71,7 @@ class GoogleSheetsService {
       try {
         const filter = await this.MongoFilter.findOne({ originalCode: filterCode });
         if (filter) {
-          console.log('[Cache] ✅ Found in MongoDB');
+          console.log(\[Cache] ✅ Found in MongoDB: \\);
           return {
             filterCode: filter.originalCode,
             elimfiltersSKU: filter.elimfiltersSKU,
@@ -56,21 +90,18 @@ class GoogleSheetsService {
     // 2. Search in Google Sheets if not in cache
     if (this.sheets) {
       try {
-        console.log('[Sheets] Searching in Google Sheets...');
+        console.log(\[Sheets] Searching for \ in Google Sheets...\);
         
-        // Search in MASTER_UNIFIED_V5 (individual filters)
         const result = await this.searchInSheet('MASTER_UNIFIED_V5', filterCode);
         if (result) {
-          console.log('[Sheets] ✅ Found in MASTER_UNIFIED_V5');
-          // Save to MongoDB cache
+          console.log(\[Sheets] ✅ Found in MASTER_UNIFIED_V5: \\);
           await this.saveFilter(filterCode, result);
           return result;
         }
 
-        // Search in MASTER_KITS_V1 (kits)
         const kitResult = await this.searchInSheet('MASTER_KITS_V1', filterCode);
         if (kitResult) {
-          console.log('[Sheets] ✅ Found in MASTER_KITS_V1');
+          console.log(\[Sheets] ✅ Found in MASTER_KITS_V1: \\);
           await this.saveFilter(filterCode, kitResult);
           return kitResult;
         }
@@ -88,32 +119,56 @@ class GoogleSheetsService {
     try {
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: this.spreadsheetId,
-        range: \\!A:Z\,
+        range: \\!A:AZ\,
       });
 
       const rows = response.data.values;
-      if (!rows || rows.length === 0) return null;
+      if (!rows || rows.length === 0) {
+        console.log(\[Sheets] No data in \\);
+        return null;
+      }
 
-      // Assume first row is headers
       const headers = rows[0];
       
-      // Find column indices (adjust based on your sheet structure)
-      const originalCodeCol = headers.findIndex(h => h.toLowerCase().includes('original') || h.toLowerCase().includes('code'));
-      const crossRefCol = headers.findIndex(h => h.toLowerCase().includes('cross') || h.toLowerCase().includes('donaldson'));
-      const skuCol = headers.findIndex(h => h.toLowerCase().includes('sku') || h.toLowerCase().includes('elimfilters'));
-      const typeCol = headers.findIndex(h => h.toLowerCase().includes('type'));
-      const dutyCol = headers.findIndex(h => h.toLowerCase().includes('duty'));
+      // Find column indices
+      const inputCodeCol = headers.findIndex(h => h && h.toLowerCase().includes('input code'));
+      const skuCol = headers.findIndex(h => h && h.toLowerCase().includes('elimfilters sku'));
+      const typeCol = headers.findIndex(h => h && h.toLowerCase().includes('filter type'));
+      const prefixCol = headers.findIndex(h => h && h.toLowerCase().includes('prefix'));
+      const dutyCol = headers.findIndex(h => h && h.toLowerCase().includes('duty'));
+      const crossRefCol = headers.findIndex(h => h && h.toLowerCase().includes('cross reference'));
 
       // Search for the filter code
       for (let i = 1; i < rows.length; i++) {
         const row = rows[i];
-        if (row[originalCodeCol] && row[originalCodeCol].toString().toUpperCase() === filterCode.toUpperCase()) {
+        if (row[inputCodeCol] && row[inputCodeCol].toString().toUpperCase() === filterCode.toUpperCase()) {
+          console.log(\[Sheets] Match found at row \\);
+          
+          // Map filter type from Google Sheets to system type
+          const sheetType = row[typeCol]?.toString().trim() || 'Oil';
+          const systemType = this.typeMapping[sheetType] || 'OIL';
+          const prefix = this.prefixMap[systemType] || 'EL8';
+          
+          // Extract duty (handle HD/LD format)
+          let duty = row[dutyCol]?.toString().trim() || 'HD';
+          if (duty.includes('/')) {
+            duty = duty.split('/')[0]; // Take first duty if multiple
+          }
+          
+          // Extract cross reference
+          let crossRefCode = null;
+          if (row[crossRefCol]) {
+            const crossRefs = row[crossRefCol].toString().split(/[,;|]/).map(c => c.trim());
+            crossRefCode = crossRefs[0] || null;
+          }
+
           return {
-            filterCode: row[originalCodeCol],
-            crossReferenceCode: row[crossRefCol] || null,
+            filterCode: row[inputCodeCol],
             elimfiltersSKU: row[skuCol] || null,
-            filterType: row[typeCol] || null,
-            duty: row[dutyCol] || null,
+            filterType: systemType,
+            elimfiltersPrefix: prefix,
+            duty: duty,
+            crossReferenceCode: crossRefCode,
             source: 'google_sheets'
           };
         }
@@ -146,7 +201,7 @@ class GoogleSheetsService {
         },
         { upsert: true, new: true }
       );
-      console.log('[Cache] ✅ Saved to MongoDB');
+      console.log(\[Cache] ✅ Saved to MongoDB: \\);
       return true;
     } catch (error) {
       console.error('[Cache] Save error:', error.message);

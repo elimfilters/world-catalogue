@@ -1,177 +1,128 @@
 ﻿const Groq = require('groq-sdk');
-const { buildImprovedPrompt } = require('./improved_groq_prompt');
-const { isMarineManufacturer, generateMarineSKU } = require('../src/utils/marineDetector');
-const { isHousingCode, generateEA2SKU } = require('../src/utils/housingDetector');
-const { performCrossReference } = require('./crossReference.service');
+
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+});
+
+const FILTER_CATEGORIES = {
+  AIR: { prefix: 'EA1', pattern: /air|intake|cabin air|engine air/i, duties: ['HD', 'LD'] },
+  FUEL: { prefix: 'EF9', pattern: /fuel|diesel|gasoline|petrol/i, duties: ['HD', 'LD'] },
+  CABIN: { prefix: 'EC1', pattern: /cabin|hvac|interior/i, duties: ['HD', 'LD'] },
+  HYDRAULIC: { prefix: 'EH6', pattern: /hydraulic|hyd|transmission oil/i, duties: ['HD'] },
+  OIL: { prefix: 'EL8', pattern: /oil|lube|lubricant|engine oil/i, duties: ['HD', 'LD'] },
+  COOLANT: { prefix: 'EW7', pattern: /coolant|water|radiator/i, duties: ['HD'] },
+  MARINE: { prefix: 'EM9', pattern: /marine|marina|boat|naval/i, duties: ['HD', 'LD'] },
+  TURBINE: { prefix: 'ET9', pattern: /turbine|turbina|turbo/i, duties: ['HD'] },
+  AIR_DRYER: { prefix: 'ED4', pattern: /air dryer|dryer|brake air|compressed air/i, duties: ['HD'] },
+  FUEL_SEPARATOR: { prefix: 'ES9', pattern: /fuel separator|water separator|fuel\\/water/i, duties: ['HD'] },
+  KIT_HD: { prefix: 'EK5', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['HD'] },
+  KIT_LD: { prefix: 'EK3', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['LD'] }
+};
 
 class ClassifierService {
-  constructor() {
-    this.groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-    
-    // 🎯 TABLA DE PREFIJOS ELIMFILTERS
-    this.prefixMap = {
-      'AIR': 'EA1',
-      'FUEL': 'EF9',
-      'CABIN': 'EC1',
-      'HYDRAULIC': 'EH6',
-      'OIL': 'EL8',
-      'LUBE': 'EL8',
-      'COOLANT': 'EW7',
-      'MARINE': 'EM9',
-      'TURBINE': 'ET9',
-      'AIR_DRYER': 'ED4'
-    };
+  async classifyFilter(filterCode, context = {}) {
+    try {
+      console.log(\[Classifier] Processing: \\);
+
+      // Quick pattern matching first
+      const quickMatch = this.quickClassify(filterCode, context);
+      if (quickMatch.confidence > 0.7) {
+        console.log(\[Classifier] Quick match: \ (\)\);
+        return quickMatch;
+      }
+
+      // Use GROQ for complex cases
+      const groqResult = await this.groqClassify(filterCode, context);
+      console.log(\[Classifier] GROQ result: \ (\)\);
+      
+      return groqResult;
+    } catch (error) {
+      console.error('[Classifier] Error:', error.message);
+      return this.getFallbackClassification(filterCode);
+    }
   }
 
-  detectManufacturer(filterCode) {
-    const code = filterCode.trim().toUpperCase();
-
-    const manufacturers = [
-      { name: 'Caterpillar', patterns: [/^[1-9][A-Z]\d{4}$/], tier: 'OEM' },
-      { name: 'Fleetguard', patterns: [/^[A-Z]{2}\d{4}/], tier: 1 },
-      { name: 'Honda', patterns: [/^\d{5}-[A-Z0-9]{3}-[A-Z0-9]{3}$/], tier: 'OEM' },
-      { name: 'Toyota', patterns: [/^(04152|90915)-/], tier: 'OEM' },
-      { name: 'Hyundai', patterns: [/^26300-/], tier: 'OEM' },
-      { name: 'Mann', patterns: [/^[A-Z]{2}\d{3}\/\d{1}[A-Z]?$/], tier: 1 }
-    ];
-
-    for (const mfg of manufacturers) {
-      for (const pattern of mfg.patterns) {
-        if (pattern.test(code)) {
-          return {
-            name: mfg.name,
-            tier: mfg.tier,
-            aliases: [mfg.name],
-            confidence: 'high'
+  quickClassify(filterCode, context) {
+    const searchText = \\ \ \\.toLowerCase();
+    
+    let bestMatch = { type: 'OIL', confidence: 0.3, duty: 'HD', prefix: 'EL8' };
+    
+    for (const [type, config] of Object.entries(FILTER_CATEGORIES)) {
+      if (config.pattern.test(searchText)) {
+        const confidence = this.calculateConfidence(searchText, config.pattern);
+        if (confidence > bestMatch.confidence) {
+          bestMatch = {
+            type,
+            confidence,
+            duty: config.duties[0],
+            prefix: config.prefix
           };
         }
       }
     }
 
-    return { name: 'Generic', tier: null, aliases: [], confidence: 'low' };
+    return bestMatch;
   }
 
-  // 🎯 NUEVA FUNCIÓN: Generar SKU desde código cross-reference
-  generateElimfiltersSKU(crossRefCode, filterType) {
-    if (!crossRefCode) return '';
+  async groqClassify(filterCode, context) {
+    const prompt = \Classify this filter code: \
+
+Context: \
+
+Categories:
+- AIR (EA1): Air filters, intake filters
+- FUEL (EF9): Fuel filters, diesel filters
+- CABIN (EC1): Cabin air filters, HVAC filters
+- HYDRAULIC (EH6): Hydraulic filters, transmission filters
+- OIL (EL8): Oil filters, lube filters
+- COOLANT (EW7): Coolant filters, water filters
+- MARINE (EM9): Marine filters
+- TURBINE (ET9): Turbine filters
+- AIR_DRYER (ED4): Air dryer filters
+- FUEL_SEPARATOR (ES9): Fuel/water separators
+- KIT_HD (EK5): Heavy duty maintenance kits
+- KIT_LD (EK3): Light duty maintenance kits
+
+Respond with JSON only:
+{
+  "type": "category name",
+  "confidence": 0.0-1.0,
+  "duty": "HD or LD",
+  "reasoning": "brief explanation"
+}\;
+
+    const response = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.1,
+      max_tokens: 200
+    });
+
+    const result = JSON.parse(response.choices[0].message.content.trim());
+    const category = FILTER_CATEGORIES[result.type] || FILTER_CATEGORIES.OIL;
     
-    // Extraer últimos 4 dígitos del código (ej: P551808 → 1808)
-    const digitsOnly = crossRefCode.replace(/\D/g, '');
-    const last4 = digitsOnly.slice(-4);
-    
-    if (!last4 || last4.length < 4) return '';
-    
-    // Obtener prefix según tipo de filtro
-    const prefix = this.prefixMap[filterType.toUpperCase()] || '';
-    
-    if (!prefix) {
-      console.log('[SKU] Unknown filter type:', filterType);
-      return '';
-    }
-    
-    const sku = `${prefix}${last4}`;
-    console.log('[SKU] Generated:', sku, 'from', crossRefCode);
-    return sku;
+    return {
+      type: result.type,
+      confidence: result.confidence,
+      duty: result.duty,
+      prefix: category.prefix,
+      reasoning: result.reasoning
+    };
   }
 
-  async processFilter(filterCode) {
-    try {
-      console.log('[Classifier] Processing:', filterCode);
+  calculateConfidence(text, pattern) {
+    const matches = text.match(pattern);
+    return matches ? Math.min(0.9, 0.6 + (matches.length * 0.1)) : 0.3;
+  }
 
-      if (isHousingCode(filterCode)) {
-        console.log('[Housing] Detected EA2 housing:', filterCode);
-        const ea2SKU = generateEA2SKU(filterCode);
-
-        return {
-          manufacturer: 'Donaldson',
-          filterType: 'HOUSING',
-          duty: 'HD',
-          elimfiltersPrefix: 'EA2',
-          elimfiltersSKU: ea2SKU,
-          confidence: 'high',
-          detectedManufacturer: { name: 'Donaldson', tier: 'Tier 1', aliases: ['Donaldson'], confidence: 'high' },
-          source: 'housing_detection',
-          ea2Flag: true,
-          primaryAirFilters: [],
-          secondaryAirFilters: []
-        };
-      }
-
-      const detectedManufacturer = this.detectManufacturer(filterCode);
-      console.log('[Classifier] Initial detection:', detectedManufacturer.name);
-
-      const prompt = buildImprovedPrompt(filterCode, detectedManufacturer);
-
-      const completion = await this.groq.chat.completions.create({
-        messages: [{ role: 'user', content: prompt }],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.1,
-        max_tokens: 500
-      });
-
-      const content = completion.choices[0]?.message?.content || '{}';
-      console.log('[GROQ] Response received');
-
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
-      }
-
-      const result = JSON.parse(jsonMatch[0]);
-
-      if (isMarineManufacturer(result.manufacturer)) {
-        console.log('[Marine] Detected:', result.manufacturer);
-        const marineSKU = generateMarineSKU(filterCode);
-        return {
-          manufacturer: result.manufacturer,
-          filterType: result.filterType || 'Marine',
-          duty: 'Marine',
-          elimfiltersPrefix: 'EM9',
-          elimfiltersSKU: marineSKU,
-          confidence: 'high',
-          detectedManufacturer: result.detectedManufacturer || detectedManufacturer,
-          source: 'marine_classification'
-        };
-      }
-
-      if (!['HD', 'LD'].includes(result.duty)) {
-        console.log('[Warning] Invalid duty:', result.duty);
-        throw new Error('Invalid duty: ' + result.duty);
-      }
-
-      console.log('[Classifier] Classified as:', result.duty);
-
-      // 🎯 HACER CROSS-REFERENCE
-      const crossRef = await performCrossReference(
-        filterCode,
-        result.filterType || 'OIL',
-        result.duty
-      );
-
-      // 🎯 GENERAR SKU desde el código cross-reference obtenido
-      const elimfiltersSKU = this.generateElimfiltersSKU(
-        crossRef.crossReferenceCode, 
-        result.filterType
-      );
-      
-      const elimfiltersPrefix = elimfiltersSKU ? elimfiltersSKU.match(/^([A-Z]+\d)/)?.[1] || '' : '';
-
-      return {
-        ...result,
-        detectedManufacturer,
-        confidence: result.confidence || 'high',
-        crossReferenceCode: crossRef.crossReferenceCode,
-        elimfiltersSKU: elimfiltersSKU,
-        elimfiltersPrefix: elimfiltersPrefix,
-        elimfiltersSeries: crossRef.elimfiltersSeries || 'STANDARD',
-        alternativeSKUs: crossRef.alternativeSKUs || [],
-        crossReferences: crossRef.crossReferences
-      };
-
-    } catch (error) {
-      console.error('[Error] Classifier:', error.message);
-      throw error;
-    }
+  getFallbackClassification(filterCode) {
+    return {
+      type: 'OIL',
+      confidence: 0.3,
+      duty: 'HD',
+      prefix: 'EL8',
+      reasoning: 'Default classification'
+    };
   }
 }
 
