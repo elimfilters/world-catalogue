@@ -1,16 +1,6 @@
 ﻿const { google } = require('googleapis');
 
-// Use the correct service account with spreadsheet access
-const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
-  .replace(/-----BEGIN PRIVATE KEY-----/g, '-----BEGIN PRIVATE KEY-----\n')
-  .replace(/-----END PRIVATE KEY-----/g, '\n-----END PRIVATE KEY-----')
-  .replace(/(.{64})/g, '$1\n');
-
-const credentials = {
-  type: 'service_account',
-  client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  private_key: privateKey
-};
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 
 const auth = new google.auth.GoogleAuth({
   credentials: credentials,
