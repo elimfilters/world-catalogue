@@ -13,11 +13,11 @@
   async searchFilterByCode(filterCode) {
     await this.initialize();
     try {
-      const filter = await this.Filter.findOne({ filterCode });
+      const filter = await this.Filter.findOne({ originalCode: filterCode });
       if (filter) {
         console.log("[Cache] ✅ Found");
         return {
-          filterCode: filter.filterCode,
+          filterCode: filter.originalCode,
           elimfiltersSKU: filter.elimfiltersSKU,
           description: filter.description,
           filterType: filter.filterType,
@@ -36,8 +36,8 @@
     await this.initialize();
     try {
       await this.Filter.findOneAndUpdate(
-        { filterCode },
-        result,
+        { originalCode: filterCode },
+        { ...result, originalCode: filterCode },
         { upsert: true, new: true }
       );
       console.log("[Cache] ✅ Saved");
