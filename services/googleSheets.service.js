@@ -1,11 +1,9 @@
 ﻿const { google } = require('googleapis');
 
+const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+
 const auth = new google.auth.GoogleAuth({
-  credentials: {
-    type: 'service_account',
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY.replace(/ /g, '\n')
-  },
+  credentials: credentials,
   scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
 });
 
