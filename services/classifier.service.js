@@ -14,7 +14,7 @@ const FILTER_CATEGORIES = {
   MARINE: { prefix: 'EM9', pattern: /marine|marina|boat|naval/i, duties: ['HD', 'LD'] },
   TURBINE: { prefix: 'ET9', pattern: /turbine|turbina|turbo/i, duties: ['HD'] },
   AIR_DRYER: { prefix: 'ED4', pattern: /air dryer|dryer|brake air|compressed air/i, duties: ['HD'] },
-  FUEL_SEPARATOR: { prefix: 'ES9', pattern: /fuel separator|water separator|fuel\\/water/i, duties: ['HD'] },
+  FUEL_SEPARATOR: { prefix: 'ES9', pattern: /fuel separator|water separator|fuel water/i, duties: ['HD'] },
   KIT_HD: { prefix: 'EK5', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['HD'] },
   KIT_LD: { prefix: 'EK3', pattern: /kit|maintenance kit|service kit|filter kit/i, duties: ['LD'] }
 };
@@ -22,18 +22,16 @@ const FILTER_CATEGORIES = {
 class ClassifierService {
   async classifyFilter(filterCode, context = {}) {
     try {
-      console.log(\[Classifier] Processing: \\);
+      console.log([Classifier] Processing: );
 
-      // Quick pattern matching first
       const quickMatch = this.quickClassify(filterCode, context);
       if (quickMatch.confidence > 0.7) {
-        console.log(\[Classifier] Quick match: \ (\)\);
+        console.log([Classifier] Quick match:  ());
         return quickMatch;
       }
 
-      // Use GROQ for complex cases
       const groqResult = await this.groqClassify(filterCode, context);
-      console.log(\[Classifier] GROQ result: \ (\)\);
+      console.log([Classifier] GROQ result:  ());
       
       return groqResult;
     } catch (error) {
@@ -43,7 +41,7 @@ class ClassifierService {
   }
 
   quickClassify(filterCode, context) {
-    const searchText = \\ \ \\.toLowerCase();
+    const searchText = ${filterCode}  .toLowerCase();
     
     let bestMatch = { type: 'OIL', confidence: 0.3, duty: 'HD', prefix: 'EL8' };
     
@@ -65,9 +63,9 @@ class ClassifierService {
   }
 
   async groqClassify(filterCode, context) {
-    const prompt = \Classify this filter code: \
+    const prompt = Classify this filter code: 
 
-Context: \
+Context: 
 
 Categories:
 - AIR (EA1): Air filters, intake filters
@@ -89,7 +87,7 @@ Respond with JSON only:
   "confidence": 0.0-1.0,
   "duty": "HD or LD",
   "reasoning": "brief explanation"
-}\;
+};
 
     const response = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
