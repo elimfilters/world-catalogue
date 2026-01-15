@@ -1,6 +1,8 @@
 ﻿const { google } = require('googleapis');
 
 const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+// Fix: convert literal \n to actual newlines
+credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
 
 const auth = new google.auth.GoogleAuth({
   credentials: credentials,
