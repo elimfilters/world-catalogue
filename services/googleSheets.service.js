@@ -35,9 +35,22 @@
   async saveFilter(filterCode, result) {
     await this.initialize();
     try {
+      const dataToSave = {
+        originalCode: filterCode,
+        manufacturer: result.manufacturer,
+        filterType: result.filterType,
+        duty: result.duty,
+        elimfiltersPrefix: result.elimfiltersPrefix,
+        elimfiltersSKU: result.elimfiltersSKU,
+        crossReferenceCode: result.crossReferenceCode,
+        crossReferences: result.crossReferences?.map(ref => ref.code) || [],
+        confidence: result.confidence,
+        detectedManufacturer: result.detectedManufacturer
+      };
+      
       await this.Filter.findOneAndUpdate(
         { originalCode: filterCode },
-        { ...result, originalCode: filterCode },
+        dataToSave,
         { upsert: true, new: true }
       );
       console.log("[Cache] ✅ Saved");
