@@ -5,7 +5,7 @@
 
   async initialize() {
     if (!this.Filter) {
-      this.Filter = require("../models/filter.model");
+      this.Filter = require("../models/FilterClassification");
       console.log("[Cache] MongoDB cache ready");
     }
   }
