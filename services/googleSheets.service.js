@@ -1,12 +1,16 @@
 ﻿const { google } = require('googleapis');
 
-const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-console.log('[DEBUG] Private key first 100 chars:', credentials.private_key.substring(0, 100));
-console.log('[DEBUG] Contains \\n literal?', credentials.private_key.includes('\\n'));
-console.log('[DEBUG] Contains real newline?', credentials.private_key.includes('\n'));
+// Use the correct service account with spreadsheet access
+const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+  .replace(/-----BEGIN PRIVATE KEY-----/g, '-----BEGIN PRIVATE KEY-----\n')
+  .replace(/-----END PRIVATE KEY-----/g, '\n-----END PRIVATE KEY-----')
+  .replace(/(.{64})/g, '$1\n');
 
-// Fix: convert literal \n to actual newlines
-credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+const credentials = {
+  type: 'service_account',
+  client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+  private_key: privateKey
+};
 
 const auth = new google.auth.GoogleAuth({
   credentials: credentials,
