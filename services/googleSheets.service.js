@@ -1,16 +1,19 @@
-﻿const mongoose = require("mongoose");
+﻿class GoogleSheetsService {
+  constructor() {
+    this.Filter = null;
+  }
 
-class GoogleSheetsService {
   async initialize() {
-    console.log("[Cache] Using MongoDB cache");
+    if (!this.Filter) {
+      this.Filter = require("../models/filter.model");
+      console.log("[Cache] MongoDB cache ready");
+    }
   }
 
   async searchFilterByCode(filterCode) {
+    await this.initialize();
     try {
-      console.log("[Cache] Searching MongoDB:", filterCode);
-      const Filter = mongoose.model("Filter");
-      const filter = await Filter.findOne({ filterCode });
-      
+      const filter = await this.Filter.findOne({ filterCode });
       if (filter) {
         console.log("[Cache] ✅ Found");
         return {
@@ -22,7 +25,6 @@ class GoogleSheetsService {
           duty: filter.duty
         };
       }
-      
       return null;
     } catch (error) {
       console.error("[Cache] Error:", error.message);
@@ -30,12 +32,12 @@ class GoogleSheetsService {
     }
   }
 
-  async saveFilter(filterCode, classificationResult) {
+  async saveFilter(filterCode, result) {
+    await this.initialize();
     try {
-      const Filter = mongoose.model("Filter");
-      await Filter.findOneAndUpdate(
+      await this.Filter.findOneAndUpdate(
         { filterCode },
-        classificationResult,
+        result,
         { upsert: true, new: true }
       );
       console.log("[Cache] ✅ Saved");
