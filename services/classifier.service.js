@@ -1,4 +1,7 @@
 ﻿const Groq = require('groq-sdk');
+const { detectDuty } = require('./duty.detector');
+const { performCrossReference } = require('./crossReference.service');
+const skuGenerator = require('./sku.generator');
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY
@@ -20,9 +23,70 @@ const FILTER_CATEGORIES = {
 };
 
 class ClassifierService {
+  async processFilter(filterCode) {
+    console.log('[Classifier] Starting full process for:', filterCode);
+
+    try {
+      const classification = await this.classifyFilter(filterCode, {});
+      console.log('[Classifier] Type detected:', classification.type);
+      
+      const dutyResult = await detectDuty(filterCode);
+      console.log('[Classifier] DUTY detected:', dutyResult.duty);
+
+      const crossRefResult = await performCrossReference(
+        filterCode,
+        classification.type,
+        dutyResult.duty
+      );
+
+      let finalSKU = crossRefResult.elimfiltersSKU;
+      let finalSeries = crossRefResult.elimfiltersSeries;
+
+      if (!finalSKU && crossRefResult.crossReferenceCode) {
+        const skuData = skuGenerator.generate(
+          crossRefResult.crossReferenceCode,
+          classification.type,
+          'PERFORMANCE'
+        );
+        finalSKU = skuData.sku;
+      }
+
+      if (!finalSKU) {
+        const skuData = skuGenerator.generateDirect(
+          filterCode,
+          classification.type,
+          'STANDARD'
+        );
+        finalSKU = skuData.sku;
+        finalSeries = 'STANDARD';
+      }
+
+      console.log('[Classifier] Final SKU:', finalSKU);
+
+      return {
+        filterCode,
+        elimfiltersSKU: finalSKU,
+        elimfiltersPrefix: classification.prefix,
+        filterType: classification.type,
+        duty: dutyResult.duty,
+        technology: classification.tech,
+        elimfiltersSeries: finalSeries || 'STANDARD',
+        crossReferenceCode: crossRefResult.crossReferenceCode,
+        manufacturer: dutyResult.duty === 'HD' ? 'Caterpillar' : 'Toyota',
+        confidence: classification.confidence,
+        dutyDetection: dutyResult,
+        timestamp: new Date().toISOString()
+      };
+
+    } catch (error) {
+      console.error('[Classifier] Error in processFilter:', error.message);
+      throw error;
+    }
+  }
+
   async classifyFilter(filterCode, context = {}) {
     try {
-      console.log('[Classifier] Processing:', filterCode);
+      console.log('[Classifier] Classifying:', filterCode);
 
       const quickMatch = this.quickClassify(filterCode, context);
       if (quickMatch.confidence > 0.7) {
@@ -32,7 +96,7 @@ class ClassifierService {
 
       const groqResult = await this.groqClassify(filterCode, context);
       console.log('[Classifier] GROQ result:', groqResult.type, groqResult.confidence);
-      
+
       return groqResult;
     } catch (error) {
       console.error('[Classifier] Error:', error.message);
@@ -42,9 +106,9 @@ class ClassifierService {
 
   quickClassify(filterCode, context) {
     const searchText = (filterCode + ' ' + (context.description || '') + ' ' + (context.application || '')).toLowerCase();
-    
+
     let bestMatch = { type: 'OIL', confidence: 0.3, duty: 'HD', prefix: 'EL8', tech: 'SYNTRAX' };
-    
+
     for (const [type, config] of Object.entries(FILTER_CATEGORIES)) {
       if (config.pattern.test(searchText)) {
         const confidence = this.calculateConfidence(searchText, config.pattern);
@@ -75,7 +139,7 @@ class ClassifierService {
 
     const result = JSON.parse(response.choices[0].message.content.trim());
     const category = FILTER_CATEGORIES[result.type] || FILTER_CATEGORIES.OIL;
-    
+
     return {
       type: result.type,
       confidence: result.confidence,
