@@ -1,7 +1,7 @@
 ﻿const FilterClassification = require('../models/FilterClassification');
 const path = require('path');
 const fs = require('fs').promises;
-const donaldsonCrossRefScraper = require('./scrapers/donaldson.crossref.scraper');
+const donaldsonCrossRefScraper = require('./scrapers/donaldson.scraper');
 const framCrossRefScraper = require('./scrapers/fram.crossref.scraper');
 
 const FRAM_SERIES_MAP = {
@@ -153,5 +153,6 @@ module.exports = {
     generateElimfiltersSKU,
     getElimfiltersSeries
 };
+
 
 
