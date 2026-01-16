@@ -27,11 +27,28 @@ class ClassifierService {
     console.log('[Classifier] Starting full process for:', filterCode);
 
     try {
-      // Primero hacer cross-reference para obtener specs
-      
+      // 1. Detectar duty primero
+      const dutyResult = await detectDuty(filterCode);
+      console.log('[Classifier] DUTY detected:', dutyResult.duty);
 
-      
+      // 2. Hacer cross-reference para obtener specs del scraper
+      const crossRefResult = await performCrossReference(
+        filterCode,
+        'OIL', // Tipo temporal, GROQ lo corregirá con specs
+        dutyResult.duty
+      );
 
+      // 3. Clasificar CON las specs extraídas del scraper
+      const context = {
+        especificaciones: crossRefResult.especificaciones || {},
+        descripcion: crossRefResult.descripcion || '',
+        productosAlternativos: crossRefResult.productosAlternativos || []
+      };
+
+      const classification = await this.classifyFilter(filterCode, context);
+      console.log('[Classifier] Type detected:', classification.type);
+
+      // 4. Generar SKU final
       let finalSKU = crossRefResult.elimfiltersSKU;
       let finalSeries = crossRefResult.elimfiltersSeries;
 
@@ -68,7 +85,8 @@ class ClassifierService {
         manufacturer: dutyResult.duty === 'HD' ? 'Caterpillar' : 'Toyota',
         confidence: classification.confidence,
         dutyDetection: dutyResult,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        source: 'new_classification'
       };
 
     } catch (error) {
@@ -98,7 +116,7 @@ class ClassifierService {
   }
 
   quickClassify(filterCode, context) {
-    const searchText = (filterCode + ' ' + (context.description || '') + ' ' + (context.application || '')).toLowerCase();
+    const searchText = (filterCode + ' ' + (context.descripcion || '') + ' ' + (context.application || '')).toLowerCase();
 
     let bestMatch = { type: 'OIL', confidence: 0.3, duty: 'HD', prefix: 'EL8', tech: 'SYNTRAX' };
 
@@ -124,7 +142,7 @@ class ClassifierService {
     const specs = context.especificaciones || {};
     const desc = context.descripcion || '';
     const alts = context.productosAlternativos || [];
-    
+
     const prompt = `Classify this filter code: ${filterCode}
 
 TECHNICAL SPECIFICATIONS FROM MANUFACTURER:
@@ -148,7 +166,13 @@ Categories:
 - KIT_HD (EK5): HD maintenance kits - DURATECH
 - KIT_LD (EK3): LD maintenance kits - DURATECH
 
-Respond with JSON only:\n{\n  "type": "category name",\n  "confidence": 0.0-1.0,\n  "duty": "HD or LD",\n  "reasoning": "brief explanation"\n}';
+Respond with JSON only:
+{
+  \"type\": \"category name\",
+  \"confidence\": 0.0-1.0,
+  \"duty\": \"HD or LD\",
+  \"reasoning\": \"brief explanation\"
+}`;
 
     const response = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
@@ -188,6 +212,3 @@ Respond with JSON only:\n{\n  "type": "category name",\n  "confidence": 0.0-1.0,
 }
 
 module.exports = new ClassifierService();
-
-
-
