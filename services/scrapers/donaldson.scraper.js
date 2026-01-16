@@ -11,7 +11,7 @@ module.exports = async function donaldsonScraper(oemCode) {
         console.log('🔍 [Donaldson] Search URL:', searchUrl);
         
         const { data: searchHtml } = await axios.get(searchUrl);
-        const  = cheerio.load(searchHtml);
+        const $search = cheerio.load(searchHtml);
         
         // Buscar el primer resultado que es el código Donaldson
         let donaldsonCode = null;
@@ -115,3 +115,4 @@ module.exports = async function donaldsonScraper(oemCode) {
         };
     }
 };
+
