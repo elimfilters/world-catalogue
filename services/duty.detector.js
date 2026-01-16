@@ -1,10 +1,98 @@
-﻿const Groq = require('groq-sdk');
+﻿// services/duty.detector.js - UPDATED VERSION
+const Groq = require('groq-sdk');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const donaldsonScraper = require('./scrapers/donaldson.crossref.scraper');
-const framScraper = require('./scrapers/fram.crossref.scraper');
+// Patrones de códigos OEM que indican fabricante y DUTY
+const OEM_PATTERNS = {
+  // HEAVY DUTY (HD) - Caterpillar
+  CATERPILLAR: {
+    patterns: [
+      /^1R\d{4}$/i,    // 1R####
+      /^2P\d{4}$/i,    // 2P####
+      /^3I\d{4}$/i,    // 3I####
+      /^4N\d{4}$/i,    // 4N####
+      /^5I\d{4}$/i,    // 5I####
+      /^6I\d{4}$/i,    // 6I####
+      /^7W\d{4}$/i,    // 7W####
+      /^8N\d{4}$/i,    // 8N####
+      /^9M\d{4}$/i     // 9M####
+    ],
+    duty: 'HD',
+    manufacturer: 'Caterpillar'
+  },
+  
+  // HEAVY DUTY (HD) - John Deere
+  JOHN_DEERE: {
+    patterns: [
+      /^(RE|AR|AT|AM|AH)\d{5,6}$/i,  // RE####, AR####, etc.
+      /^T\d{5,6}$/i                   // T#####
+    ],
+    duty: 'HD',
+    manufacturer: 'John Deere'
+  },
+  
+  // HEAVY DUTY (HD) - Komatsu
+  KOMATSU: {
+    patterns: [
+      /^6[0-9]{2}-[0-9]{2}-[0-9]{4}$/,  // ###-##-####
+      /^YM\d{6}$/i                       // YM######
+    ],
+    duty: 'HD',
+    manufacturer: 'Komatsu'
+  },
+  
+  // HEAVY DUTY (HD) - Case/New Holland
+  CASE: {
+    patterns: [
+      /^(84|87|47)\d{5}$/,   // 84#####, 87#####
+      /^CNH\d{6}$/i          // CNH######
+    ],
+    duty: 'HD',
+    manufacturer: 'Case'
+  },
+  
+  // HEAVY DUTY (HD) - Cummins
+  CUMMINS: {
+    patterns: [
+      /^(FF|FS|LF|AF)\d{4,5}$/i  // FF####, FS####, LF####, AF####
+    ],
+    duty: 'HD',
+    manufacturer: 'Cummins'
+  },
+  
+  // HEAVY DUTY (HD) - Donaldson (directo)
+  DONALDSON: {
+    patterns: [
+      /^P\d{6}$/i,      // P######
+      /^X\d{6}$/i,      // X######
+      /^DBA\d{4}$/i,    // DBA####
+      /^DBP\d{4}$/i,    // DBP####
+      /^G\d{6}$/i       // G######
+    ],
+    duty: 'HD',
+    manufacturer: 'Donaldson'
+  },
+  
+  // HEAVY DUTY (HD) - Baldwin
+  BALDWIN: {
+    patterns: [
+      /^(B|BT|PA|PT|BF|RS)\d{3,5}$/i  // B###, BT####, PA####, etc.
+    ],
+    duty: 'HD',
+    manufacturer: 'Baldwin'
+  },
+  
+  // HEAVY DUTY (HD) - Fleetguard
+  FLEETGUARD: {
+    patterns: [
+      /^(LF|FF|AF|HF|FS|WF|CS)\d{4,5}$/i  // LF####, FF####, etc.
+    ],
+    duty: 'HD',
+    manufacturer: 'Fleetguard'
+  }
+};
 
-// Listas de fabricantes
+// Listas de fabricantes para detección en texto
 const HD_MANUFACTURERS = [
   'CATERPILLAR', 'CAT', 'JOHN DEERE', 'DEERE', 'KOMATSU', 'BOBCAT',
   'CASE', 'NEW HOLLAND', 'AGCO', 'MACK', 'FREIGHTLINER', 'VOLVO',
@@ -20,89 +108,61 @@ const LD_MANUFACTURERS = [
   'RAM', 'GMC', 'BUICK', 'CADILLAC', 'CHRYSLER', 'MITSUBISHI', 'SUZUKI'
 ];
 
+function detectByPattern(code) {
+  const cleanCode = code.trim().toUpperCase();
+  
+  for (const [brand, config] of Object.entries(OEM_PATTERNS)) {
+    for (const pattern of config.patterns) {
+      if (pattern.test(cleanCode)) {
+        console.log('[DUTY] ✅ Pattern match found:', brand);
+        return {
+          duty: config.duty,
+          manufacturer: config.manufacturer,
+          confidence: 'high',
+          method: 'pattern_match',
+          pattern: pattern.source
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
 function extractManufacturerFromText(text) {
   if (!text) return null;
-  
+
   const textUpper = text.toUpperCase();
-  
+
   for (const mfg of HD_MANUFACTURERS) {
     if (textUpper.includes(mfg)) {
       return { name: mfg, duty: 'HD' };
     }
   }
-  
+
   for (const mfg of LD_MANUFACTURERS) {
     if (textUpper.includes(mfg)) {
       return { name: mfg, duty: 'LD' };
     }
   }
-  
-  return null;
-}
-
-async function getApplicationsFromScraper(code) {
-  try {
-    console.log('[DUTY] Attempting Donaldson scraper for applications...');
-    const donaldsonResult = await donaldsonScraper(code);
-    
-    if (donaldsonResult && donaldsonResult.applications) {
-      return { source: 'donaldson', applications: donaldsonResult.applications };
-    }
-  } catch (error) {
-    console.log('[DUTY] Donaldson scraper failed:', error.message);
-  }
-
-  try {
-    console.log('[DUTY] Attempting FRAM scraper for applications...');
-    const framResult = await framScraper(code);
-    
-    if (framResult && framResult.applications) {
-      return { source: 'fram', applications: framResult.applications };
-    }
-  } catch (error) {
-    console.log('[DUTY] FRAM scraper failed:', error.message);
-  }
 
   return null;
 }
 
-async function detectDuty(code, specifications = {}) {
+async function detectWithAI(code, specifications = {}) {
   try {
-    console.log('[DUTY] Starting detection for:', code);
-
-    const applicationsData = await getApplicationsFromScraper(code);
-    
-    if (applicationsData && applicationsData.applications) {
-      const appText = JSON.stringify(applicationsData.applications);
-      const manufacturer = extractManufacturerFromText(appText);
-      
-      if (manufacturer) {
-        console.log('[DUTY] Detected from applications:', manufacturer.name, '→', manufacturer.duty);
-        return {
-          duty: manufacturer.duty,
-          confidence: 'high',
-          method: 'application_scraping',
-          manufacturer: manufacturer.name,
-          source: applicationsData.source
-        };
-      }
-    }
-
-    const specsText = JSON.stringify(specifications).toUpperCase();
-    const specsManufacturer = extractManufacturerFromText(specsText);
-    
-    if (specsManufacturer) {
-      console.log('[DUTY] Detected from specifications:', specsManufacturer.name, '→', specsManufacturer.duty);
-      return {
-        duty: specsManufacturer.duty,
-        confidence: 'medium',
-        method: 'specifications',
-        manufacturer: specsManufacturer.name
-      };
-    }
-
     console.log('[DUTY] Using AI for determination...');
-    const prompt = 'Analiza este codigo de filtro y determina si es Heavy Duty (HD) o Light Duty (LD).\n\nCodigo: ' + code + '\nEspecificaciones: ' + JSON.stringify(specifications) + '\n\nHD = Equipos industriales, maquinaria pesada, camiones (Caterpillar, John Deere, Komatsu, Mack, etc.)\nLD = Vehiculos automotrices ligeros (Ford, Toyota, BMW, Honda, etc.)\n\nResponde SOLO con JSON:\n{"duty":"HD","confidence":"low","reason":"breve explicacion"}';
+    
+    const prompt = `Analiza este codigo de filtro y determina si es Heavy Duty (HD) o Light Duty (LD).
+
+Codigo: ${code}
+Especificaciones: ${JSON.stringify(specifications)}
+
+HD = Equipos industriales, maquinaria pesada, camiones (Caterpillar, John Deere, Komatsu, Mack, etc.)
+LD = Vehiculos automotrices ligeros (Ford, Toyota, BMW, Honda, etc.)
+
+Responde SOLO con JSON:
+{"duty":"HD","confidence":"low","reason":"breve explicacion"}`;
 
     const completion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
@@ -123,10 +183,70 @@ async function detectDuty(code, specifications = {}) {
     };
 
   } catch (error) {
-    console.error('[DUTY] Error in detection:', error.message);
-    return { 
-      duty: 'HD', 
-      confidence: 'default', 
+    console.error('[DUTY] Error in AI detection:', error.message);
+    return null;
+  }
+}
+
+async function detectDuty(code, specifications = {}) {
+  try {
+    console.log('[DUTY] ==========================================');
+    console.log('[DUTY] Starting detection for:', code);
+    console.log('[DUTY] ==========================================');
+
+    const patternResult = detectByPattern(code);
+    if (patternResult) {
+      console.log('[DUTY] ✅ DETECTED BY PATTERN');
+      console.log('[DUTY]    - Manufacturer:', patternResult.manufacturer);
+      console.log('[DUTY]    - DUTY:', patternResult.duty);
+      console.log('[DUTY]    - Confidence:', patternResult.confidence);
+      console.log('[DUTY] ==========================================');
+      return patternResult;
+    }
+
+    if (specifications && Object.keys(specifications).length > 0) {
+      const specsText = JSON.stringify(specifications).toUpperCase();
+      const specsManufacturer = extractManufacturerFromText(specsText);
+
+      if (specsManufacturer) {
+        console.log('[DUTY] ✅ DETECTED FROM SPECIFICATIONS');
+        console.log('[DUTY]    - Manufacturer:', specsManufacturer.name);
+        console.log('[DUTY]    - DUTY:', specsManufacturer.duty);
+        console.log('[DUTY] ==========================================');
+        return {
+          duty: specsManufacturer.duty,
+          manufacturer: specsManufacturer.name,
+          confidence: 'medium',
+          method: 'specifications'
+        };
+      }
+    }
+
+    const aiResult = await detectWithAI(code, specifications);
+    if (aiResult) {
+      console.log('[DUTY] ✅ DETECTED BY AI');
+      console.log('[DUTY]    - DUTY:', aiResult.duty);
+      console.log('[DUTY]    - Confidence:', aiResult.confidence);
+      console.log('[DUTY] ==========================================');
+      return aiResult;
+    }
+
+    console.log('[DUTY] ⚠️ USING DEFAULT (HD)');
+    console.log('[DUTY] ==========================================');
+    return {
+      duty: 'HD',
+      manufacturer: 'Unknown',
+      confidence: 'default',
+      method: 'fallback',
+      reason: 'Could not determine DUTY, defaulting to HD'
+    };
+
+  } catch (error) {
+    console.error('[DUTY] ❌ Error in detection:', error.message);
+    return {
+      duty: 'HD',
+      manufacturer: 'Unknown',
+      confidence: 'default',
       method: 'fallback',
       reason: 'Error in detection, defaulting to HD'
     };
