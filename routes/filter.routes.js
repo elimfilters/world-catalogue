@@ -93,7 +93,7 @@ router.post('/batch', async (req, res) => {
       });
     }
 
-    console.log(`[Batch] Processing ${filters.length} filters`);
+    console.log("[Batch] Processing ${filters.length} filters");
     const results = [];
     
     for (const filterCode of filters) {
@@ -275,7 +275,7 @@ router.post('/batch', async (req, res) => {
       });
     }
 
-    console.log(`[Batch] Processing ${filters.length} filters`);
+    console.log("[Batch] Processing ${filters.length} filters");
     const results = [];
     
     for (const filterCode of filters) {
