@@ -120,8 +120,9 @@ async function performCrossReference(filterCode, filterType, duty) {
 
         const referenceCode = result?.idReal || null;
         
-        return {
+                return {
             crossReferenceCode: referenceCode,
+            filterType: result?.filterType || filterType,
             elimfiltersSKU: elimfiltersSKU,
             elimfiltersSeries: elimfiltersSeries,
             alternativeSKUs: alternativeSKUs,
@@ -152,4 +153,5 @@ module.exports = {
     generateElimfiltersSKU,
     getElimfiltersSeries
 };
+
 
