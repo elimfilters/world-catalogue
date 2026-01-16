@@ -13,25 +13,22 @@ module.exports = async function donaldsonScraper(code) {
         // Descripción principal
         const descripcion = $(".product-name").first().text().trim();
 
-        // Detectar tipo de filtro
-        const textoBusqueda = descripcion.toLowerCase();
-        const breadcrumb = $('.breadcrumb').text().toLowerCase();
-        let filterType = 'OIL';
-        if (textoBusqueda.includes('fuel') || desc.includes('combustible') || breadcrumb.includes('fuel')) filterType = 'FUEL';
-        else if (textoBusqueda.includes('air') || desc.includes('aire') || breadcrumb.includes('air')) filterType = 'AIR';
-        else if (textoBusqueda.includes('hydraulic') || breadcrumb.includes('hydraulic')) filterType = 'HYDRAULIC';
-        else if (textoBusqueda.includes('coolant') || breadcrumb.includes('coolant')) filterType = 'COOLANT';
-        else if (textoBusqueda.includes('cabin') || breadcrumb.includes('cabin')) filterType = 'CABIN';
-
-        // Detectar tipo de filtro
-        const textoBusqueda = descripcion.toLowerCase();
-        const breadcrumb = $('.breadcrumb').text().toLowerCase();
-        let filterType = 'OIL';
-        if (textoBusqueda.includes('fuel') || desc.includes('combustible') || breadcrumb.includes('fuel')) filterType = 'FUEL';
-        else if (textoBusqueda.includes('air') || desc.includes('aire') || breadcrumb.includes('air')) filterType = 'AIR';
-        else if (textoBusqueda.includes('hydraulic') || breadcrumb.includes('hydraulic')) filterType = 'HYDRAULIC';
-        else if (textoBusqueda.includes('coolant') || breadcrumb.includes('coolant')) filterType = 'COOLANT';
-        else if (textoBusqueda.includes('cabin') || breadcrumb.includes('cabin')) filterType = 'CABIN';
+          // Detectar tipo de filtro basado en descripción y breadcrumb
+          const textoBusqueda = descripcion.toLowerCase();
+          const breadcrumb = $('.breadcrumb').text().toLowerCase();
+          let filterType = 'OIL'; // Default
+          
+          if (textoBusqueda.includes('fuel') || textoBusqueda.includes('combustible') || breadcrumb.includes('fuel')) {
+            filterType = 'FUEL';
+          } else if (textoBusqueda.includes('air') || textoBusqueda.includes('aire') || breadcrumb.includes('air')) {
+            filterType = 'AIR';
+          } else if (textoBusqueda.includes('hydraulic') || breadcrumb.includes('hydraulic')) {
+            filterType = 'HYDRAULIC';
+          } else if (textoBusqueda.includes('coolant') || breadcrumb.includes('coolant')) {
+            filterType = 'COOLANT';
+          } else if (textoBusqueda.includes('cabin') || breadcrumb.includes('cabin')) {
+            filterType = 'CABIN';
+          }
 
         // Especificaciones de la tabla
         const specs = {};
@@ -73,6 +70,7 @@ module.exports = async function donaldsonScraper(code) {
             filterType, error: true, message: error.message };
     }
 };
+
 
 
 
