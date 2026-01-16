@@ -14,24 +14,24 @@ module.exports = async function donaldsonScraper(code) {
         const descripcion = $(".product-name").first().text().trim();
 
         // Detectar tipo de filtro
-        const desc = descripcion.toLowerCase();
+        const textoBusqueda = descripcion.toLowerCase();
         const breadcrumb = $('.breadcrumb').text().toLowerCase();
         let filterType = 'OIL';
-        if (desc.includes('fuel') || desc.includes('combustible') || breadcrumb.includes('fuel')) filterType = 'FUEL';
-        else if (desc.includes('air') || desc.includes('aire') || breadcrumb.includes('air')) filterType = 'AIR';
-        else if (desc.includes('hydraulic') || breadcrumb.includes('hydraulic')) filterType = 'HYDRAULIC';
-        else if (desc.includes('coolant') || breadcrumb.includes('coolant')) filterType = 'COOLANT';
-        else if (desc.includes('cabin') || breadcrumb.includes('cabin')) filterType = 'CABIN';
+        if (textoBusqueda.includes('fuel') || desc.includes('combustible') || breadcrumb.includes('fuel')) filterType = 'FUEL';
+        else if (textoBusqueda.includes('air') || desc.includes('aire') || breadcrumb.includes('air')) filterType = 'AIR';
+        else if (textoBusqueda.includes('hydraulic') || breadcrumb.includes('hydraulic')) filterType = 'HYDRAULIC';
+        else if (textoBusqueda.includes('coolant') || breadcrumb.includes('coolant')) filterType = 'COOLANT';
+        else if (textoBusqueda.includes('cabin') || breadcrumb.includes('cabin')) filterType = 'CABIN';
 
         // Detectar tipo de filtro
-        const desc = descripcion.toLowerCase();
+        const textoBusqueda = descripcion.toLowerCase();
         const breadcrumb = $('.breadcrumb').text().toLowerCase();
         let filterType = 'OIL';
-        if (desc.includes('fuel') || desc.includes('combustible') || breadcrumb.includes('fuel')) filterType = 'FUEL';
-        else if (desc.includes('air') || desc.includes('aire') || breadcrumb.includes('air')) filterType = 'AIR';
-        else if (desc.includes('hydraulic') || breadcrumb.includes('hydraulic')) filterType = 'HYDRAULIC';
-        else if (desc.includes('coolant') || breadcrumb.includes('coolant')) filterType = 'COOLANT';
-        else if (desc.includes('cabin') || breadcrumb.includes('cabin')) filterType = 'CABIN';
+        if (textoBusqueda.includes('fuel') || desc.includes('combustible') || breadcrumb.includes('fuel')) filterType = 'FUEL';
+        else if (textoBusqueda.includes('air') || desc.includes('aire') || breadcrumb.includes('air')) filterType = 'AIR';
+        else if (textoBusqueda.includes('hydraulic') || breadcrumb.includes('hydraulic')) filterType = 'HYDRAULIC';
+        else if (textoBusqueda.includes('coolant') || breadcrumb.includes('coolant')) filterType = 'COOLANT';
+        else if (textoBusqueda.includes('cabin') || breadcrumb.includes('cabin')) filterType = 'CABIN';
 
         // Especificaciones de la tabla
         const specs = {};
@@ -73,5 +73,6 @@ module.exports = async function donaldsonScraper(code) {
             filterType, error: true, message: error.message };
     }
 };
+
 
 
