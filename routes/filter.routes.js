@@ -355,7 +355,6 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-, 'i') }
     });
     
     res.json({
