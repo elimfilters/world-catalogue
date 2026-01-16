@@ -27,17 +27,10 @@ class ClassifierService {
     console.log('[Classifier] Starting full process for:', filterCode);
 
     try {
-      const classification = await this.classifyFilter(filterCode, {});
-      console.log('[Classifier] Type detected:', classification.type);
+      // Primero hacer cross-reference para obtener specs
       
-      const dutyResult = await detectDuty(filterCode);
-      console.log('[Classifier] DUTY detected:', dutyResult.duty);
 
-      const crossRefResult = await performCrossReference(
-        filterCode,
-        classification.type,
-        dutyResult.duty
-      );
+      
 
       let finalSKU = crossRefResult.elimfiltersSKU;
       let finalSeries = crossRefResult.elimfiltersSeries;
@@ -128,7 +121,34 @@ class ClassifierService {
   }
 
   async groqClassify(filterCode, context) {
-    const prompt = 'Classify this filter code: ' + filterCode + '\n\nContext: ' + JSON.stringify(context) + '\n\nCategories:\n- AIR (EA1): Air filters - MACROCORE\n- FUEL (EF9): Fuel filters - NANOFORCE\n- CABIN (EC1): Cabin filters - MICROKAPPA\n- HYDRAULIC (EH6): Hydraulic filters - SYNTEPORE\n- OIL (EL8): Oil filters - SYNTRAX\n- COOLANT (EW7): Coolant filters - COOLTECH\n- MARINE (EM9): Marine filters - MARINEGUARD\n- TURBINE (ET9): Turbine filters - AQUAGUARD\n- AIR_DRYER (ED4): Air dryer filters - DRYCORE\n- FUEL_SEPARATOR (ES9): Fuel separators - AQUAGUARD\n- KIT_HD (EK5): HD maintenance kits - DURATECH\n- KIT_LD (EK3): LD maintenance kits - DURATECH\n\nRespond with JSON only:\n{\n  "type": "category name",\n  "confidence": 0.0-1.0,\n  "duty": "HD or LD",\n  "reasoning": "brief explanation"\n}';
+    const specs = context.especificaciones || {};
+    const desc = context.descripcion || '';
+    const alts = context.productosAlternativos || [];
+    
+    const prompt = `Classify this filter code: ${filterCode}
+
+TECHNICAL SPECIFICATIONS FROM MANUFACTURER:
+Description: ${desc}
+Specifications: ${JSON.stringify(specs, null, 2)}
+Alternative Products: ${JSON.stringify(alts)}
+
+Based on these TECHNICAL SPECIFICATIONS (not the code), determine the filter type.
+
+Categories:
+- AIR (EA1): Air filters - MACROCORE
+- FUEL (EF9): Fuel filters - NANOFORCE
+- CABIN (EC1): Cabin filters - MICROKAPPA
+- HYDRAULIC (EH6): Hydraulic filters - SYNTEPORE
+- OIL (EL8): Oil/Lube filters - SYNTRAX
+- COOLANT (EW7): Coolant filters - COOLTECH
+- MARINE (EM9): Marine filters - MARINEGUARD
+- TURBINE (ET9): Turbine filters - AQUAGUARD
+- AIR_DRYER (ED4): Air dryer filters - DRYCORE
+- FUEL_SEPARATOR (ES9): Fuel separators - AQUAGUARD
+- KIT_HD (EK5): HD maintenance kits - DURATECH
+- KIT_LD (EK3): LD maintenance kits - DURATECH
+
+Respond with JSON only:\n{\n  "type": "category name",\n  "confidence": 0.0-1.0,\n  "duty": "HD or LD",\n  "reasoning": "brief explanation"\n}';
 
     const response = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
@@ -168,4 +188,6 @@ class ClassifierService {
 }
 
 module.exports = new ClassifierService();
+
+
 

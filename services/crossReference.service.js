@@ -131,7 +131,11 @@ async function performCrossReference(filterCode, filterType, duty) {
                 code: referenceCode,
                 duty: duty
             }] : [],
-            scrapedData: result
+            scrapedData: result,
+            // NUEVO: Pasar specs y descripción para GROQ
+            especificaciones: result?.especificaciones || {},
+            descripcion: result?.descripcion || '',
+            productosAlternativos: result?.productosAlternativos || []
         };
 
     } catch (error) {
@@ -153,6 +157,7 @@ module.exports = {
     generateElimfiltersSKU,
     getElimfiltersSeries
 };
+
 
 
 
