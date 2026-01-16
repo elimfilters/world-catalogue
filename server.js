@@ -6,7 +6,12 @@ require('dotenv').config();
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['https://elimfilters.com', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -57,7 +62,7 @@ app.use((err, req, res, next) => {
 
 // 404 handler - DEBE IR AL FINAL
 app.use((req, res) => {
-  console.log(`⚠️ 404: ${req.method} ${req.path}`);
+  console.log(⚠️ 404: ${req.method} ${req.path});
   res.status(404).json({
     error: 'Endpoint not found',
     path: req.path,
@@ -77,7 +82,7 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
   console.log('🚀 ELIMFILTERS Backend API v1.0.1');
-  console.log(`📍 Server running on port ${8080}`);
+  console.log(📍 Server running on port ${PORT});
   console.log('✅ Server ready to receive requests');
 });
 
