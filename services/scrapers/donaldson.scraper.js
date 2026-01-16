@@ -1,4 +1,4 @@
-﻿const axios = require("axios");
+const axios = require("axios");
 const cheerio = require("cheerio");
 const getDonaldsonAlternatives = require("./getDonaldsonAlternatives");
 
@@ -6,19 +6,16 @@ module.exports = async function donaldsonScraper(oemCode) {
     try {
         console.log('🔍 [Donaldson] Buscando:', oemCode);
         
-        // PASO 1: Buscar el código OEM en Donaldson
         const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${oemCode}*&Ntk=All&originalSearchTerm=${oemCode}*`;
         console.log('🔍 [Donaldson] Search URL:', searchUrl);
         
         const { data: searchHtml } = await axios.get(searchUrl);
-        const $search = cheerio.load(searchHtml);
+        const dollarsearch = cheerio.load(searchHtml);
         
-        // Buscar el primer resultado que es el código Donaldson
         let donaldsonCode = null;
         
-        // Intentar varios selectores
-        ('a[href*="/product/"]').each((i, el) => {
-            const href = (el).attr('href');
+        dollarsearch('a[href*="/product/"]').each((i, el) => {
+            const href = dollarsearch(el).attr('href');
             const match = href.match(/\/product\/([A-Z0-9]+)\//);
             if (match && !donaldsonCode) {
                 donaldsonCode = match[1];
@@ -37,21 +34,18 @@ module.exports = async function donaldsonScraper(oemCode) {
             };
         }
         
-        // PASO 2: Ir a la página del producto Donaldson
         const productUrl = `https://shop.donaldson.com/store/es-us/product/${donaldsonCode}/80`;
         console.log('🔍 [Donaldson] Product URL:', productUrl);
         
         const { data: html } = await axios.get(productUrl);
-        const $ = cheerio.load(html);
+        const dollar = cheerio.load(html);
         
-        // Extraer descripción
-        const descripcion = .product-name.first().text().trim();
+        const descripcion = dollar(".product-name").first().text().trim();
         console.log('📝 [Donaldson] Descripción:', descripcion);
         
-        // Detectar tipo basado en descripción
         const textoBusqueda = descripcion.toLowerCase();
-        const breadcrumb = .breadcrumb.text().toLowerCase();
-        let filterType = 'OIL'; // Default
+        const breadcrumb = dollar('.breadcrumb').text().toLowerCase();
+        let filterType = 'OIL';
         
         if (textoBusqueda.includes('fuel') || textoBusqueda.includes('combustible') || breadcrumb.includes('fuel')) {
             filterType = 'FUEL';
@@ -69,22 +63,19 @@ module.exports = async function donaldsonScraper(oemCode) {
         
         console.log('🏷️ [Donaldson] Tipo detectado:', filterType);
         
-        // Especificaciones
         const specs = {};
-        .spec-table tr.each((i, el) => {
-            const label = .find("td").eq(0).text().trim();
-            const value = .find("td").eq(1).text().trim();
+        dollar(".spec-table tr").each((i, el) => {
+            const label = dollar(el).find("td").eq(0).text().trim();
+            const value = dollar(el).find("td").eq(1).text().trim();
             if (label && value) specs[label] = value;
         });
         
-        // Cross references
         const alternativos = [];
-        div#crossReferencesList .cross-reference-number.each((i, el) => {
-            const val = .text().trim();
+        dollar("div#crossReferencesList .cross-reference-number").each((i, el) => {
+            const val = dollar(el).text().trim();
             if (val) alternativos.push(val);
         });
         
-        // Productos alternativos (Puppeteer)
         const productosAlternativos = await getDonaldsonAlternatives(productUrl);
         
         console.log('✅ [Donaldson] Scraping completo');
@@ -115,5 +106,3 @@ module.exports = async function donaldsonScraper(oemCode) {
         };
     }
 };
-
-
