@@ -1,7 +1,7 @@
-﻿const FilterClassification = require('../models/FilterClassification');
+const FilterClassification = require('../models/FilterClassification');
 const path = require('path');
 const fs = require('fs').promises;
-const donaldsonCrossRefScraper = require('./scrapers/donaldson.scraper');
+const donaldsonCrossRefScraper = require('./scrapers/donaldson.scraper.http');
 const framCrossRefScraper = require('./scrapers/fram.crossref.scraper');
 
 const FRAM_SERIES_MAP = {
@@ -132,7 +132,7 @@ async function performCrossReference(filterCode, filterType, duty) {
                 duty: duty
             }] : [],
             scrapedData: result,
-            // NUEVO: Pasar specs y descripción para GROQ
+            // NUEVO: Pasar specs y descripci�n para GROQ
             especificaciones: result?.especificaciones || {},
             descripcion: result?.descripcion || '',
             productosAlternativos: result?.productosAlternativos || []
