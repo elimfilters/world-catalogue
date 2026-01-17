@@ -1,7 +1,7 @@
 const FilterClassification = require('../models/FilterClassification');
 const path = require('path');
 const fs = require('fs').promises;
-const donaldsonCrossRefScraper = require('./scrapers/donaldson.scraper.http');
+const donaldsonCrossRefScraper = require('./scrapers/donaldson.scraper.api');
 const framCrossRefScraper = require('./scrapers/fram.crossref.scraper');
 
 const FRAM_SERIES_MAP = {
