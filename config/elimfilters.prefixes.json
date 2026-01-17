@@ -1,30 +1,82 @@
 ﻿{
-  "air": {
-    "prefix": "EA1",
-    "description": "Air filters - MACROCORE™ technology"
+  "prefixes": {
+    "AIR": {
+      "code": "EA1",
+      "technology": "MACROCORE™",
+      "duty": "HD/LD"
+    },
+    "FUEL": {
+      "code": "EF9",
+      "technology": "NANOFORCE™",
+      "duty": "HD/LD"
+    },
+    "CABIN": {
+      "code": "EC1",
+      "technology": "MICROKAPPA™",
+      "duty": "HD/LD"
+    },
+    "HYDRAULIC": {
+      "code": "EH6",
+      "technology": "SYNTEPORE™",
+      "duty": "HD"
+    },
+    "OIL": {
+      "code": "EL8",
+      "technology": "SYNTRAX™",
+      "duty": "HD/LD"
+    },
+    "COOLANT": {
+      "code": "EW7",
+      "technology": "COOLTECH™",
+      "duty": "HD"
+    },
+    "MARINE": {
+      "code": "EM9",
+      "technology": "MARINEGUARD™",
+      "duty": "HD/LD"
+    },
+    "TURBINE": {
+      "code": "ET9",
+      "technology": "AQUAGUARD™",
+      "duty": "HD"
+    },
+    "AIR_DRYER": {
+      "code": "ED4",
+      "technology": "DRYCORE™",
+      "duty": "HD"
+    },
+    "FUEL_SEPARATOR": {
+      "code": "ES9",
+      "technology": "AQUAGUARD™",
+      "duty": "HD"
+    },
+    "KIT_HD": {
+      "code": "EK5",
+      "technology": "DURATECH™",
+      "duty": "HD"
+    },
+    "KIT_LD": {
+      "code": "EK3",
+      "technology": "DURATECH™",
+      "duty": "LD"
+    }
   },
-  "oil": {
-    "prefix": "EL8",
-    "description": "Oil filters - SYNTRAX™ technology"
+  "trilogy": {
+    "STANDARD": {
+      "name": "Standard",
+      "quality": "OEM-grade baseline filtration",
+      "price_tier": 1
+    },
+    "PERFORMANCE": {
+      "name": "Performance",
+      "quality": "Enhanced filtration with extended service life",
+      "price_tier": 2
+    },
+    "ELITE": {
+      "name": "Elite",
+      "quality": "Premium filtration with maximum protection",
+      "price_tier": 3
+    }
   },
-  "fuel": {
-    "prefix": "EF9",
-    "description": "Fuel filters - NANOFORCE™ technology"
-  },
-  "hydraulic": {
-    "prefix": "EH5",
-    "description": "Hydraulic filters"
-  },
-  "cabin": {
-    "prefix": "EC3",
-    "description": "Cabin air filters"
-  },
-  "coolant": {
-    "prefix": "ET7",
-    "description": "Coolant filters"
-  },
-  "transmission": {
-    "prefix": "ER4",
-    "description": "Transmission filters"
-  }
+  "defaultPrefix": "EL8"
 }
