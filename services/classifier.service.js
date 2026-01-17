@@ -86,7 +86,14 @@ class ClassifierService {
         confidence: classification.confidence,
         dutyDetection: dutyResult,
         timestamp: new Date().toISOString(),
-        source: 'new_classification'
+        source: 'new_classification',
+        // DATOS COMPLETOS DEL SCRAPER
+        especificaciones: crossRefResult.especificaciones || {},
+        descripcion: crossRefResult.descripcion || '',
+        productosAlternativos: crossRefResult.productosAlternativos || [],
+        productosEquipo: crossRefResult.productosEquipo || [],
+        referenciaCruzada: crossRefResult.referenciaCruzada || [],
+        alternativeSKUs: crossRefResult.alternativeSKUs || []
       };
 
     } catch (error) {
@@ -212,3 +219,4 @@ Respond with JSON only:
 }
 
 module.exports = new ClassifierService();
+
