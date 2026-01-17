@@ -22,7 +22,6 @@ const filterClassificationSchema = new mongoose.Schema({
 // Índices compuestos para búsquedas comunes
 filterClassificationSchema.index({ manufacturer: 1, duty: 1 });
 filterClassificationSchema.index({ filterType: 1, duty: 1 });
-filterClassificationSchema.index({ crossReferenceCode: 1 });
 filterClassificationSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('FilterClassification', filterClassificationSchema);
