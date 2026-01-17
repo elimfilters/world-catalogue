@@ -1,76 +1,85 @@
-﻿const axios = require('axios');
-const cheerio = require('cheerio');
+﻿const puppeteer = require('puppeteer');
 
 const MARCAS_OEM = ['VOLVO', 'CATERPILLAR', 'CAT', 'JOHN DEERE', 'MACK', 'CUMMINS', 'KOMATSU', 'SCANIA', 'FREIGHTLINER', 'KENWORTH', 'TEREX', 'BOBCAT', 'CASE', 'DOOSAN', 'HITACHI', 'HYUNDAI', 'IVECO', 'JCB', 'LIEBHERR', 'MAN', 'MERCEDES-BENZ', 'MTU', 'PERKINS', 'RENAULT', 'YANMAR'];
 
-module.exports = async function donaldsonScraperHTTP(oemCode) {
-    const headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Cache-Control': 'no-cache'
-    };
-
+module.exports = async function donaldsonScraper(oemCode) {
+    let browser;
     try {
-        // PASO 1: BÚSQUEDA CON SEGUIMIENTO DE COOKIES
-        const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${oemCode}`;
-        const session = axios.create({ headers, withCredentials: true });
-        
-        const searchRes = await session.get(searchUrl);
-        const $search = cheerio.load(searchRes.data);
-        
-        // Intentar obtener el ID de producto y la URL
-        const relativeUrl = $search('#product_url').val() || $search('.donaldson-part-details').first().attr('href');
-        
-        if (!relativeUrl) {
-            // Si falla el primer selector, buscamos en los datos de la lista
-            const linkAlternativo = $search('a[href*="/product/"]').first().attr('href');
-            if (!linkAlternativo) throw new Error('Bloqueo de seguridad detectado por Donaldson');
-            var fullUrl = `https://shop.donaldson.com${linkAlternativo}`;
-        } else {
-            var fullUrl = `https://shop.donaldson.com${relativeUrl}`;
-        }
-
-        // PASO 2: EXTRAER DATOS DE LAS TABS (Pidiendo el HTML completo)
-        const [mainPage, crossRefs] = await Promise.all([
-            session.get(fullUrl),
-            session.get(`${fullUrl}/_crossReferenceTab`)
-        ]);
-
-        const $main = cheerio.load(mainPage.data);
-        const $cross = cheerio.load(crossRefs.data);
-
-        const oem_references = [];
-        const cross_references = [];
-
-        $cross('table tbody tr').each((i, row) => {
-            const m = $cross(row).find('td').eq(0).text().trim().toUpperCase();
-            const p = $cross(row).find('td').eq(1).text().trim();
-            if (m && p) {
-                const item = { brand: m, part_number: p };
-                MARCAS_OEM.some(oem => m.includes(oem)) ? oem_references.push(item) : cross_references.push(item);
-            }
+        console.log(`🚀 [Puppeteer] Iniciando búsqueda real para: ${oemCode}`);
+        browser = await puppeteer.launch({
+            headless: "new",
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
+
+        const page = await browser.newPage();
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+
+        // 1. IR AL BUSCADOR (TU PASO 1)
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${oemCode}`, { waitUntil: 'networkidle2' });
+
+        // Capturar el link del primer resultado
+        const productLink = await page.evaluate(() => {
+            const link = document.querySelector('#product_url')?.value || document.querySelector('.donaldson-part-details')?.href;
+            return link;
+        });
+
+        if (!productLink) throw new Error('Producto no encontrado');
+
+        const finalUrl = productLink.startsWith('http') ? productLink : `https://shop.donaldson.com${productLink}`;
+        console.log(`🔗 Entrando a: ${finalUrl}`);
+
+        // 2. IR A LA PÁGINA DEL PRODUCTO
+        await page.goto(finalUrl, { waitUntil: 'networkidle2' });
+
+        // 3. PULSAR TABS Y "MOSTRAR MÁS" (TU PASO 2 Y 3)
+        // Intentamos pulsar los botones si existen para forzar la carga
+        await page.evaluate(async () => {
+            const btnSpecs = document.querySelector('#showMoreProductSpecsButton');
+            if (btnSpecs) btnSpecs.click();
+            
+            const btnCross = document.querySelector('#showAllCrossReferenceListButton');
+            if (btnCross) btnCross.click();
+            
+            // Expandir los símbolos "+" de las referencias
+            document.querySelectorAll('.fa-plus').forEach(el => el.click());
+        });
+
+        // Esperar un segundo a que cargue la expansión
+        await new Promise(r => setTimeout(r, 1500));
+
+        // 4. EXTRAER TODA LA DATA CLASIFICADA
+        const data = await page.evaluate((marcasOem) => {
+            const desc = document.querySelector('.prodSubTitle')?.innerText || document.querySelector('h1')?.innerText;
+            
+            const oem_refs = [];
+            const cross_refs = [];
+            
+            document.querySelectorAll('.crossRefDiv table tbody tr').each((i, row) => {
+                const brand = row.cells[0]?.innerText.trim().toUpperCase();
+                const part = row.cells[1]?.innerText.trim();
+                if (brand && part) {
+                    const isOem = marcasOem.some(m => brand.includes(m));
+                    if (isOem) oem_refs.push({ brand, part_number: part });
+                    else cross_refs.push({ brand, part_number: part });
+                }
+            });
+
+            return { desc, oem_refs, cross_refs };
+        }, MARCAS_OEM);
+
+        await browser.close();
 
         return {
             error: false,
             skuBuscado: oemCode,
-            idReal: fullUrl.split('/')[6] || 'N/A',
-            descripcion: $main('.prodSubTitle').text().trim() || $main('h1').text().trim(),
-            especificaciones: {}, 
-            oem_references,
-            cross_references,
-            productosAlternativos: [...oem_references, ...cross_references],
-            url: fullUrl
+            descripcion: data.desc,
+            oem_references: data.oem_refs,
+            cross_references: data.cross_refs,
+            url: finalUrl
         };
+
     } catch (error) {
-        console.error('ERROR DETALLADO:', error.message);
-        return { error: true, message: "Donaldson bloqueó la conexión. Reintentando..." };
+        if (browser) await browser.close();
+        return { error: true, message: error.message };
     }
 };
