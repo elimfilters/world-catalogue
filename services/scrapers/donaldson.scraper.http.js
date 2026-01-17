@@ -4,27 +4,26 @@ const GOOGLE_BRIDGE_URL = 'https://script.google.com/macros/s/AKfycbwaMY5or2MCdk
 
 module.exports = async function donaldsonScraper(oemCode) {
     try {
-        console.log(`🎯 [BRIDGE V4] Consultando API para: ${oemCode}`);
-        const res = await axios.get(`${GOOGLE_BRIDGE_URL}?q=${oemCode}`);
+        // LIMPIEZA: Si el código trae basura antes de la P (ej: 2191P527682)
+        const cleanMatch = oemCode.match(/P\d{6,7}/i);
+        const searchCode = cleanMatch ? cleanMatch[0] : oemCode;
         
-        // Log crítico para ver en el panel de Railway
-        console.log("📦 RESPUESTA CRUDA DEL PUENTE:", JSON.stringify(res.data).substring(0, 500));
-
-        // Verificamos si la respuesta tiene la estructura de sugerencias de Donaldson
+        console.log(`🎯 [BRIDGE V5] Buscando código limpio: ${searchCode}`);
+        const res = await axios.get(`${GOOGLE_BRIDGE_URL}?q=${searchCode}`);
+        
         if (res.data && res.data.productSuggestions && res.data.productSuggestions.length > 0) {
             const product = res.data.productSuggestions[0];
             return {
                 error: false,
-                descripcion: product.title || "Filtro Donaldson",
-                idReal: product.partNumber || oemCode,
+                descripcion: product.title || "FILTRO DE AIRE",
+                idReal: product.partNumber || searchCode,
                 oem_references: [],
                 cross_references: []
             };
         }
 
-        return { error: true, message: "No se hallaron datos en el JSON", raw: res.data };
+        return { error: true, message: "No se hallaron datos en Donaldson" };
     } catch (e) {
-        console.error("❌ ERROR EN SCRAPER:", e.message);
         return { error: true, message: e.message };
     }
 };
