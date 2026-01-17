@@ -4,22 +4,27 @@ const GOOGLE_BRIDGE_URL = 'https://script.google.com/macros/s/AKfycbwaMY5or2MCdk
 
 module.exports = async function donaldsonScraper(oemCode) {
     try {
-        console.log(`📡 Investigando respuesta para: ${oemCode}`);
+        console.log(`🎯 [BRIDGE V4] Consultando API para: ${oemCode}`);
         const res = await axios.get(`${GOOGLE_BRIDGE_URL}?q=${oemCode}`);
         
-        // Si el puente devuelve un error de Google (HTML en lugar de JSON)
-        if (typeof res.data === 'string' && res.data.includes("<!DOCTYPE html>")) {
-             return { error: true, message: "El puente devolvió HTML (posible error de script en Google)", raw: res.data.substring(0, 100) };
+        // Log crítico para ver en el panel de Railway
+        console.log("📦 RESPUESTA CRUDA DEL PUENTE:", JSON.stringify(res.data).substring(0, 500));
+
+        // Verificamos si la respuesta tiene la estructura de sugerencias de Donaldson
+        if (res.data && res.data.productSuggestions && res.data.productSuggestions.length > 0) {
+            const product = res.data.productSuggestions[0];
+            return {
+                error: false,
+                descripcion: product.title || "Filtro Donaldson",
+                idReal: product.partNumber || oemCode,
+                oem_references: [],
+                cross_references: []
+            };
         }
 
-        // RETORNAMOS TODO LO QUE LLEGUE PARA VERLO EN CONSOLA
-        return {
-            error: false,
-            descripcion: "MODO_DIAGNOSTICO",
-            skuBuscado: oemCode,
-            rawData: res.data // Aquí veremos la estructura real
-        };
+        return { error: true, message: "No se hallaron datos en el JSON", raw: res.data };
     } catch (e) {
-        return { error: true, message: "Error de conexión: " + e.message };
+        console.error("❌ ERROR EN SCRAPER:", e.message);
+        return { error: true, message: e.message };
     }
 };
