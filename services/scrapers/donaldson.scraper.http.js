@@ -3,16 +3,21 @@ const BRIDGE = 'https://script.google.com/macros/s/AKfycbwaMY5or2MCdkJ41N2r-a3XR
 
 module.exports = async function donaldsonScraper(oemCode) {
     try {
-        const match = oemCode.match(/P\d{6,7}/i);
-        const search = match ? match[0].toUpperCase() : oemCode.trim();
+        const search = oemCode.trim().toUpperCase();
         
-        const res = await axios.get(BRIDGE + '?q=' + search);
+        // Intento 1: Búsqueda tal cual
+        let res = await axios.get(BRIDGE + '?q=' + search);
         
-        if (res.data && res.data.title) {
+        // Intento 2: Si falla, forzamos búsqueda con asterisco (como en la web oficial)
+        if (!res.data || !res.data.title || res.data.title === "Sin resultados") {
+            res = await axios.get(BRIDGE + '?q=' + search + '*');
+        }
+        
+        if (res.data && res.data.title && res.data.title !== "Sin resultados") {
             return {
                 error: false,
                 descripcion: res.data.title.toUpperCase(),
-                idReal: search
+                idReal: res.data.partNumber || search // Intentamos capturar el P-Number del bridge
             };
         }
         return { error: true, message: "Sin datos" };
