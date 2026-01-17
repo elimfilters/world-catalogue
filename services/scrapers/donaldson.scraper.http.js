@@ -4,23 +4,17 @@ const BRIDGE = 'https://script.google.com/macros/s/AKfycbwaMY5or2MCdkJ41N2r-a3XR
 module.exports = async function donaldsonScraper(oemCode) {
     try {
         const search = oemCode.trim().toUpperCase();
-        
-        // Intento 1: Búsqueda tal cual
-        let res = await axios.get(BRIDGE + '?q=' + search);
-        
-        // Intento 2: Si falla, forzamos búsqueda con asterisco (como en la web oficial)
-        if (!res.data || !res.data.title || res.data.title === "Sin resultados") {
-            res = await axios.get(BRIDGE + '?q=' + search + '*');
-        }
+        // Forzamos la búsqueda para que el Bridge capture el tab de competencia
+        const res = await axios.get(BRIDGE + '?q=' + search + '*');
         
         if (res.data && res.data.title && res.data.title !== "Sin resultados") {
             return {
                 error: false,
                 descripcion: res.data.title.toUpperCase(),
-                idReal: res.data.partNumber || search // Intentamos capturar el P-Number del bridge
+                idReal: res.data.partNumber || "" // Capturamos el P550851 aquí
             };
         }
-        return { error: true, message: "Sin datos" };
+        return { error: true, message: "No se halló el tab de competencia" };
     } catch (e) {
         return { error: true, message: e.message };
     }
