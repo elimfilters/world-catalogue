@@ -1,33 +1,39 @@
-﻿const donaldsonScraper = require('../services/scrapers/donaldson.scraper.http');
+﻿const puppeteer = require('puppeteer-core');
 
 exports.classifyFilter = async (req, res) => {
+    const { filterCode } = req.body;
+    let browser;
     try {
-        const { filterCode } = req.body;
-        // Consultamos al Bridge que ya tiene el "ojo" en el tab de competencia
-        const data = await donaldsonScraper(filterCode);
+        // Abrimos un navegador invisible
+        browser = await puppeteer.launch();
+        const page = await browser.newPage();
         
-        const desc = (data.title || "").toUpperCase();
-        const pNumber = (data.partNumber || "").toUpperCase();
+        // Navegamos como un humano
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${filterCode}`);
+        
+        // PAUSA HUMANA: Esperamos a que el Tab de competencia aparezca y cargue
+        await page.waitForSelector('.search-results-tab', { timeout: 5000 });
+        
+        // Hacemos "clic" en la pestaña de competencia
+        const tabs = await page.$$('.search-results-tab');
+        if (tabs.length > 1) await tabs[1].click();
 
-        // REGLA ELIMFILTERS: Si es Separador de Agua -> ES9
-        let prefix = "EL8"; 
-        if (desc.includes("SEPARADOR") || desc.includes("SEPARATOR") || desc.includes("AGUA")) {
-            prefix = "ES9";
-        } else if (desc.includes("FUEL") || desc.includes("COMBUSTIBLE")) {
-            prefix = "EF9";
-        }
+        // Extraemos el texto una vez que la página terminó de "pensar"
+        const content = await page.content();
+        const pMatch = content.match(/P\d{6,7}/i);
+        const isSep = /SEPARADOR|SEPARATOR/i.test(content);
 
-        // REGLA DE 4 DÍGITOS: P550851 -> 0851
-        const lastFour = pNumber.length >= 4 ? pNumber.slice(-4) : "0000";
-        const finalSKU = pNumber !== "SIN DATOS" ? `${prefix}${lastFour}` : "NO_ENCONTRADO";
+        const pNumber = pMatch ? pMatch[0].toUpperCase() : "NO_HALLADO";
+        
+        await browser.close();
 
         return res.json({
-            SKU: finalSKU,
+            SKU: pNumber !== "NO_HALLADO" ? (isSep ? "ES9" : "EF9") + pNumber.slice(-4) : "EL80000",
             referencia_donaldson: pNumber,
-            especificacion: desc,
-            metodo: "Bridge-Competitor-Tab"
+            especificacion: isSep ? "SEPARADOR DE AGUA" : "FILTRO DE COMBUSTIBLE"
         });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    } catch (e) {
+        if (browser) await browser.close();
+        res.status(500).json({ error: "Donaldson bloqueó el acceso humano" });
     }
 };

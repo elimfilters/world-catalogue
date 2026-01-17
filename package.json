@@ -18,6 +18,6 @@
     "mongodb": "^7.0.0",
     "mongoose": "^9.1.2",
     "puppeteer": "^21.11.0",
-    "puppeteer-core": "^24.34.0"
+    "puppeteer-core": "^24.35.0"
   }
 }
