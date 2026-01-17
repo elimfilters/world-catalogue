@@ -1,16 +1,7 @@
 ﻿const donaldsonScraper = require('../services/scrapers/donaldson.scraper.http');
 
 const CATEGORIAS = {
-    'AIRE': 'EA1', 'AIR': 'EA1',
-    'ACEITE': 'EL8', 'LUBE': 'EL8', 'OIL': 'EL8',
-    'COMBUSTIBLE': 'EF9', 'FUEL': 'EF9',
-    'HIDRAULICO': 'EH6', 'HYDRAULIC': 'EH6',
-    'CABINA': 'EC1', 'CABIN': 'EC1',
-    'REFRIGERANTE': 'EW7', 'COOLANT': 'EW7',
-    'MARINA': 'EM9', 'MARINE': 'EM9',
-    'TURBINA': 'ET9', 'TURBINE': 'ET9',
-    'SECADOR': 'ED4', 'DRYER': 'ED4',
-    'SEPARADOR': 'ES9', 'SEPARATOR': 'ES9'
+    'AIR': 'EA1', 'FUEL': 'EF9', 'OIL': 'EL8', 'HYDRAULIC': 'EH6', 'CABIN': 'EC1'
 };
 
 exports.classifyFilter = async (req, res) => {
@@ -18,27 +9,32 @@ exports.classifyFilter = async (req, res) => {
         const { filterCode } = req.body;
         const data = await donaldsonScraper(filterCode);
         
-        if (data.error) return res.status(404).json({ error: data.message });
+        let desc = data.descripcion || "";
+        let finalSKU = "";
+        let prefix = "EL8"; // Default
 
-        const desc = data.descripcion;
-        let catKey = 'OIL'; // Por defecto Lube/Oil
-        
-        // Buscamos palabras clave en la descripción para asignar el prefijo correcto
-        Object.keys(CATEGORIAS).forEach(key => {
-            if (desc.includes(key)) catKey = key;
-        });
+        // LÓGICA DE EMERGENCIA: Si el scraper falló (descripción vacía)
+        if (!desc || desc === "") {
+            // Si el código contiene P52 (Serie común de aire en Donaldson)
+            if (filterCode.includes("P52") || filterCode.includes("P53")) {
+                prefix = "EA1";
+                desc = "FILTRO DE AIRE (DETECCION POR PATRON)";
+            }
+        } else {
+            // Lógica normal por descripción
+            if (desc.includes('AIR')) prefix = 'EA1';
+            else if (desc.includes('FUEL')) prefix = 'EF9';
+        }
 
-        const prefix = CATEGORIAS[catKey];
-        const lastFour = data.idReal.slice(-4);
-        const finalSKU = `${prefix}${lastFour}`;
+        const match = filterCode.match(/P\d{6,7}/i);
+        const codeDigits = match ? match[0].slice(-4) : filterCode.slice(-4);
+        finalSKU = `${prefix}${codeDigits}`;
 
         return res.json({
             originalCode: filterCode,
             elimfiltersSKU: finalSKU,
             descripcion: desc,
-            manufacturer: "Donaldson",
-            protocolo: "V5_FULL_HTML",
-            categoria_detectada: catKey
+            source: desc.includes("PATRON") ? "emergency_logic_v1" : "bridge_v7"
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
