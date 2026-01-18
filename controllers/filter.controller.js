@@ -1,41 +1,44 @@
-﻿const donaldsonScraper = require('../services/scrapers/donaldson.scraper.api');
-const googleSheetsService = require('../services/googleSheets.service');
+﻿const puppeteer = require('puppeteer-core');
 
-exports.classifyFilter = async (req, res) => { /* ... lógica existente ... */ };
-
-// ESTA ES LA FUNCIÓN QUE NECESITAMOS
 exports.testFullExtraction = async (req, res) => {
+    const { filterCode } = req.body;
+    let browser;
     try {
-        const { filterCode, cleanNames, updateSheet } = req.body;
-        const data = await donaldsonScraper(filterCode);
+        browser = await puppeteer.launch();
+        const page = await browser.newPage();
         
-        if (data.error) return res.status(404).json(data);
+        // 1. Home y Búsqueda
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${filterCode}`);
+        
+        // 2. Clic en el resultado del Tab
+        await page.waitForSelector('.search-result-item');
+        await page.click('.search-result-item a');
 
-        // Lógica de limpieza de nombres en Cross Reference
-        const cleanXref = data.referenciaCruzada.map(ref => {
-            return ref.part_number.replace(/[a-zA-Z]+\s/g, '').trim();
-        }).join(', ');
-
-        const sku = (data.filterType === 'FUEL SEPARATOR' ? 'ES9' : 'EL8') + data.idReal.slice(-4);
-
-        if (updateSheet) {
-            await googleSheetsService.updateFilterRow(filterCode, {
-                sku: sku,
-                thread: data.especificaciones['Tamaño de la rosca'] || '',
-                crossRef: cleanXref,
-                specs: data.especificaciones
-            });
+        // 3. Extracción de los 4 Tabs con "Mostrar Más"
+        const tabs = ['.prodSpecInfoDiv', '.ListCrossReferenceDetailPageComp', '.ListPartDetailPageComp'];
+        for (let tab of tabs) {
+            await page.click(`a[data-target="${tab}"]`);
+            const showMore = await page.$('button#showMoreProductSpecsButton, button#showMorePdpListButton');
+            if (showMore) await showMore.click();
+            await page.waitForTimeout(500); // Pausa humana
         }
 
-        res.json({
-            SKU: sku,
-            threadSize: data.especificaciones['Tamaño de la rosca'],
-            cleanCrossReferences: cleanXref,
-            sheetUpdateStatus: updateSheet ? "Actualizado con éxito" : "No solicitado"
+        const data = await page.evaluate(() => {
+            // Lógica para limpiar nombres de fabricantes en Cross Reference
+            const cleanRefs = Array.from(document.querySelectorAll('.ListCrossReferenceDetailPageComp .part-number'))
+                                   .map(el => el.innerText.replace(/[a-zA-Z]+\s/g, '').trim());
+            return {
+                skuBase: document.querySelector('.base-part-number')?.innerText,
+                specs: document.querySelector('.prodSpecInfoDiv')?.innerText,
+                crossRefs: cleanRefs.join(', '),
+                alternativos: Array.from(document.querySelectorAll('.preAlternate')).map(el => el.innerText)
+            };
         });
+
+        await browser.close();
+        res.json(data);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        if (browser) await browser.close();
+        res.status(500).json({ error: "Fallo en navegación humana: " + err.message });
     }
 };
-
-exports.batchProcess = async (req, res) => { /* ... */ };
