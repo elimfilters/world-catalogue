@@ -3,49 +3,56 @@ const googleSheetsService = require('../services/googleSheets.service');
 
 exports.testFullExtraction = async (req, res) => {
     const { filterCode, updateSheet } = req.body;
-    try {
-        // 1. EL BUSCADOR (Lo que pones en la barra)
-        const searchUrl = `https://shop.donaldson.com/store/es-us/search/results?Ntt=${filterCode}&_requestContext=competitor`;
-        const searchRes = await axios.get(searchUrl, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        
-        const pNumber = JSON.stringify(searchRes.data).match(/P\d{6,7}/i);
-        if (!pNumber) return res.status(404).json({ error: "No hallado en Donaldson" });
-        const realP = pNumber[0].toUpperCase();
+    
+    // Headers obligatorios para que Donaldson no nos bloquee
+    const donaldsonHeaders = {
+        'accept': 'application/json, text/javascript, */*; q=0.01',
+        'x-requested-with': 'XMLHttpRequest',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'referer': 'https://shop.donaldson.com/store/es-us/home'
+    };
 
-        // 2. ASALTO A LOS 4 TABS EN PARALELO (Los Fetch que me pasaste)
+    try {
+        // 1. Buscador (Convertir OEM a P-Number)
+        const searchUrl = `https://shop.donaldson.com/store/es-us/search/results?Ntt=${filterCode}&_requestContext=competitor`;
+        const searchRes = await axios.get(searchUrl, { headers: donaldsonHeaders });
+        
+        const pMatch = JSON.stringify(searchRes.data).match(/P\d{6,7}/i);
+        if (!pMatch) return res.status(404).json({ error: "No hallado en Donaldson", debug: "Búsqueda fallida" });
+        const realP = pMatch[0].toUpperCase();
+
+        // 2. El asalto a los 4 túneles (Usando tus URLs de Fetch)
         const [attrRes, crossRes, equipRes] = await Promise.all([
-            axios.get(`https://shop.donaldson.com/store/rest/fetchProductAttrAndRecentlyViewed?id=20823&fpp=${realP}`),
-            axios.get(`https://shop.donaldson.com/store/rest/fetchCrossReferenceData?fpp=${realP}`),
-            axios.get(`https://shop.donaldson.com/store/rest/fetchproductequipmentlist?fpp=${realP}`)
+            axios.get(`https://shop.donaldson.com/store/rest/fetchProductAttrAndRecentlyViewed?id=20823&fpp=${realP}`, { headers: donaldsonHeaders }),
+            axios.get(`https://shop.donaldson.com/store/rest/fetchCrossReferenceData?fpp=${realP}`, { headers: donaldsonHeaders }),
+            axios.get(`https://shop.donaldson.com/store/rest/fetchproductequipmentlist?fpp=${realP}`, { headers: donaldsonHeaders })
         ]);
 
-        // 3. PROCESAMIENTO Y LIMPIEZA (Solo códigos, sin nombres)
+        // 3. Limpieza de nombres de fabricantes (Solo códigos)
         const crossRefs = (crossRes.data.crossReferenceResponse || [])
             .map(ref => ref.part_number.replace(/[a-zA-Z]+\s/g, '').trim())
             .filter(code => code.length > 2);
 
         const specs = attrRes.data.productAttributesResponse?.dynamicAttributes || {};
-        const alternativos = (attrRes.data.recentlyViewedProductResponse?.recentlyViewedProducts || [])
-            .filter(p => p.basePartNumber !== realP)
-            .map(p => p.basePartNumber);
-
+        
         const data = {
             skuBase: realP,
-            description: attrRes.data.recentlyViewedProductResponse?.recentlyViewedProducts[0]?.description,
+            description: attrRes.data.recentlyViewedProductResponse?.recentlyViewedProducts[0]?.description || "Sin descripción",
             specs: specs,
             crossRefs: crossRefs.join(', '),
-            alternativos: alternativos,
-            equipos: (equipRes.data.equipmentResponse || []).map(e => `${e.make} ${e.model}`).slice(0, 10)
+            alternativos: (attrRes.data.recentlyViewedProductResponse?.recentlyViewedProducts || [])
+                            .filter(p => p.basePartNumber !== realP)
+                            .map(p => p.basePartNumber),
+            equipos: (equipRes.data.equipmentResponse || []).map(e => `${e.make} ${e.model}`).slice(0, 15)
         };
 
         if (updateSheet) {
-            // Aquí se llenan las columnas M hasta la AL
             await googleSheetsService.updateFilterRow(filterCode, data);
         }
 
         res.json(data);
     } catch (err) {
-        res.status(500).json({ error: "Error en el asalto de 4 tabs: " + err.message });
+        res.status(500).json({ error: "Error en asalto directo: " + err.message });
     }
 };
 
