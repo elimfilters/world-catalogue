@@ -1,39 +1,41 @@
-﻿const puppeteer = require('puppeteer-core');
+﻿const donaldsonScraper = require('../services/scrapers/donaldson.scraper.api');
+const googleSheetsService = require('../services/googleSheets.service');
 
-exports.classifyFilter = async (req, res) => {
-    const { filterCode } = req.body;
-    let browser;
+exports.classifyFilter = async (req, res) => { /* ... lógica existente ... */ };
+
+// ESTA ES LA FUNCIÓN QUE NECESITAMOS
+exports.testFullExtraction = async (req, res) => {
     try {
-        // Abrimos un navegador invisible
-        browser = await puppeteer.launch();
-        const page = await browser.newPage();
+        const { filterCode, cleanNames, updateSheet } = req.body;
+        const data = await donaldsonScraper(filterCode);
         
-        // Navegamos como un humano
-        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${filterCode}`);
-        
-        // PAUSA HUMANA: Esperamos a que el Tab de competencia aparezca y cargue
-        await page.waitForSelector('.search-results-tab', { timeout: 5000 });
-        
-        // Hacemos "clic" en la pestaña de competencia
-        const tabs = await page.$$('.search-results-tab');
-        if (tabs.length > 1) await tabs[1].click();
+        if (data.error) return res.status(404).json(data);
 
-        // Extraemos el texto una vez que la página terminó de "pensar"
-        const content = await page.content();
-        const pMatch = content.match(/P\d{6,7}/i);
-        const isSep = /SEPARADOR|SEPARATOR/i.test(content);
+        // Lógica de limpieza de nombres en Cross Reference
+        const cleanXref = data.referenciaCruzada.map(ref => {
+            return ref.part_number.replace(/[a-zA-Z]+\s/g, '').trim();
+        }).join(', ');
 
-        const pNumber = pMatch ? pMatch[0].toUpperCase() : "NO_HALLADO";
-        
-        await browser.close();
+        const sku = (data.filterType === 'FUEL SEPARATOR' ? 'ES9' : 'EL8') + data.idReal.slice(-4);
 
-        return res.json({
-            SKU: pNumber !== "NO_HALLADO" ? (isSep ? "ES9" : "EF9") + pNumber.slice(-4) : "EL80000",
-            referencia_donaldson: pNumber,
-            especificacion: isSep ? "SEPARADOR DE AGUA" : "FILTRO DE COMBUSTIBLE"
+        if (updateSheet) {
+            await googleSheetsService.updateFilterRow(filterCode, {
+                sku: sku,
+                thread: data.especificaciones['Tamaño de la rosca'] || '',
+                crossRef: cleanXref,
+                specs: data.especificaciones
+            });
+        }
+
+        res.json({
+            SKU: sku,
+            threadSize: data.especificaciones['Tamaño de la rosca'],
+            cleanCrossReferences: cleanXref,
+            sheetUpdateStatus: updateSheet ? "Actualizado con éxito" : "No solicitado"
         });
-    } catch (e) {
-        if (browser) await browser.close();
-        res.status(500).json({ error: "Donaldson bloqueó el acceso humano" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 };
+
+exports.batchProcess = async (req, res) => { /* ... */ };
