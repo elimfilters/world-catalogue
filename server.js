@@ -1,63 +1,55 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
-const { JWT } = require('google-auth-library');
-require('dotenv').config();
+﻿const express = require("express");
+const mongoose = require("mongoose");
+require("dotenv").config();
 
 const app = express();
 app.use(express.json());
 
-// 1. CONEXIÓN MONGODB
-mongoose.connect(process.env.MONGO_URL)
-    .then(() => console.log('✅ MongoDB Conectado'))
-    .catch(err => console.error('❌ Error Mongo:', err.message));
+// CONFIGURACIÓN MAESTRA ELIMFILTERS V5.10 (VERSIÓN TÉCNICA FINAL)
+const config = {
+    'Oil': { prefix: 'EL8', tech: 'SYNTRAX™' },
+    'Air': { prefix: 'EA1', tech: 'MACROCORE™' },
+    'Air_Housing': { prefix: 'EA2', tech: 'INTEKCORE™' },
+    'Fuel': { prefix: 'EF9', tech: 'NANOFORCE™' },
+    'Fuel_Separator': { prefix: 'ES9', tech: 'AQUAGUARD™' },
+    'Hydraulic': { prefix: 'EH6', tech: 'SYNTEPORE™' },
+    'Turbines': { prefix: 'ET9', tech: 'AQUAGUARD™' },     // ET9: Turbinas + AQUAGUARD
+    'Marine': { prefix: 'EM9', tech: 'MARINETECH™' },      // EM9: Marine + MARINETECH
+    'Kit_HD': { prefix: 'EK5', tech: 'DURATECH™' },
+    'Kit_LD': { prefix: 'EK3', tech: 'DURATECH™' },
+    'Cabin': { prefix: 'EC1', tech: 'MICROKAPPA™' },
+    'Air_Brake_Dryer': { prefix: 'ED4', tech: 'DRYCORE™' },
+    'Coolant': { prefix: 'EW7', tech: 'COOLTECH™' }
+};
 
-const Filter = mongoose.model('Filter', new mongoose.Schema({
-    originalCode: String,
-    sku: String,
-    timestamp: { type: Date, default: Date.now }
-}));
-
-// 2. FUNCIÓN GOOGLE SHEETS (Asíncrona)
-async function syncToSheets(data) {
+app.post("/generate", async (req, res) => {
     try {
-        if (!process.env.GOOGLE_PRIVATE_KEY) return;
-        const auth = new JWT({
-            email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-            key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        const { refCode, category } = req.body;
+        const mapping = config[category] || { prefix: "GEN", tech: "STANDARD™" };
+        
+        // Regla de los 4 números (Identidad ELIMFILTERS)
+        const numbersOnly = refCode.replace(/[^0-9]/g, "");
+        const suffix = numbersOnly.slice(-4).padStart(4, "0");
+        const sku = `${mapping.prefix}${suffix}`;
+
+        res.json({
+            source: "V5.10_TOTAL_UNIVERSE",
+            data: {
+                sku: sku,
+                technology: mapping.tech,
+                category: category,
+                status: "Production Ready"
+            }
         });
-        const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
-        await doc.loadInfo();
-        const sheet = doc.sheetsByIndex[0];
-        await sheet.addRow({ SKU: data.sku, CODIGO: data.originalCode, FECHA: new Date().toISOString() });
-        console.log('✅ Google Sheets Sincronizado');
-    } catch (e) { console.error('⚠️ Error Sheets:', e.message); }
-}
-
-// 3. RUTAS API (Corregidas para evitar "Cannot GET")
-app.get('/', (req, res) => res.send('🚀 Motor ELIMFILTERS v5.10 Online'));
-
-app.get('/api/search/:code', async (req, res) => {
-    try {
-        const code = req.params.code.toUpperCase();
-        let filter = await Filter.findOne({ originalCode: code });
-        
-        if (!filter) {
-            // Lógica de generación de SKU segura
-            const sku = "EL-" + code.replace(/[^0-9]/g, '').slice(-5);
-            filter = await Filter.create({ originalCode: code, sku: sku });
-            syncToSheets(filter); // Sincroniza en segundo plano
-        }
-        
-        res.json({ success: true, data: filter });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
     }
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log('🚀 Servidor ELIMFILTERS Corriendo en puerto ' + PORT));
-// Forced Update: 1/22/2026 9:38:32 AM
-
-// Cache Bypass ID: 1799351209
+mongoose.connect(process.env.MONGO_URL)
+    .then(() => {
+        console.log("✅ MongoDB Conectado");
+        app.listen(PORT, () => console.log(`🚀 Servidor V5.10 TOTAL UNIVERSE en puerto ${PORT}`));
+    })
+    .catch(err => console.error("❌ Error:", err));
