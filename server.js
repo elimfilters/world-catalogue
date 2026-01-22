@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const mongoose = require('mongoose');
 const axios = require('axios');
+const cheerio = require('cheerio');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 require('dotenv').config();
@@ -8,7 +9,7 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v5.20: Sistema de Columnas Maestro Activo'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v5.30: Deep Scraper & Full Mapping Active'));
 
 const TECH_MATRIX = {
     'Air':          { prefix: 'EA1', tech: 'MACROCORE™' },
@@ -18,7 +19,7 @@ const TECH_MATRIX = {
     'Fuel Sep':     { prefix: 'ES9', tech: 'AQUAGUARD™' },
     'Hydraulic':    { prefix: 'EH6', tech: 'SYNTEPORE™' },
     'Cabin':        { prefix: 'EC1', tech: 'MICROKAPPA™' },
-    'Coolant':      { prefix: 'EW7', tech: 'COOLTECH™' },
+    'Cool coolant': { prefix: 'EW7', tech: 'COOLTECH™' },
     'Kits HD':      { prefix: 'EK5', tech: 'DURATECH™' },
     'Kits LD':      { prefix: 'EK3', tech: 'DURATECH™' },
     'Turbines':     { prefix: 'ET9', tech: 'AQUAGUARD™' },
@@ -26,27 +27,59 @@ const TECH_MATRIX = {
     'Air Dryer':    { prefix: 'ED4', tech: 'DRYGUARD™' }
 };
 
-const Filter = mongoose.model('FilterCache', new mongoose.Schema({
-    originalCode: String, sku: String, prefix: String, technology: String,
-    duty: String, category: String, source: String
-}));
+async function getTechnicalDNA(code) {
+    const specs = {};
+    const SCRAPE_URL = (url) => `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${url}`;
+    
+    try {
+        const response = await axios.get(SCRAPE_URL(`https://shop.donaldson.com/store/search?q=${code}`));
+        const $ = cheerio.load(response.data);
+        
+        specs.duty = 'HD';
+        specs.source = 'DONALDSON';
+        
+        // Extracción de datos de la tabla de Donaldson (Ejemplo de selectores)
+        $('.attribute-row').each((i, el) => {
+            const label = $(el).find('.label').text().trim();
+            const value = $(el).find('.value').text().trim();
+            
+            if (label.includes('Outer Diameter')) specs.od = value;
+            if (label.includes('Height') || label.includes('Length')) specs.height = value;
+            if (label.includes('Thread Size')) specs.thread = value;
+            if (label.includes('Efficiency')) specs.efficiency = value;
+        });
+    } catch (e) { 
+        specs.duty = 'UNKNOWN';
+        specs.source = 'OEM_PENDING';
+    }
+    return specs;
+}
 
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
     const cat = req.query.cat || 'Oil';
     try {
+        const dna = await getTechnicalDNA(code);
         const config = TECH_MATRIX[cat] || { prefix: 'ELX', tech: 'STANDARD™' };
         const suffix = code.replace(/[^0-9]/g, '').slice(-4).padStart(4, '0');
         let sku = `${config.prefix}${suffix}`;
+        
         if (cat === 'Turbines') {
             const letterMatch = code.match(/\d+([A-Z])/);
             if (letterMatch) sku += letterMatch[1];
         }
 
-        const data = { originalCode: code, sku: sku, prefix: config.prefix, technology: config.tech, duty: 'PENDING_SCRAPE', category: cat };
-        res.json({ source: 'V5.20_LIVE', data });
-        
-        syncToSheets(data);
+        const fullData = {
+            originalCode: code,
+            sku: sku,
+            category: cat,
+            tech: config.tech,
+            prefix: config.prefix,
+            ...dna
+        };
+
+        res.json({ source: 'V5.30_DEEP_SYNC', data: fullData });
+        syncToSheets(fullData);
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -59,23 +92,25 @@ async function syncToSheets(data) {
         });
         const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
         await doc.loadInfo();
-        
-        // Seleccionamos la pestaña específica que vi en tu imagen
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'] || doc.sheetsByIndex[0];
 
         await sheet.addRow({
             'Input Code': data.originalCode,
             'ELIMFILTERS SKU': data.sku,
-            'Description': `Filtro ELIMFILTERS ${data.category}`,
+            'Description': `ELIMFILTERS ${data.category} - ${data.tech}`,
             'Filter Type': data.category,
             'Prefix': data.prefix,
-            'ELIMFILTERS Technology': data.technology,
+            'ELIMFILTERS Technology': data.tech,
             'Duty': data.duty,
+            'Thread Size': data.thread || 'TBD',
+            'Height (mm)': data.height || 'TBD',
+            'Outer Diameter (mm)': data.od || 'TBD',
+            'Nominal Efficiency (%)': data.efficiency || 'TBD',
             'OEM Codes': data.originalCode,
-            'Technical Sheet URL': 'https://elimfilters.com/db'
+            'Technical Sheet URL': `https://elimfilters.com/spec/${data.sku}`
         });
-        console.log('✅ Fila agregada a MASTER_UNIFIED_V5');
-    } catch (error) { console.error('❌ Error de Sync:', error); }
+        console.log('✅ Sincronización completa de columnas');
+    } catch (error) { console.error('❌ Error:', error); }
 }
 
 app.listen(process.env.PORT || 8080);
