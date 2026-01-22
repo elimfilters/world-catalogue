@@ -7,82 +7,70 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 Motor ELIMFILTERS v5.02: Inteligencia de Fabricante Activa'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('✅ v5.09: EA2 configurado para Carcasas Aire (HD)'));
 
-// --- DICCIONARIO MAESTRO DE FABRICANTES ---
-const MANUFACTURERS = {
-    HD: ['CATERPILLAR', 'CAT', 'CUMMINS', 'DETROIT DIESEL', 'JOHN DEERE', 'KOMATSU', 'MACK', 'VOLVO TRUCK', 'KENWORTH', 'PETERBILT', 'FREIGHTLINER', 'PERKINS', 'DEUTZ', 'MTU', 'SCANIA', 'MAN'],
-    LD: ['TOYOTA', 'FORD', 'CHEVROLET', 'NISSAN', 'HONDA', 'BMW', 'MERCEDES-BENZ', 'HYUNDAI', 'KIA', 'VOLKSWAGEN', 'MAZDA', 'SUBARU', 'STELLANTIS', 'JEEP']
-};
-
-// --- FUNCIÓN DE DETECCIÓN POR ESPECIFICACIÓN ---
-const determineDutyFromSpecs = (brand, description) => {
-    const text = (brand + ' ' + description).toUpperCase();
-    
-    // 1. Prioridad por Fabricante
-    if (MANUFACTURERS.HD.some(m => text.includes(m))) return 'HD';
-    if (MANUFACTURERS.LD.some(m => text.includes(m))) return 'LD';
-    
-    // 2. Prioridad por Palabras Clave de Equipo
-    const hdKeywords = ['EXCAVATOR', 'GENSET', 'TRUCK', 'TRACTOR', 'LOADER', 'MINING', 'DIESEL ENGINE'];
-    if (hdKeywords.some(k => text.includes(k))) return 'HD';
-    
-    return 'LD'; // Default para pasajeros si no hay indicios de equipo pesado
-};
-
-// --- SCRAPERS RECONSTRUIDOS (DONALDSON & FRAM) ---
-const getExternalData = async (code) => {
-    try {
-        // Intentamos Donaldson (HD) primero por ser el estándar de ELIMFILTERS
-        const donaldsonRes = await axios.get(https://api.scrapestack.com/scrape?access_key=&url=https://shop.donaldson.com/store/search?q=);
-        
-        // Si Donaldson tiene datos, es HD casi seguro
-        if (donaldsonRes.data && donaldsonRes.data.includes('Specifications')) {
-            return { brand: 'DONALDSON', duty: 'HD', specs: 'Extracted from Donaldson' };
-        }
-
-        // Si no, probamos FRAM (LD)
-        const framRes = await axios.get(https://api.scrapestack.com/scrape?access_key=&url=https://www.fram.com/search?q=);
-        if (framRes.data) {
-            return { brand: 'FRAM', duty: 'LD', specs: 'Extracted from FRAM' };
-        }
-
-        return null;
-    } catch (e) {
-        return null;
-    }
+// --- MATRIZ DE IDENTIDAD TÉCNICA DEFINITIVA ---
+const TECH_MATRIX = {
+    'Air':          { prefix: 'EA1', tech: 'MACROCORE™' },
+    'Air Housings': { prefix: 'EA2', tech: 'AEROFLOW™' },      // Corregido: Carcasas para filtros de Aire (HD)
+    'Oil':          { prefix: 'EL8', tech: 'SYNTRAX™' },
+    'Fuel':         { prefix: 'EF9', tech: 'NANOFORCE™' },
+    'Hydraulic':    { prefix: 'EH6', tech: 'SYNTEPORE™' },
+    'Cabin':        { prefix: 'EC1', tech: 'MICROKAPPA™' },
+    'Coolant':      { prefix: 'EW7', tech: 'COOLTECH™' },
+    'Fuel Sep':     { prefix: 'ES9', tech: 'AQUAGUARD™' },
+    'Kits HD':      { prefix: 'EK5', tech: 'DURATECH™' },
+    'Kits LD':      { prefix: 'EK3', tech: 'DURATECH™' },
+    'Turbinas':     { prefix: 'ET9', tech: 'TURBINAS SERIES™' },
+    'Air Dryer':    { prefix: 'ED4', tech: 'DRYGUARD™' }
 };
 
 const Filter = mongoose.model('FilterCache', new mongoose.Schema({
-    originalCode: String, sku: String, duty: String, manufacturer: String,
-    technology: String, hexColor: String, specs: mongoose.Schema.Types.Mixed
+    originalCode: { type: String, unique: true },
+    sku: String,
+    duty: String,
+    category: String,
+    source: String,
+    isOemFallback: Boolean,
+    specs: mongoose.Schema.Types.Mixed
 }));
+
+async function getTechnicalDNA(code) {
+    const SCRAPE_URL = (url) => https://api.scrapestack.com/scrape?access_key=&url=;
+    try {
+        const resHD = await axios.get(SCRAPE_URL(https://shop.donaldson.com/store/search?q=));
+        if (resHD.data && resHD.data.includes('Specifications')) return { duty: 'HD', source: 'DONALDSON', isOem: false };
+    } catch (e) { console.log('Donaldson Skip'); }
+
+    try {
+        const resLD = await axios.get(SCRAPE_URL(https://www.fram.com/search?q=));
+        if (resLD.data && resLD.data.includes('Product Details')) return { duty: 'LD', source: 'FRAM', isOem: false };
+    } catch (e) { console.log('FRAM Skip'); }
+
+    return { duty: 'UNKNOWN', source: 'OEM_ORIGINAL', isOem: true };
+}
 
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
+    const cat = req.query.cat || 'Oil';
     
-    // 1. Fase Cascada: Buscar en Cache
-    let filter = await Filter.findOne({ originalCode: code });
-    if (filter) return res.json({ source: 'MASTER_CACHE', data: filter });
+    try {
+        let filter = await Filter.findOne({ originalCode: code });
+        if (filter) return res.json({ source: 'CACHE', data: filter });
 
-    // 2. Fase Scraper: Salir al mundo a buscar el fabricante
-    const external = await getExternalData(code);
-    const finalDuty = external ? determineDutyFromSpecs(external.brand, '') : 'HD';
+        const dna = await getTechnicalDNA(code);
+        const suffix = code.replace(/[^0-9]/g, '').slice(-4).padStart(4, '0');
+        const config = TECH_MATRIX[cat] || { prefix: 'ELX', tech: 'STANDARD™' };
+        const sku = ${config.prefix};
 
-    // 3. Generación de Identidad (Regla de los 4 números)
-    const suffix = code.replace(/[^0-9]/g, '').slice(-4).padStart(4, '0');
-    const sku = EL8;
+        const newEntry = await Filter.create({
+            originalCode: code, sku: sku, duty: dna.duty, category: cat,
+            source: dna.source, isOemFallback: dna.isOem,
+            specs: dna.isOem ? { alert: 'OEM ORIGIN: Validar medidas.' } : { status: 'Verified' }
+        });
 
-    const newFilter = await Filter.create({
-        originalCode: code,
-        sku: sku,
-        duty: finalDuty,
-        manufacturer: external ? external.brand : 'UNKNOWN',
-        technology: 'SYNTRAX™',
-        hexColor: finalDuty === 'HD' ? '#000000' : '#E31E24'
-    });
-
-    res.json({ source: 'v5.02_INTELLIGENT_ENGINE', data: newFilter });
+        res.json({ source: 'V5.09_AEROFLOW_ENGINE', data: newEntry });
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.listen(process.env.PORT || 8080);
