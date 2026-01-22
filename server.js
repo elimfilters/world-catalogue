@@ -61,10 +61,17 @@ app.get('/api/search/:code', async (req, res) => {
         let filter = await Filter.findOne({ originalCode: code });
         if (filter) return res.json({ source: 'CACHE', data: filter });
 
-        const dna = await getTechnicalDNA(code);
-        const suffix = code.replace(/[^0-9]/g, '').slice(-4).padStart(4, '0');
+                const dna = await getTechnicalDNA(code);
+        const numbersOnly = code.replace(/[^0-9]/g, '');
+        const suffix = numbersOnly.slice(-4).padStart(4, '0');
         const config = TECH_MATRIX[cat] || { prefix: 'ELX', tech: 'STANDARD™' };
-        const sku = `${config.prefix}${suffix}`;
+        let sku = `${config.prefix}${suffix}`;
+
+        // REGLA ESPECIAL TURBINAS: Capturar letra de micronaje (P, T, S)
+        if (cat === 'Turbines') {
+            const letterMatch = code.match(/\d+([A-Z])/);
+            if (letterMatch) sku += letterMatch[1];
+        }
 
         const newEntry = await Filter.create({
             originalCode: code, sku: sku, duty: dna.duty, category: cat,
@@ -105,3 +112,4 @@ async function syncToSheets(data) {
 }
 
 app.listen(process.env.PORT || 8080);
+
