@@ -1,4 +1,4 @@
-﻿{
+{
   "dependencies": {
     "mongoose": "^8.0.0",
     "google-spreadsheet": "^4.1.1",

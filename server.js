@@ -7,8 +7,8 @@ const app = express();
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URL)
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.error('❌ MongoDB error:', err));
+  .then(() => console.log('âœ… MongoDB connected'))
+  .catch(err => console.error('âŒ MongoDB error:', err));
 
 const FilterSchema = new mongoose.Schema({
   originalCode: { type: String, required: true, index: true },
@@ -54,4 +54,4 @@ const FilterSchema = new mongoose.Schema({
 const Filter = mongoose.model('Filter', FilterSchema);
 
 app.get('/', (req, res) => res.send('Motor ELIMFILTERS V2 - Activo'));
-app.listen(process.env.PORT || 8080, () => console.log('🚀 Server running'));
+app.listen(process.env.PORT || 8080, () => console.log('ðŸš€ Server running'));
