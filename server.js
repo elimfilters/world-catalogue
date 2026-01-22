@@ -7,15 +7,14 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('✅ v5.10: Matriz Totalmente Integrada (ES9 Incluido)'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('✅ v5.10: Motor ELIMFILTERS Online'));
 
-// --- MATRIZ DE IDENTIDAD TÉCNICA GLOBAL ELIMFILTERS ---
 const TECH_MATRIX = {
     'Air':          { prefix: 'EA1', tech: 'MACROCORE™' },
     'Air Housings': { prefix: 'EA2', tech: 'AEROFLOW™' },
     'Oil':          { prefix: 'EL8', tech: 'SYNTRAX™' },
     'Fuel':         { prefix: 'EF9', tech: 'NANOFORCE™' },
-    'Fuel Sep':     { prefix: 'ES9', tech: 'AQUAGUARD™' },    // ES9: Separadores de Combustible
+    'Fuel Sep':     { prefix: 'ES9', tech: 'AQUAGUARD™' },
     'Hydraulic':    { prefix: 'EH6', tech: 'SYNTEPORE™' },
     'Cabin':        { prefix: 'EC1', tech: 'MICROKAPPA™' },
     'Coolant':      { prefix: 'EW7', tech: 'COOLTECH™' },
@@ -36,7 +35,9 @@ const Filter = mongoose.model('FilterCache', new mongoose.Schema({
 }));
 
 async function getTechnicalDNA(code) {
+    // ESTA ES LA LÍNEA CORREGIDA (Línea 39)
     const SCRAPE_URL = (url) => https://api.scrapestack.com/scrape?access_key=&url=;
+    
     try {
         const resHD = await axios.get(SCRAPE_URL(https://shop.donaldson.com/store/search?q=));
         if (resHD.data && resHD.data.includes('Specifications')) return { duty: 'HD', source: 'DONALDSON', isOem: false };
@@ -53,7 +54,6 @@ async function getTechnicalDNA(code) {
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
     const cat = req.query.cat || 'Oil';
-    
     try {
         let filter = await Filter.findOne({ originalCode: code });
         if (filter) return res.json({ source: 'CACHE', data: filter });
@@ -68,8 +68,7 @@ app.get('/api/search/:code', async (req, res) => {
             source: dna.source, isOemFallback: dna.isOem,
             specs: dna.isOem ? { alert: 'OEM ORIGIN: Validar medidas.' } : { status: 'Verified' }
         });
-
-        res.json({ source: 'V5.10_TOTAL_UNIVERSE', data: newEntry });
+        res.json({ source: 'V5.10_FINAL', data: newEntry });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
