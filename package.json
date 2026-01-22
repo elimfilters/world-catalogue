@@ -1,8 +1,9 @@
 {
   "dependencies": {
-    "mongoose": "^8.0.0",
+    "dotenv": "^16.6.1",
+    "express": "^5.2.1",
+    "google-auth-library": "^9.4.1",
     "google-spreadsheet": "^4.1.1",
-    "dotenv": "^16.3.1",
-    "google-auth-library": "^9.4.1"
+    "mongoose": "^8.21.0"
   }
 }
