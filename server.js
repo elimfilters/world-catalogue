@@ -7,18 +7,18 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('✅ v5.09: EA2 configurado para Carcasas Aire (HD)'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('✅ v5.10: Matriz Totalmente Integrada (ES9 Incluido)'));
 
-// --- MATRIZ DE IDENTIDAD TÉCNICA DEFINITIVA ---
+// --- MATRIZ DE IDENTIDAD TÉCNICA GLOBAL ELIMFILTERS ---
 const TECH_MATRIX = {
     'Air':          { prefix: 'EA1', tech: 'MACROCORE™' },
-    'Air Housings': { prefix: 'EA2', tech: 'AEROFLOW™' },      // Corregido: Carcasas para filtros de Aire (HD)
+    'Air Housings': { prefix: 'EA2', tech: 'AEROFLOW™' },
     'Oil':          { prefix: 'EL8', tech: 'SYNTRAX™' },
     'Fuel':         { prefix: 'EF9', tech: 'NANOFORCE™' },
+    'Fuel Sep':     { prefix: 'ES9', tech: 'AQUAGUARD™' },    // ES9: Separadores de Combustible
     'Hydraulic':    { prefix: 'EH6', tech: 'SYNTEPORE™' },
     'Cabin':        { prefix: 'EC1', tech: 'MICROKAPPA™' },
     'Coolant':      { prefix: 'EW7', tech: 'COOLTECH™' },
-    'Fuel Sep':     { prefix: 'ES9', tech: 'AQUAGUARD™' },
     'Kits HD':      { prefix: 'EK5', tech: 'DURATECH™' },
     'Kits LD':      { prefix: 'EK3', tech: 'DURATECH™' },
     'Turbinas':     { prefix: 'ET9', tech: 'TURBINAS SERIES™' },
@@ -69,7 +69,7 @@ app.get('/api/search/:code', async (req, res) => {
             specs: dna.isOem ? { alert: 'OEM ORIGIN: Validar medidas.' } : { status: 'Verified' }
         });
 
-        res.json({ source: 'V5.09_AEROFLOW_ENGINE', data: newEntry });
+        res.json({ source: 'V5.10_TOTAL_UNIVERSE', data: newEntry });
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
