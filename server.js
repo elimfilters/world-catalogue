@@ -6,85 +6,73 @@ dotenv.config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL)
-  .then(() => console.log('✅ MongoDB v5.0 Connected'))
-  .catch(err => console.error('❌ Error:', err));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('✅ v5.01 Intelligence Active'));
 
-// --- MATRIZ DE IDENTIDAD ELIMFILTERS v5.0 ---
-const TECH_MATRIX = {
-    'Oil':       { prefix: 'EL8', tech: 'SYNTRAX™',    color: '#E31E24', media: 'Full Synthetic Micro-Glass' },
-    'Air':       { prefix: 'EA1', tech: 'MACROCORE™',  color: '#0055A4', media: 'Nano-Fiber Advanced Media' },
-    'Fuel':      { prefix: 'EF9', tech: 'NANOFORCE™',  color: '#FFD700', media: 'Multi-layer Nano-Density Media' },
-    'Hydraulic': { prefix: 'EH6', tech: 'SYNTEPORE™',  color: '#4C9141', media: 'High-Pressure Synthetic Mesh' },
-    'Cabin':     { prefix: 'EC1', tech: 'MICROKAPPA™', color: '#A9A9A9', media: 'Activated Carbon / HEPA' },
-    'Coolant':   { prefix: 'EW7', tech: 'COOLTECH™',   color: '#00AEEF', media: 'Corrosion-Resistant Synthetic' },
-    'Fuel Sep':  { prefix: 'ES9', tech: 'AQUAGUARD™',  color: '#003366', media: 'Silicone-Treated Hydrophobic' },
-    'Kits HD':   { prefix: 'EK5', tech: 'DURATECH™',   color: '#000000', media: 'Heavy Duty Master Kit Media' }
+// --- DICCIONARIO DE DUTY (PROTOCOLO ESTRICTO) ---
+const DUTY_MAP = {
+    HD: ['CAT', 'CUMMINS', 'JOHN DEERE', 'KOMATSU', 'MACK', 'FREIGHTLINER', 'BOBCAT', 'DETROIT DIESEL'],
+    LD: ['TOYOTA', 'FORD', 'BMW', 'HONDA', 'KIA', 'HYUNDAI', 'NISSAN', 'MAZDA']
 };
 
-const FilterSchema = new mongoose.Schema({
-    originalCode: { type: String, required: true, index: true },
-    sku: { type: String, required: true, unique: true },
-    technology: String,
-    mediaType: String,
-    duty: String,
-    category: String,
-    hexColor: String,
-    technicalUrl: String,
-    specs: mongoose.Schema.Types.Mixed
-}, { timestamps: true });
+const detectDuty = (brand, input) => {
+    const text = (brand + ' ' + input).toUpperCase();
+    if (DUTY_MAP.HD.some(b => text.includes(b))) return 'HD';
+    if (DUTY_MAP.LD.some(b => text.includes(b))) return 'LD';
+    // Híbridos (Mercedes, Volvo, etc.)
+    if (text.includes('VOLVO') || text.includes('MERCEDES')) return 'HYBRID_CHECK';
+    return 'HD'; // Default por seguridad de ingeniería
+};
 
-const Filter = mongoose.model('FilterCache', FilterSchema);
-
-// --- MOTOR GENERATIVO v5.0 ---
-const generateSKU = (refCode, category) => {
-    const config = TECH_MATRIX[category] || { prefix: 'GEN', tech: 'STANDARD™', color: '#666', media: 'Standard Media' };
-    const numbers = refCode.replace(/[^0-9]/g, '');
-    const suffix = numbers.slice(-4).padStart(4, '0');
-    const sku = ${config.prefix};
-    
+// --- LÓGICA DE SCRAPER (CONSULTA PRIORITARIA) ---
+const fetchExternalSpecs = async (code, duty) => {
+    console.log(🔍 Scraper activado: Buscando  en fuentes ...);
+    // Aquí se integra la URL de ScrapeStack hacia Donaldson o FRAM
+    // Por ahora, el motor genera la estructura base lista para ser poblada
     return {
-        sku,
-        tech: config.tech,
-        media: ELIMFILTERS  ,
-        color: config.color,
-        url: https://techtips.elimfilters.com/spec-sheet/
+        source: duty === 'HD' ? 'Donaldson' : 'FRAM',
+        verified: true
     };
 };
 
-// --- ENDPOINT DE BÚSQUEDA EN CASCADA ---
+const Filter = mongoose.model('FilterCache', new mongoose.Schema({
+    originalCode: String, sku: String, technology: String, duty: String,
+    hexColor: String, specs: mongoose.Schema.Types.Mixed
+}));
+
 app.get('/api/search/:code', async (req, res) => {
     const inputCode = req.params.code.toUpperCase();
-    const category = req.query.cat || 'Oil'; // Por defecto Oil si no se especifica
+    const brand = req.query.brand || '';
     
     try {
-        // 1. Fase de Consulta Primaria (Cache/DB)
+        // 1. Clasificación de DUTY
+        let duty = detectDuty(brand, inputCode);
+        
+        // 2. Búsqueda en Cascada (Cache)
         let filter = await Filter.findOne({ originalCode: inputCode });
         if (filter) return res.json({ source: 'MASTER_CACHE', data: filter });
 
-        // 2. Protocolo Generativo (Regla de los 4 Números)
-        const identity = generateSKU(inputCode, category);
-        
-        // 3. Persistencia (Upsert en MongoDB)
-        const newFilter = await Filter.findOneAndUpdate(
-            { originalCode: inputCode },
-            { 
-                sku: identity.sku,
-                technology: identity.tech,
-                mediaType: identity.media,
-                hexColor: identity.color,
-                technicalUrl: identity.url,
-                category: category,
-                duty: 'HD' // Aquí se activaría el Scraper de Donaldson/FRAM
-            },
-            { upsert: true, new: true }
-        );
+        // 3. Si es HYBRID, decidimos por Scraper
+        if (duty === 'HYBRID_CHECK') {
+            const external = await fetchExternalSpecs(inputCode, 'HD');
+            duty = external.verified ? 'HD' : 'LD';
+        }
 
-        res.json({ source: 'GENERATIVE_PROTOCOL_V5', data: newFilter });
+        // 4. Generación de Identidad ELIMFILTERS (Regla de los 4 números)
+        const numbers = inputCode.replace(/[^0-9]/g, '');
+        const suffix = numbers.slice(-4).padStart(4, '0');
+        const sku = EL8; // Ejemplo para Oil
 
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+        const newFilter = await Filter.create({
+            originalCode: inputCode,
+            sku: sku,
+            duty: duty,
+            technology: 'SYNTRAX™',
+            hexColor: '#E31E24'
+        });
+
+        res.json({ source: 'v5.01_DYNAMIC_ENGINE', data: newFilter });
+
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.listen(process.env.PORT || 8080, () => console.log('🚀 ELIMFILTERS v5.0 Active'));
+app.listen(process.env.PORT || 8080);
