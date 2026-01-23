@@ -8,47 +8,50 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-app.get('/', (req, res) => res.send('<h1>🚀 V21.00 Human Mirror - Online</h1>'));
+app.get('/', (req, res) => res.send('<h1>🚀 V23.00 Bloodhound - Online</h1><p>Donaldson no pudo con el Sniper, ahora va el Rastreador.</p>'));
 
-async function runMirrorProtocol(code) {
-    console.log(`[V21.00] 👤 Imitando navegación humana para: ${code}`);
+async function runBloodhound(code) {
+    console.log(`[V23.00] 🐕 Rastreando producto: ${code}`);
+    
+    // Volvemos al buscador que SÍ funciona
     const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`;
     
     const actions = [
-        { "wait_for": ".listTile" },
-        { "click": ".listTile a.donaldson-part-details" },
-        { "wait": 5000 }, // Espera a que cargue la ficha
-        { "click": "a[data-target='.prodSpecInfoDiv']" },
-        { "wait": 2000 },
-        { "click": "#showMoreProductSpecsButton" },
-        { "wait": 3000 }
+        { "wait_for": "a[href*='/product/']" }, // Espera a CUALQUIER enlace de producto
+        { "click": "a[href*='/product/']:first" }, // Haz clic en el primerito que salga
+        { "wait_for": ".prodSpecInfoDiv" }, 
+        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 2000 },
+        { "click": "#showMoreProductSpecsButton" }, { "wait": 3000 }
     ];
 
-    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&proxy_type=residential&keep_headers=1&wait_until=networkidle0&actions=${encodeURIComponent(JSON.stringify(actions))}`;
+    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&proxy_type=residential&country_code=us&actions=${encodeURIComponent(JSON.stringify(actions))}`;
 
     try {
         const res = await axios.get(target);
         const $ = cheerio.load(res.data);
-        const fullText = $('body').text();
         const html = $('body').html() || "";
 
-        // Extracción agresiva: buscamos en todo el texto, no solo en tablas
+        // Si vemos el 404 de nuevo, lo registramos para insultarlos con pruebas
+        if (html.includes("404") || html.includes("no encontramos la página")) {
+            throw new Error("Donaldson lanzó un 404 en el buscador.");
+        }
+
         const data = {
             mainCode: code,
-            description: $('h1').first().text().trim() || "Filtro Detectado (Sin Título)",
+            description: $('h1').first().text().trim() || "Filtro Encontrado",
             specs: {
-                thread: fullText.match(/Thread Size[:\s]+([^\n\r<]*)/i)?.[1]?.trim(),
-                od: fullText.match(/Outer Diameter[:\s]+([\d.]+)/i)?.[1]?.trim(),
-                height: fullText.match(/Height[:\s]+([\d.]+)/i)?.[1]?.trim()
+                thread: html.match(/Thread Size<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A",
+                od: html.match(/Outer Diameter<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A",
+                height: html.match(/Height<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A"
             }
         };
 
-        console.log(`✅ Captura: ${data.description} | Rosca: ${data.specs.thread}`);
-        await syncToGoogle(data, fullText.includes("Thread") ? "DATA_FOUND" : "TEXT_ONLY");
+        console.log(`✅ ¡Lo tenemos! -> ${data.description} | Rosca: ${data.specs.thread}`);
+        await syncToGoogle(data, "EXITO_V23");
 
     } catch (err) {
-        console.error("❌ Fallo en V21:", err.message);
-        await syncToGoogle({ mainCode: code, description: "ERROR_CARGA" }, "TIMEOUT_OR_BLOCK");
+        console.error("❌ ERROR SUCIO:", err.message);
+        await syncToGoogle({ mainCode: code, description: "DONALDSON_FALLO_WEB" }, `ERROR: ${err.message}`);
     }
 }
 
@@ -62,14 +65,14 @@ async function syncToGoogle(d, status) {
             'Input Code': d.mainCode,
             'Description': d.description,
             'Thread Size': d.specs?.thread || "N/A",
-            'Audit Status': `V21_${status}_${new Date().toLocaleTimeString()}`
+            'Audit Status': status
         });
     } catch (e) { console.error("Error Sheet:", e.message); }
 }
 
 app.get('/api/search/:code', (req, res) => {
-    runMirrorProtocol(req.params.code.toUpperCase());
-    res.json({ status: "MIRROR_ON", message: "V21 en marcha. Emulando red humana." });
+    runBloodhound(req.params.code.toUpperCase());
+    res.json({ status: "HUNTING", message: "V23: Rastreando el filtro. Esquivando sus 404 de porquería." });
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V21.00 MIRROR ACTIVO"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V23.00 BLOODHOUND ACTIVO"));
