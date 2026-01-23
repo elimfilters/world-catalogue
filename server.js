@@ -1,81 +1,93 @@
 ﻿const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 require('dotenv').config();
 
+puppeteer.use(StealthPlugin());
 const app = express();
-app.use(express.json());
 
-app.get('/', (req, res) => res.send('<h1>🚀 V25.00 X-Ray - Online</h1>'));
-
-async function runXRayProtocol(code) {
-    console.log(`[V25.00] ☢️ Escaneando con Rayos X: ${code}`);
-    const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`;
+async function runStealth(code) {
+    console.log(`[V26.00] 👤 Navegador Humano Activo para: ${code}`);
     
-    const actions = [
-        { "wait_for": "a[href*='/product/']" },
-        { "click": "a[href*='/product/']:first" },
-        { "wait": 10000 }, // Espera agresiva de 10 segundos para que el JS cargue sí o sí
-        { "click": "a[data-target='.prodSpecInfoDiv']" },
-        { "click": "#showMoreProductSpecsButton" },
-        { "wait": 2000 }
-    ];
-
-    // USAMOS "ULTRASTEALTH" (keep_headers + residential + desktop)
-    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&proxy_type=residential&keep_headers=1&device=desktop&actions=${encodeURIComponent(JSON.stringify(actions))}`;
+    const browser = await puppeteer.launch({
+        headless: "new",
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    });
 
     try {
-        const res = await axios.get(target);
-        const $ = cheerio.load(res.data);
-        const html = $('body').html() || "";
-        const text = $('body').text();
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 800 });
+        
+        // Simular que somos un usuario de Windows real
+        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        // LOG DE DIAGNÓSTICO: ¿Vemos la palabra Thread en algún lado?
-        console.log(`🔍 ¿Palabra 'Thread' presente?: ${text.includes("Thread")}`);
+        console.log(`🔎 Buscando ${code}...`);
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`, { waitUntil: 'networkidle2' });
+        
+        // Esperar al mosaico y entrar
+        await page.waitForSelector('a.donaldson-part-details', { timeout: 15000 });
+        await page.click('a.donaldson-part-details');
 
-        // EXTRACCIÓN MULTI-ZONA
-        const threadMatch = html.match(/Thread Size<\/td>\s*<td>([^<]*)<\/td>/i) || 
-                            text.match(/Thread Size:\s*([^\n\r]*)/i) ||
-                            text.match(/Tamaño de la rosca:\s*([^\n\r]*)/i);
+        // Pestaña de atributos
+        await page.waitForSelector("a[data-target='.prodSpecInfoDiv']", { timeout: 15000 });
+        await page.click("a[data-target='.prodSpecInfoDiv']");
 
-        const data = {
-            mainCode: code,
-            description: $('h1').first().text().trim() || "BLOQUEO_VISUAL",
-            specs: {
-                thread: threadMatch ? threadMatch[1].trim() : "N/A",
-                od: html.match(/Outer Diameter<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A"
-            }
-        };
+        // Botón Mostrar Más
+        try {
+            await page.waitForSelector("#showMoreProductSpecsButton", { timeout: 5000 });
+            await page.click("#showMoreProductSpecsButton");
+        } catch (e) { console.log("Botón mostrar más no necesario o no hallado."); }
 
-        console.log(`✅ Resultado: ${data.description} | Rosca: ${data.specs.thread}`);
-        await syncToGoogle(data, text.includes("Thread") ? "XRAY_SUCCESS" : "XRAY_BLOCKED");
+        // Esperar 2 segundos para que el JS termine de pintar la tabla
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Extraer datos directamente del DOM de Donaldson
+        const specs = await page.evaluate(() => {
+            const getVal = (text) => {
+                const td = Array.from(document.querySelectorAll('td')).find(el => el.innerText.includes(text));
+                return td ? td.nextElementSibling.innerText.trim() : "N/A";
+            };
+            return {
+                title: document.querySelector('h1')?.innerText.trim() || "Filtro Detectado",
+                thread: getVal("Thread Size"),
+                od: getVal("Outer Diameter")
+            };
+        });
+
+        console.log(`✅ EXTRACCIÓN EXITOSA: ${specs.thread}`);
+        await syncToGoogle({ ...specs, mainCode: code });
 
     } catch (err) {
-        console.error("❌ FALLO X-RAY:", err.message);
-        await syncToGoogle({ mainCode: code, description: "ERROR_V25" }, err.message);
+        console.error("❌ ERROR EN NAVEGACIÓN:", err.message);
+    } finally {
+        await browser.close();
     }
 }
 
-async function syncToGoogle(d, status) {
+async function syncToGoogle(d) {
     try {
-        const auth = new JWT({ email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL, key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+        const auth = new JWT({
+            email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+            scopes: ['https://www.googleapis.com/auth/spreadsheets']
+        });
         const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         await sheet.addRow({
             'Input Code': d.mainCode,
-            'Description': d.description,
-            'Thread Size': d.specs.thread || "N/A",
-            'Audit Status': `V25_${status}_${new Date().toLocaleTimeString()}`
+            'Description': d.title,
+            'Thread Size': d.thread,
+            'Audit Status': `V26_STEALTH_${new Date().toLocaleTimeString()}`
         });
-    } catch (e) { console.error("Error Sheet:", e.message); }
+    } catch (e) { console.error("Error Google:", e.message); }
 }
 
 app.get('/api/search/:code', (req, res) => {
-    runXRayProtocol(req.params.code.toUpperCase());
-    res.json({ status: "XRAY_STARTED", message: "Víctor, lanzando Rayos X con 10s de espera. No toques nada." });
+    runStealth(req.params.code.toUpperCase());
+    res.json({ status: "STEALTH_ON", message: "Procesando con Navegador Indetectable. Revisa Railway Logs." });
 });
 
-app.listen(process.env.PORT || 8080);
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V26.00 STEALTH ONLINE"));
