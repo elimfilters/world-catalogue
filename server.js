@@ -9,71 +9,69 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.90: Full Intelligence Matrix (Alternatives/Cross/Equip) Active'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.95: Smart Sequence Intelligence Active'));
 
-const SCRAPE = async (url) => {
-    // SECUENCIA MAESTRA DE CLICS (Según tu análisis)
+const SCRAPE_SIMPLE = async (url) => {
+    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1`;
+    const res = await axios.get(target);
+    return cheerio.load(res.data);
+};
+
+const SCRAPE_WITH_ACTIONS = async (url) => {
     const actions = encodeURIComponent(JSON.stringify([
-        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 500 },
+        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 1000 },
         { "click": "#showMoreProductSpecsButton" }, { "wait": 500 },
-        { "click": "a[data-target='.comapreProdListSection']" }, { "wait": 800 }, // Alternativos
+        { "click": "a[data-target='.comapreProdListSection']" }, { "wait": 1000 },
         { "click": "a[data-target='.ListCrossReferenceDetailPageComp']" }, { "wait": 500 },
-        { "click": "#showMorePdpListButton" }, { "wait": 800 }, // Referencia Cruzada
+        { "click": "#showMorePdpListButton" }, { "wait": 1000 },
         { "click": "a[data-target='.ListPartDetailPageComp']" }, { "wait": 500 },
-        { "click": "#showMorePdpListButton" }, { "wait": 800 }  // Equipos
+        { "click": "#showMorePdpListButton" }, { "wait": 1000 }
     ]));
-
     const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1&premium_proxy=1&actions=${actions}`;
     const res = await axios.get(target);
     return cheerio.load(res.data);
 };
 
-async function getFullIntelligence(query) {
-    const d = { specs: {}, alts: [], crossRefs: [], oemCodes: [], equipment: [], validated: false };
+async function getFullData(query) {
+    const d = { specs: {}, alts: [], crossRefs: [], equipment: [], validated: false };
     try {
-        const $search = await SCRAPE(`https://shop.donaldson.com/store/search?q=${query}`);
-        const link = $search('a[href*="/product/"]').first().attr('href');
+        // FASE 1: Buscar el link (Sin clics)
+        const $search = await SCRAPE_SIMPLE(`https://shop.donaldson.com/store/search?q=${query}`);
+        const link = $search('.product-name a').first().attr('href') || $search('a[href*="/product/"]').first().attr('href');
         
         if (link) {
-            const $d = await SCRAPE(link.startsWith('http') ? link : `https://shop.donaldson.com${link}`);
+            const detailUrl = link.startsWith('http') ? link : `https://shop.donaldson.com${link}`;
+            console.log(`🔗 Entrando a ficha técnica: ${detailUrl}`);
+
+            // FASE 2: Entrar y ejecutar clics
+            const $d = await SCRAPE_WITH_ACTIONS(detailUrl);
             d.validated = true;
+            const text = $d('body').text();
 
-            // 1. PRODUCTOS ALTERNATIVOS (Creación de variantes)
-            $d('.comapreProdListSection .product-card').each((i, el) => {
-                const altCode = $d(el).find('.product-name').text().trim();
-                if (altCode) d.alts.push(altCode);
-            });
+            // Extracción de Atributos
+            const getVal = (regex) => (text.match(regex) ? text.match(regex)[1].trim() : null);
+            d.specs.thread = getVal(/Thread Size:\s*([^\n\r]*)/i);
+            d.specs.od = getVal(/Outer Diameter:\s*([\d.]+)/i);
+            d.specs.height = getVal(/Height:\s*([\d.]+)/i);
+            d.specs.micron = getVal(/Efficiency[^:]*:\s*([^\n\r]*)/i);
 
-            // 2. REFERENCIAS CRUZADAS (Limpieza de Fabricantes)
+            // Alternativos y Cruces (Limpios)
+            $d('.comapreProdListSection .product-name').each((i, el) => d.alts.push($d(el).text().trim()));
             $d('.ListCrossReferenceDetailPageComp tr').each((i, el) => {
-                const rawText = $d(el).find('td').first().text().trim();
-                const codeOnly = rawText.split(/\s+/)[0]; // Toma solo el primer bloque (el código)
-                if (codeOnly) {
-                    if (i < 3) d.oemCodes.push(codeOnly); // Los primeros suelen ser OEM
-                    else d.crossRefs.push(codeOnly);
-                }
+                const code = $d(el).find('td').first().text().trim().split(/\s+/)[0];
+                if (code) d.crossRefs.push(code);
             });
-
-            // 3. PRODUCTOS DEL EQUIPO (Aplicaciones)
-            $d('.ListPartDetailPageComp .equipment-name').each((i, el) => {
-                d.equipment.push($d(el).text().trim());
-            });
-
-            // 4. ATRIBUTOS TÉCNICOS
-            const bodyText = $d('body').text();
-            d.specs.thread = bodyText.match(/Thread Size:\s*([^\n\r]*)/i)?.[1]?.trim();
-            d.specs.od = bodyText.match(/Outer Diameter:\s*([\d.]+)/i)?.[1]?.trim();
-            d.specs.height = bodyText.match(/Height:\s*([\d.]+)/i)?.[1]?.trim();
+            $d('.ListPartDetailPageComp .equipment-name').each((i, el) => d.equipment.push($d(el).text().trim()));
         }
-    } catch (e) { console.error("Error Matrix:", e.message); }
+    } catch (e) { console.error("Error en Smart Sequence:", e.message); }
     return d;
 }
 
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
     try {
-        const data = await getFullIntelligence(code);
-        if (!data.validated) return res.status(404).send("NOT_FOUND_IN_MATRIX");
+        const data = await getFullData(code);
+        if (!data.validated) return res.status(404).json({ error: "Product Not Found", step: "Search phase" });
 
         await syncToSheet(data, code);
         res.json({ status: "SUCCESS", data });
@@ -85,16 +83,17 @@ async function syncToSheet(d, code) {
     const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
     await doc.loadInfo();
     const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-
+    
     await sheet.addRow({
-        'Input Code': code,
-        'ELIMFILTERS SKU': `EF-${code.slice(-4)}`,
+        'Input Code': code, 'ELIMFILTERS SKU': `EF-${code.slice(-4)}`,
         'Thread Size': d.specs.thread || 'N/A',
-        'OEM Codes': d.oemCodes.join(', '),
+        'Height (mm)': d.specs.height || 'N/A',
+        'Outer Diameter (mm)': d.specs.od || 'N/A',
+        'Micron Rating': d.specs.micron || 'N/A',
         'Cross Reference Codes': d.crossRefs.join(', '),
-        'Alternative Products': d.alts.join(', '), // Columna para crear los otros 3 SKU
-        'Equipment Applications': d.equipment.slice(0, 15).join('; '),
-        'Audit Status': 'V6.90_FULL_INTELLIGENCE'
+        'Alternative Products': d.alts.join(', '),
+        'Equipment Applications': d.equipment.slice(0, 10).join('; '),
+        'Audit Status': 'V6.95_SMART_SEQUENCE'
     });
 }
 
