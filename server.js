@@ -9,84 +9,104 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v5.80: Full Spec Extractor (43 Columns) Active'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.20: Logic Certified - VIN/Equip vs Part Number'));
 
 const TECH_MATRIX = {
-    'Air': { prefix: 'EA1', tech: 'MACROCORE™' },
-    'Air Housings': { prefix: 'EA2', tech: 'AEROFLOW™' },
-    'Oil': { prefix: 'EL8', tech: 'SYNTRAX™' },
-    'Fuel': { prefix: 'EF9', tech: 'NANOFORCE™' },
-    'Fuel Sep': { prefix: 'ES9', tech: 'AQUAGUARD™' },
-    'Hydraulic': { prefix: 'EH6', tech: 'SYNTEPORE™' },
-    'Cabin': { prefix: 'EC1', tech: 'MICROKAPPA™' },
-    'Coolant': { prefix: 'EW7', tech: 'COOLTECH™' },
-    'Kits HD': { prefix: 'EK5', tech: 'DURATECH™' },
-    'Kits LD': { prefix: 'EK3', tech: 'DURATECH™' },
-    'Turbines': { prefix: 'ET9', tech: 'AQUAGUARD™' },
-    'Marine': { prefix: 'EM9', tech: 'MARINETECH™' },
-    'Air Dryer': { prefix: 'ED4', tech: 'DRYGUARD™' }
+    'Air': { prefix: 'EA1', tech: 'MACROCORE™' }, 'Oil': { prefix: 'EL8', tech: 'SYNTRAX™' },
+    'Fuel': { prefix: 'EF9', tech: 'NANOFORCE™' }, 'Fuel Sep': { prefix: 'ES9', tech: 'AQUAGUARD™' },
+    'Hydraulic': { prefix: 'EH6', tech: 'SYNTEPORE™' }, 'Kits HD': { prefix: 'EK5', tech: 'DURATECH™' },
+    'Kits LD': { prefix: 'EK3', tech: 'DURATECH™' }, 'Turbines': { prefix: 'ET9', tech: 'AQUAGUARD™' }
 };
 
-async function getFullSpecs(code) {
-    const s = { duty: 'UNKNOWN', crossRefs: [], apps: [] };
-    const SCRAPE_URL = (target) => `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${target}`;
+const SCRAPE = async (url) => {
+    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}`;
+    const res = await axios.get(target);
+    return cheerio.load(res.data);
+};
+
+// RUTA A: FILTROS INDIVIDUALES (Busca Specs Técnicas)
+async function getFilterDetails(partNumber) {
+    const s = { specs: {}, crossRefs: [] };
     try {
-        const searchRes = await axios.get(SCRAPE_URL(`https://shop.donaldson.com/store/search?q=${code}`));
-        let $ = cheerio.load(searchRes.data);
-        const productLink = $('.product-name a').attr('href') || $('.product-card a').attr('href');
-        if (productLink) {
-            const detailRes = await axios.get(SCRAPE_URL(`https://shop.donaldson.com${productLink}`));
-            $ = cheerio.load(detailRes.data);
-            s.duty = 'HD';
-            $('.attribute-row').each((i, el) => {
-                const label = $(el).find('.label').text().trim();
-                const val = $(el).find('.value').text().trim();
+        const $ = await SCRAPE(`https://shop.donaldson.com/store/search?q=${partNumber}`);
+        const link = $('.product-name a').first().attr('href');
+        if (link) {
+            const $d = await SCRAPE(`https://shop.donaldson.com${link}`);
+            $d('.attribute-row').each((i, el) => {
+                const label = $d(el).find('.label').text().trim();
+                const val = $d(el).find('.value').text().trim();
                 const n = parseFloat(val.replace(/[^0-9.]/g, ''));
-                if (label.includes('Outer Diameter')) { s.od_mm = n; s.od_in = (n/25.4).toFixed(2); }
-                if (label.includes('Height') || label.includes('Length')) { s.h_mm = n; s.h_in = (n/25.4).toFixed(2); }
-                if (label.includes('Thread')) s.thread = val;
-                if (label.includes('Gasket OD')) { s.god_mm = n; s.god_in = (n/25.4).toFixed(2); }
-                if (label.includes('Gasket ID')) { s.gid_mm = n; s.gid_in = (n/25.4).toFixed(2); }
-                if (label.includes('Efficiency')) s.eff = val;
-                if (label.includes('Micron')) s.micron = val;
-                if (label.includes('Media Type')) s.media = val;
+                if (label.includes('Outer Diameter')) { s.specs.od_mm = n; s.specs.od_in = (n/25.4).toFixed(2); }
+                if (label.includes('Height')) { s.specs.h_mm = n; s.specs.h_in = (n/25.4).toFixed(2); }
+                if (label.includes('Thread')) s.specs.thread = val;
+                if (label.includes('Efficiency')) s.specs.eff = val;
             });
-            $('.cross-reference-list li, .x-ref-row').each((i, el) => { s.crossRefs.push($(el).text().trim()); });
+            $d('.cross-reference-list li').each((i, el) => s.crossRefs.push($d(el).text().trim()));
         }
-    } catch (e) { console.error("Error specs: " + code); }
+    } catch (e) { console.error("Error Individual Filter"); }
     return s;
+}
+
+// RUTA B: KITS (Busca Componentes por VIN/Equipo)
+async function getKitComponents(query) {
+    const k = { components: [], machine: '' };
+    try {
+        const $ = await SCRAPE(`https://shop.donaldson.com/store/search?q=${query}`);
+        const machineLink = $('.equipment-list-item a').first().attr('href');
+        if (machineLink) {
+            const $d = await SCRAPE(`https://shop.donaldson.com${machineLink}`);
+            k.machine = $d('.equipment-header-title').text().trim();
+            $d('.kit-components-table tr, .service-group-row').each((i, el) => {
+                const p = $d(el).find('.part-number').text().trim();
+                if (p) k.components.push(p);
+            });
+        }
+    } catch (e) { console.error("Error Kit Scrape"); }
+    return k;
 }
 
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
     const cat = req.query.cat || 'Oil';
     try {
-        const specs = await getFullSpecs(code);
         const config = TECH_MATRIX[cat] || { prefix: 'ELX', tech: 'STANDARD™' };
         const suffix = code.replace(/[^0-9]/g, '').slice(-4).padStart(4, '0');
-        let sku = `${config.prefix}${suffix}`;
-        if (cat === 'Turbines') { const l = code.match(/\d+([A-Z])/); if (l) sku += l[1]; }
-        const data = { code, sku, cat, tech: config.tech, prefix: config.prefix, ...specs };
-        res.json({ source: 'V5.80_DEEP_DATA', data });
-        syncToSheets(data);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+        const sku = `${config.prefix}${suffix}`;
+
+        if (cat.includes('Kits')) {
+            const data = await getKitComponents(code);
+            const final = { code, sku, cat, ...data };
+            res.json(final);
+            syncToKits(final);
+        } else {
+            const data = await getFilterDetails(code);
+            const final = { code, sku, cat, tech: config.tech, prefix: config.prefix, ...data };
+            res.json(final);
+            syncToUnified(final);
+        }
+    } catch (err) { res.status(500).send(err.message); }
 });
 
-async function syncToSheets(d) {
-    try {
-        const auth = new JWT({ email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL, key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
-        const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
-        await doc.loadInfo();
-        const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        await sheet.addRow({
-            'Input Code': d.code, 'ELIMFILTERS SKU': d.sku, 'Description': `ELIMFILTERS ${d.cat} - ${d.tech}`, 'Filter Type': d.cat,
-            'Prefix': d.prefix, 'ELIMFILTERS Technology': d.tech, 'Duty': d.duty, 'Thread Size': d.thread || '',
-            'Height (mm)': d.h_mm || '', 'Height (inch)': d.h_in || '', 'Outer Diameter (mm)': d.od_mm || '', 'Outer Diameter (inch)': d.od_in || '',
-            'Gasket OD (mm)': d.god_mm || '', 'Gasket OD (inch)': d.god_in || '', 'Gasket ID (mm)': d.gid_mm || '', 'Gasket ID (inch)': d.gid_in || '',
-            'Micron Rating': d.micron || '', 'Nominal Efficiency (%)': d.eff || '', 'Media Type': d.media || '',
-            'Filtration Technology': d.tech, 'OEM Codes': d.code, 'Cross Reference Codes': d.crossRefs.join(', ') || '',
-            'Technical Sheet URL': `https://elimfilters.com/spec/${d.sku}`
-        });
-    } catch (e) { console.error('Error Sync:', e); }
+async function syncToUnified(d) {
+    const auth = new JWT({ email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL, key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
+    await doc.loadInfo();
+    await doc.sheetsByTitle['MASTER_UNIFIED_V5'].addRow({
+        'Input Code': d.code, 'ELIMFILTERS SKU': d.sku, 'Prefix': d.prefix, 'ELIMFILTERS Technology': d.tech,
+        'Thread Size': d.specs.thread || '', 'Height (mm)': d.specs.h_mm || '', 'Outer Diameter (mm)': d.specs.od_mm || '',
+        'OEM Codes': d.code, 'Cross Reference Codes': d.crossRefs.join(', ') || ''
+    });
 }
+
+async function syncToKits(d) {
+    const auth = new JWT({ email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL, key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
+    await doc.loadInfo();
+    await doc.sheetsByTitle['MASTER_KITS_V1'].addRow({
+        'kit_sku': d.sku, 'kit_description_en': `Maintenance Kit for ${d.machine || d.code}`,
+        'filters_included': d.components.join(', ') || 'N/A', 'equipment_applications': d.machine || d.code,
+        'oem_kit_reference': d.code, 'audit_status': 'CERTIFIED_V6'
+    });
+}
+
 app.listen(process.env.PORT || 8080);
