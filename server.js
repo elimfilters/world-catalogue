@@ -18,8 +18,8 @@ const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
 const flatten = (val) => Array.isArray(val) ? val.join(', ') : (val || "N/A");
 
-async function runV45(sku) {
-    console.log(`[V45] 🎯 Extracción Quirúrgica para: ${sku}`);
+async function runV46(sku) {
+    console.log(`[V46] 🦾 Extracción de Fuerza Bruta para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -33,31 +33,37 @@ async function runV45(sku) {
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
 
-        // RUTINA DE EXPANSIÓN (Igual que V44 pero con limpieza posterior)
+        // --- RUTINA DE EXPANSIÓN REFORZADA ---
         await page.evaluate(async () => {
             const clickAll = async (txt) => {
-                const btns = Array.from(document.querySelectorAll('a, button')).filter(el => el.innerText.toUpperCase().includes(txt));
-                for (let b of btns) { b.click(); await new Promise(r => setTimeout(r, 1000)); }
+                let btns = Array.from(document.querySelectorAll('a, button')).filter(el => el.innerText.toUpperCase().includes(txt));
+                for (let b of btns) { 
+                    b.click(); 
+                    await new Promise(r => setTimeout(r, 2000)); // Espera a que el DOM se actualice
+                }
             };
+            
             await clickAll('MOSTRAR MÁS');
             const tab = Array.from(document.querySelectorAll('.nav-tabs a')).find(el => el.innerText.toUpperCase().includes('EQUIPO'));
-            if (tab) { tab.click(); await new Promise(r => setTimeout(r, 2000)); await clickAll('MOSTRAR MÁS'); }
+            if (tab) { 
+                tab.click(); 
+                await new Promise(r => setTimeout(r, 3000)); 
+                await clickAll('MOSTRAR MÁS');
+            }
         });
 
-        // LIMPIEZA QUIRÚRGICA: Solo agarramos las áreas de datos
-        const cleanData = await page.evaluate(() => {
-            const specs = document.querySelector('.product-specifications')?.innerText || "";
-            const crosses = document.querySelector('.ListCrossReferenceDetailPageComp')?.innerText || "";
-            const equip = document.querySelector('.tab-content')?.innerText || "";
-            return (specs + " " + crosses + " " + equip).replace(/\s\s+/g, ' ').substring(0, 12000);
+        // Captura más amplia pero limpia
+        const fullContent = await page.evaluate(() => {
+            const main = document.querySelector('.product-detail-page') || document.body;
+            return main.innerText.replace(/\s\s+/g, ' ').substring(0, 18000);
         });
         
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
             messages: [
-                { role: "system", content: "Extrae JSON: oem_codes, cross_ref_codes, equipment_apps, desc, thread, h_mm, od_mm. Sé exhaustivo con los códigos." },
-                { role: "user", content: `Datos del filtro ${sku}: ${cleanData}` }
+                { role: "system", content: "Eres un extractor de datos técnicos. Tu objetivo es NO omitir ningún código. Si hay 50 códigos de cruce, escribe los 50 separados por comas. JSON keys: oem_codes, cross_ref_codes, equipment_apps, desc, thread, h_mm, od_mm, micron, efficiency." },
+                { role: "user", content: `Filtro ${sku}: ${fullContent}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
@@ -74,8 +80,10 @@ async function runV45(sku) {
             'Thread Size': flatten(d.thread),
             'Height (mm)': flatten(d.h_mm),
             'Outer Diameter (mm)': flatten(d.od_mm),
+            'Micron Rating': flatten(d.micron),
+            'Nominal Efficiency (%)': flatten(d.efficiency),
             'Technical Sheet URL': productUrl,
-            'Audit Status': `V45_CLEAN_SUCCESS_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V46_FULL_FORCE_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -88,8 +96,8 @@ async function runV45(sku) {
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV45(req.params.code.toUpperCase());
+    const result = await runV46(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V45.00 SURGEON ONLINE"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V46.00 FULL FORCE ONLINE"));
