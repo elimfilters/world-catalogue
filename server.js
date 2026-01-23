@@ -16,53 +16,57 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-const clean = (v) => (v === null || v === undefined) ? "N/A" : String(v).trim();
-
-async function runV49(sku) {
-    console.log(`[V49.01] 📡 Rastreo de Conexión para: ${sku}`);
+async function runV50(sku) {
+    console.log(`[V50] 🔍 Usando librería de Jules para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
+    
     try {
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
         const productUrl = await page.evaluate(() => document.querySelector('a.donaldson-part-details')?.href);
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
+        
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        await new Promise(r => setTimeout(r, 3000));
-        const txt = await page.evaluate(() => document.body.innerText.substring(0, 10000));
+        const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 10000));
         
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
-            messages: [{ role: "system", content: "Extrae JSON: desc, oem_codes, cross_ref, equipment." }, { role: "user", content: txt }]
+            messages: [{ role: "system", content: "Extrae JSON: desc, oem, cross, equip" }, { role: "user", content: bodyText }]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
         const d = JSON.parse(response.data.choices[0].message.content);
-        console.log(`[V49.01] 📝 Datos listos: ${d.desc ? d.desc.substring(0, 20) : 'Sin desc'}`);
 
+        // --- CONEXIÓN PURA CON JULES ---
         await doc.loadInfo();
-        // --- ATENCIÓN AQUÍ ---
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        if (!sheet) {
-            console.error("❌ ERROR: La pestaña 'MASTER_UNIFIED_V5' NO EXISTE");
-            return { sku, status: "ERROR_PESTANA_NO_EXISTE" };
-        }
+        
+        // Verificamos qué columnas ve Jules en tu Sheet
+        await sheet.loadHeaderRow();
+        console.log("[V50] 📋 Columnas detectadas en tu Sheet:", sheet.headerValues);
 
-        await sheet.addRow({
+        const rowData = {
             'Input Code': sku,
-            'Description': clean(d.desc),
-            'OEM Codes': clean(d.oem_codes),
-            'Cross Reference Codes': clean(d.cross_ref),
-            'Equipment Applications': clean(d.equipment),
+            'Description': d.desc || "N/A",
+            'OEM Codes': d.oem || "N/A",
+            'Cross Reference Codes': d.cross || "N/A",
+            'Equipment Applications': d.equip || "N/A",
             'Technical Sheet URL': productUrl
-        });
-        console.log(`[V49.01] ✅ ESCRITURA CONFIRMADA EN GOOGLE`);
+        };
+
+        console.log("[V50] 📤 Intentando escribir fila...");
+        await sheet.addRow(rowData);
+        
         await browser.close();
-        return { sku, status: "EXITO" };
+        console.log("✅ ¡ESCRITO!");
+        return { sku, status: "EXITO_REAL" };
+
     } catch (err) {
         if (browser) await browser.close();
-        console.error(`[V49.01] ❌ FALLO: ${err.message}`);
+        console.error(`[V50] ❌ ERROR: ${err.message}`);
         return { sku, status: "ERROR", msg: err.message };
     }
 }
-app.get('/api/search/:code', async (req, res) => { res.json(await runV49(req.params.code.toUpperCase())); });
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V49.01 TRACKER ONLINE - ID:FORCE_UPDATE_99"));
+
+app.get('/api/search/:code', async (req, res) => res.json(await runV50(req.params.code.toUpperCase())));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V50.00 JULES EDITION ONLINE"));
