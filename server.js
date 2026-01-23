@@ -9,82 +9,75 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v7.10: Auto-Redirect & Tile Detection Active'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v8.00: Victor Protocol Active (Manual Path)'));
 
-const SCRAPE = async (url, actions = null) => {
-    let target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1&premium_proxy=1`;
-    if (actions) target += `&actions=${encodeURIComponent(JSON.stringify(actions))}`;
-    
+const SCRAPE = async (url, actions) => {
+    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1&premium_proxy=1&actions=${encodeURIComponent(JSON.stringify(actions))}`;
+    console.log(`📡 Ejecutando Protocolo en: ${url}`);
     const res = await axios.get(target);
-    return { $: cheerio.load(res.data), finalUrl: res.headers['x-final-url'] || url };
+    return cheerio.load(res.data);
 };
 
 app.get('/api/search/:code', async (req, res) => {
-    const code = req.params.code.toUpperCase().replace(/-/g, ''); // Quitamos guiones por si Jules los pone
+    const code = req.params.code.toUpperCase();
+    const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`;
+
+    // LA RUTA QUE TÚ INDICASTE:
+    const sequence = [
+        // 1. En la lista de búsqueda, pulsar sobre el mosaico del producto (listTile)
+        { "click": ".listTile a.donaldson-part-details" },
+        { "wait": 2000 },
+        // 2. Ya en la ficha, pulsar pestaña Atributos y Mostrar Más
+        { "click": "a[data-target='.prodSpecInfoDiv']" },
+        { "click": "#showMoreProductSpecsButton" },
+        { "wait": 500 },
+        // 3. Pulsar pestaña Productos Alternativos
+        { "click": "a[data-target='.comapreProdListSection']" },
+        { "wait": 500 },
+        // 4. Pulsar pestaña Referencia Cruzada y Mostrar Más
+        { "click": "a[data-target='.ListCrossReferenceDetailPageComp']" },
+        { "click": "#showMorePdpListButton" },
+        { "wait": 500 },
+        // 5. Pulsar pestaña Productos del Equipo y Mostrar Más
+        { "click": "a[data-target='.ListPartDetailPageComp']" },
+        { "click": "#showMorePdpListButton" },
+        { "wait": 1000 }
+    ];
+
     try {
-        console.log(`🔎 Buscando: ${code}`);
-        // FASE 1: Intento de búsqueda inicial
-        const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${code}`;
-        const { $, finalUrl } = await SCRAPE(searchUrl);
-
-        let productLink = null;
-
-        // ¿Ya estamos en la página del producto? (Redirect exitoso)
-        if (finalUrl.includes('/product/')) {
-            console.log("⚡ Redirección directa detectada.");
-            productLink = finalUrl;
-        } else {
-            // No hubo redirect, buscamos el Tile que Víctor identificó
-            console.log("📋 Lista de resultados detectada. Buscando Tile...");
-            const tileLink = $('a.donaldson-part-details').first().attr('href') || 
-                             $('input#product_url').first().val();
-            if (tileLink) productLink = `https://shop.donaldson.com${tileLink}`;
-        }
-
-        if (!productLink) {
-            return res.status(404).json({ error: "Product Not Found", step: "Search/Redirect phase" });
-        }
-
-        // FASE 2: Expansión y Extracción (Tus 4 pestañas)
-        console.log(`🛰️ Extrayendo matriz completa de: ${productLink}`);
-        const actions = [
-            { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 1000 },
-            { "click": "#showMoreProductSpecsButton" }, { "wait": 500 },
-            { "click": "a[data-target='.comapreProdListSection']" }, { "wait": 1000 },
-            { "click": "a[data-target='.ListCrossReferenceDetailPageComp']" }, { "wait": 500 },
-            { "click": "#showMorePdpListButton" }, { "wait": 1000 },
-            { "click": "a[data-target='.ListPartDetailPageComp']" }, { "wait": 500 },
-            { "click": "#showMorePdpListButton" }, { "wait": 1000 }
-        ];
-
-        const { $: $d } = await SCRAPE(productLink, actions);
-        const text = $d('body').text();
-
+        const $ = await SCRAPE(searchUrl, sequence);
+        
         const data = {
             code,
-            description: $d('.donaldson-product-details').first().text().trim(),
+            description: $('.donaldson-product-details').first().text().trim(),
             specs: {
-                thread: text.match(/Thread Size:\s*([^\n\r]*)/i)?.[1]?.trim(),
-                od: text.match(/Outer Diameter:\s*([\d.]+)/i)?.[1]?.trim(),
-                height: text.match(/Height:\s*([\d.]+)/i)?.[1]?.trim()
+                thread: $('body').text().match(/Thread Size:\s*([^\n\r]*)/i)?.[1]?.trim(),
+                od: $('body').text().match(/Outer Diameter:\s*([\d.]+)/i)?.[1]?.trim(),
+                height: $('body').text().match(/Height:\s*([\d.]+)/i)?.[1]?.trim()
             },
             alternatives: [],
             crossRefs: [],
             equipment: []
         };
 
-        $d('.comapreProdListSection .product-name').each((i, el) => data.alternatives.push($d(el).text().trim()));
-        $d('.ListCrossReferenceDetailPageComp tr').each((i, el) => {
-            const c = $d(el).find('td').first().text().trim().split(/\s+/)[0];
-            if (c && c !== "Fabricante") data.crossRefs.push(c);
+        // Extraer Alternativos (Sku diferentes)
+        $('.comapreProdListSection .product-name').each((i, el) => data.alternatives.push($(el).text().trim()));
+
+        // Extraer Referencias (Solo código, sin fabricante)
+        $('.ListCrossReferenceDetailPageComp tr').each((i, el) => {
+            const raw = $(el).find('td').first().text().trim();
+            const cleanCode = raw.split(/\s+/)[0]; 
+            if (cleanCode && cleanCode !== "Fabricante") data.crossRefs.push(cleanCode);
         });
-        $d('.ListPartDetailPageComp .equipment-name').each((i, el) => data.equipment.push($d(el).text().trim()));
+
+        // Extraer Equipos
+        $('.ListPartDetailPageComp .equipment-name').each((i, el) => data.equipment.push($(el).text().trim()));
 
         await syncToSheet(data);
         res.json({ status: "SUCCESS", data });
 
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: "Falla en Protocolo Victor", detail: err.message });
     }
 });
 
@@ -93,15 +86,17 @@ async function syncToSheet(d) {
     const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
     await doc.loadInfo();
     const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
+    
     await sheet.addRow({
         'Input Code': d.code,
         'Description': d.description,
         'Thread Size': d.specs.thread || 'N/A',
         'Height (mm)': d.specs.height || 'N/A',
         'Outer Diameter (mm)': d.specs.od || 'N/A',
+        'Alternative Products': d.alternatives.join(', '),
         'Cross Reference Codes': d.crossRefs.join(', '),
-        'Equipment Applications': d.equipment.slice(0, 10).join('; '),
-        'Audit Status': 'V7.10_AUTO_REDIRECT'
+        'Equipment Applications': d.equipment.slice(0, 15).join('; '),
+        'Audit Status': 'V8.00_VICTOR_PROTOCOL'
     });
 }
 
