@@ -3,11 +3,11 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
+const axios = require('axios');
 require('dotenv').config();
 
 puppeteer.use(StealthPlugin());
 const app = express();
-app.use(express.json());
 
 const auth = new JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -16,88 +16,76 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-async function processSku(sku) {
+// FUNCIÓN PARA CONSULTAR A GROQ (EL CEREBRO)
+async function askGroq(pageContent) {
     try {
-        await doc.loadInfo();
-        const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        const rows = await sheet.getRows();
-        const existingRow = rows.find(r => r.get('Input Code') === sku);
-
-        // 1. AHORRO: Si ya tiene rosca, no gastamos recursos
-        if (existingRow && existingRow.get('Thread Size') && existingRow.get('Thread Size') !== 'N/A') {
-            console.log(`[V29] ✅ ${sku} ya existe. Saltando...`);
-            return { sku, status: "EXISTENTE", thread: existingRow.get('Thread Size') };
-        }
-
-        console.log(`[V29] 👤 Buscando ${sku} en modo humano...`);
-        const browser = await puppeteer.launch({
-            headless: "new",
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+            model: "llama3-8b-8192",
+            messages: [
+                { role: "system", content: "Eres un experto en filtros industriales. Extrae solo el 'Thread Size' del texto. Si no lo ves, responde 'N/A'. Solo responde el valor, nada de explicaciones." },
+                { role: "user", content: `Del siguiente texto de una web de Donaldson, dime la rosca (Thread Size): ${pageContent.substring(0, 5000)}` }
+            ]
+        }, {
+            headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' }
         });
-        
-        const page = await browser.newPage();
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        return response.data.choices[0].message.content.trim();
+    } catch (e) { return "ERROR_AI"; }
+}
 
+async function processSkuV30(sku) {
+    console.log(`[V30] 🧠 Iniciando IA + Stealth para: ${sku}`);
+    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    
+    try {
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
         
-        try {
-            await page.waitForSelector('a.donaldson-part-details', { timeout: 10000 });
-            await page.click('a.donaldson-part-details');
-            await page.waitForSelector("a[data-target='.prodSpecInfoDiv']", { timeout: 10000 });
-            await page.click("a[data-target='.prodSpecInfoDiv']");
+        // Intentamos encontrar el producto
+        const productLink = await page.$('a[href*="/product/"]');
+        if (productLink) {
+            await productLink.click();
+            await page.waitForTimeout(5000); // Esperamos que cargue la ficha
             
-            try {
-                await page.waitForSelector("#showMoreProductSpecsButton", { timeout: 4000 });
-                await page.click("#showMoreProductSpecsButton");
-            } catch (e) {}
-
-            await new Promise(r => setTimeout(r, 2000));
-
-            const data = await page.evaluate(() => {
-                const getVal = (text) => {
-                    const td = Array.from(document.querySelectorAll('td')).find(el => el.innerText.includes(text));
-                    return td ? td.nextElementSibling.innerText.trim() : "N/A";
-                };
-                return {
-                    title: document.querySelector('h1')?.innerText.trim() || "Filtro Detectado",
-                    thread: getVal("Thread Size"),
-                    od: getVal("Outer Diameter")
-                };
+            // CAPTURA DE TEXTO CRUDA (Para Groq)
+            const bodyText = await page.evaluate(() => document.body.innerText);
+            
+            // PLAN A: Extracción por Código
+            let thread = await page.evaluate(() => {
+                const td = Array.from(document.querySelectorAll('td')).find(el => el.innerText.includes('Thread Size'));
+                return td ? td.nextElementSibling.innerText.trim() : null;
             });
 
-            // 2. GUARDAR/ACTUALIZAR
-            if (existingRow) {
-                existingRow.set('Description', data.title);
-                existingRow.set('Thread Size', data.thread);
-                existingRow.set('Audit Status', `V29_AUTO_${new Date().toLocaleDateString()}`);
-                await existingRow.save();
-            } else {
-                await sheet.addRow({
-                    'Input Code': sku,
-                    'Description': data.title,
-                    'Thread Size': data.thread,
-                    'Audit Status': `V29_NEW_${new Date().toLocaleDateString()}`
-                });
+            // PLAN B: Si el código falla, entra la IA (Groq)
+            if (!thread || thread === "N/A") {
+                console.log("[V30] 🤖 El código falló. Consultando a Groq...");
+                thread = await askGroq(bodyText);
             }
 
-            await browser.close();
-            return { sku, status: "EXITO", thread: data.thread };
+            console.log(`✅ Resultado Final: ${thread}`);
+            
+            // GUARDAR EN GOOGLE
+            await doc.loadInfo();
+            const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
+            await sheet.addRow({
+                'Input Code': sku,
+                'Thread Size': thread,
+                'Audit Status': `V30_AI_CHECKED_${new Date().toLocaleTimeString()}`
+            });
 
-        } catch (error) {
             await browser.close();
-            console.log(`[V29] ❌ ${sku} no hallado en web.`);
-            return { sku, status: "NOT_FOUND" };
+            return { sku, thread, method: thread.includes("AI") ? "GROQ" : "CSS" };
+        } else {
+            throw new Error("Producto no visible");
         }
-
     } catch (err) {
-        console.error("❌ ERROR:", err.message);
-        return { error: err.message };
+        await browser.close();
+        return { sku, status: "NOT_FOUND", error: err.message };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await processSku(req.params.code.toUpperCase());
+    const result = await processSkuV30(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V29.00 MOTOR LISTO"));
+app.listen(process.env.PORT || 8080);
