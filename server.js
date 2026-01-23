@@ -8,47 +8,47 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-app.get('/', (req, res) => res.send('<h1>🚀 V19.00 Shield - Online</h1>'));
+app.get('/', (req, res) => res.send('<h1>🚀 V21.00 Human Mirror - Online</h1>'));
 
-async function runShieldProtocol(code) {
-    console.log(`[V19.00] 🛡️ Iniciando protocolo blindado para: ${code}`);
+async function runMirrorProtocol(code) {
+    console.log(`[V21.00] 👤 Imitando navegación humana para: ${code}`);
     const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`;
     
     const actions = [
         { "wait_for": ".listTile" },
-        { "click": ".listTile a.donaldson-part-details" }, { "wait": 8000 },
-        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 2000 },
-        { "click": "#showMoreProductSpecsButton" }, { "wait": 3000 }
+        { "click": ".listTile a.donaldson-part-details" },
+        { "wait": 5000 }, // Espera a que cargue la ficha
+        { "click": "a[data-target='.prodSpecInfoDiv']" },
+        { "wait": 2000 },
+        { "click": "#showMoreProductSpecsButton" },
+        { "wait": 3000 }
     ];
 
-    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&proxy_type=residential&actions=${encodeURIComponent(JSON.stringify(actions))}`;
+    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&proxy_type=residential&keep_headers=1&wait_until=networkidle0&actions=${encodeURIComponent(JSON.stringify(actions))}`;
 
     try {
         const res = await axios.get(target);
-        
-        if (!res.data || res.data.length < 100) {
-            throw new Error("Página recibida vacía o demasiado corta.");
-        }
-
         const $ = cheerio.load(res.data);
-        const htmlBody = $('body').html() || ""; // Evitamos el NULL
+        const fullText = $('body').text();
+        const html = $('body').html() || "";
 
+        // Extracción agresiva: buscamos en todo el texto, no solo en tablas
         const data = {
             mainCode: code,
-            description: $('.donaldson-product-details h1').text().trim() || "Filtro no identificado",
+            description: $('h1').first().text().trim() || "Filtro Detectado (Sin Título)",
             specs: {
-                thread: htmlBody.match(/Thread Size<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A",
-                od: htmlBody.match(/Outer Diameter<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A",
-                height: htmlBody.match(/Height<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A"
+                thread: fullText.match(/Thread Size[:\s]+([^\n\r<]*)/i)?.[1]?.trim(),
+                od: fullText.match(/Outer Diameter[:\s]+([\d.]+)/i)?.[1]?.trim(),
+                height: fullText.match(/Height[:\s]+([\d.]+)/i)?.[1]?.trim()
             }
         };
 
-        console.log(`✅ Resultado: ${data.description} | Rosca: ${data.specs.thread}`);
-        await syncToGoogle(data, "SUCCESS");
+        console.log(`✅ Captura: ${data.description} | Rosca: ${data.specs.thread}`);
+        await syncToGoogle(data, fullText.includes("Thread") ? "DATA_FOUND" : "TEXT_ONLY");
 
     } catch (err) {
-        console.error("❌ ERROR CAPTURADO:", err.message);
-        await syncToGoogle({ mainCode: code, description: "ERROR_CARGA", specs: {} }, `FALLO: ${err.message}`);
+        console.error("❌ Fallo en V21:", err.message);
+        await syncToGoogle({ mainCode: code, description: "ERROR_CARGA" }, "TIMEOUT_OR_BLOCK");
     }
 }
 
@@ -60,16 +60,16 @@ async function syncToGoogle(d, status) {
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         await sheet.addRow({
             'Input Code': d.mainCode,
-            'Description': d.description || "N/A",
+            'Description': d.description,
             'Thread Size': d.specs?.thread || "N/A",
-            'Audit Status': `V19_${status}`
+            'Audit Status': `V21_${status}_${new Date().toLocaleTimeString()}`
         });
     } catch (e) { console.error("Error Sheet:", e.message); }
 }
 
 app.get('/api/search/:code', (req, res) => {
-    runShieldProtocol(req.params.code.toUpperCase());
-    res.json({ status: "SHIELD_ON", message: "Procesando con blindaje V19. Mira los logs." });
+    runMirrorProtocol(req.params.code.toUpperCase());
+    res.json({ status: "MIRROR_ON", message: "V21 en marcha. Emulando red humana." });
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V19.00 SHIELD ACTIVO"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V21.00 MIRROR ACTIVO"));
