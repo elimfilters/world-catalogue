@@ -16,42 +16,34 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-const toElimSku = (sku, isKit) => {
+const toElimSku = (sku) => {
     if (!sku) return "";
     let s = sku.replace(/[^a-zA-Z0-9]/g, '');
-    if (isKit) return s.replace(/^P/, 'EK');
     if (s.startsWith('P55') || s.startsWith('DBF')) return s.replace(/^(P55|DBF)/, 'EL8');
     return `EL8${s}`;
 };
 
-async function runV61(inputCode) {
-    console.log(`[V61] 🕵️ Buscando: ${inputCode}`);
-    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+// LIMPIADOR DEFINITIVO DE OBJETOS
+const forceString = (val) => {
+    if (val === null || val === undefined) return "";
+    if (Array.isArray(val)) return val.map(forceString).join(', ');
+    if (typeof val === 'object') return Object.values(val).map(forceString).join(' ');
+    return String(val).trim();
+};
+
+async function runV63(inputCode) {
+    console.log(`[V63] 🏷️ Clasificando Tipo y Subtipo para: ${inputCode}`);
+    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 800 });
     
     try {
-        // 1. INTENTO DE BÚSQUEDA ROBUSTO
-        await page.goto('https://shop.donaldson.com/store/es-us/home', { waitUntil: 'networkidle2' });
-        
-        // Esperamos por el buscador con múltiples selectores posibles
-        const searchSelector = 'input[name="Ntt"], #searchBox, .search-query';
-        try {
-            await page.waitForSelector(searchSelector, { visible: true, timeout: 10000 });
-            await page.type(searchSelector, inputCode);
-            await page.keyboard.press('Enter');
-        } catch (e) {
-            console.log("⚠️ Home search failed, trying direct search URL...");
-            await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${inputCode}*`, { waitUntil: 'networkidle2' });
-        }
-
-        // 2. IDENTIFICAR EL PRODUCTO REAL
-        await page.waitForSelector('.donaldson-part-details', { timeout: 15000 });
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${inputCode}*`, { waitUntil: 'networkidle2' });
+        await page.waitForSelector('.donaldson-part-details', { timeout: 10000 });
         const productUrl = await page.evaluate(() => document.querySelector('a.donaldson-part-details')?.href);
-        if (!productUrl) throw new Error("Producto no encontrado en la lista");
+        const donaldsonSku = await page.evaluate(() => document.querySelector('a.donaldson-part-details span')?.innerText.trim());
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
 
-        // 3. ATRIBUTOS Y REFERENCIAS
+        // EXTRACCIÓN DE ATRIBUTOS Y REFERENCIAS
         await page.evaluate(() => {
             document.querySelector('a[data-target=".prodSpecInfoDiv"]')?.click();
             document.querySelector('a[data-target=".ListCrossReferenceDetailPageComp"]')?.click();
@@ -59,68 +51,53 @@ async function runV61(inputCode) {
         });
         await new Promise(r => setTimeout(r, 2000));
 
-        // Expandir "Mostrar más" en Atributos y Referencias
-        await page.evaluate(() => {
-            document.querySelector('#showMoreProductSpecsButton')?.click();
-            document.querySelector('#showAllCrossReferenceListButton')?.click();
+        // CAPTURA DE REFERENCIAS CRUDAS
+        const rawRefs = await page.evaluate(() => {
+            const rows = Array.from(document.querySelectorAll('.ListCrossReferenceDetailPageComp table tbody tr'));
+            return rows.map(tr => tr.innerText.replace(/\t/g, ': ')).join(' | ');
         });
 
-        // 4. DEEP LINK: FILTROS DEL EQUIPO
-        const deepLinkData = await page.evaluate(() => {
-            const row = document.querySelector('.ListEquipmentDetailPageComp table tbody tr');
-            return row ? { name: row.innerText.split('\t')[0].trim(), url: row.querySelector('a')?.href } : null;
-        });
-
-        let eqFilters = "";
-        if (deepLinkData && deepLinkData.url) {
-            const p2 = await browser.newPage();
-            await p2.goto(deepLinkData.url, { waitUntil: 'networkidle2' });
-            const list = await p2.evaluate(() => 
-                Array.from(document.querySelectorAll('.donaldson-part-details span:first-child')).map(s => s.innerText.trim())
-            );
-            eqFilters = `${deepLinkData.name}: [${list.join(' | ')}]`;
-            await p2.close();
-        }
-
-        // 5. IA PARA CLASIFICACIÓN AJ/AK Y SPECS
         const rawBody = await page.evaluate(() => document.body.innerText);
-        const alternates = await page.evaluate(() => 
-            Array.from(document.querySelectorAll('.comapreProdListSection .donaldson-part-details span:first-child')).map(i => i.innerText.trim())
-        );
 
+        // IA: DISERTACIÓN DE DATOS
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
-            messages: [{ role: "system", content: "Extrae JSON: desc, oem, cross, kits, specs {thread, height_mm, micron}." }, { role: "user", content: rawBody.substring(0, 18000) }]
+            messages: [{
+                role: "system",
+                content: `Extrae JSON:
+                - filter_type: (Ej: FUEL FILTER)
+                - subtype: (Ej: SPIN-ON SECONDARY)
+                - oem: códigos de maquinaria (solo números) -> AJ
+                - cross: códigos de otras marcas de filtros (solo números) -> AK
+                - specs: {thread, height_mm, micron}`
+            }, { role: "user", content: `Analiza: ${rawBody.substring(0, 15000)}. Refs: ${rawRefs}` }]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
         const d = JSON.parse(response.data.choices[0].message.content);
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
 
-        // 6. CARGA FINAL
         await sheet.addRow({
             'Input Code': inputCode,
-            'ELIMFILTERS SKU': toElimSku(inputCode, false),
-            'Description': d.desc || "",
-            'Thread Size': d.specs?.thread || "",
-            'Height (mm)': d.specs?.height_mm || "",
-            'Micron Rating': d.specs?.micron || "",
-            'OEM Codes': Array.isArray(d.oem) ? d.oem.join(', ') : d.oem,
-            'Cross Reference Codes': Array.isArray(d.cross) ? d.cross.join(', ') : d.cross,
-            'Equipment Applications': deepLinkData?.name || "",
-            'Alternative Products': alternates.join(', '),
-            'Equipment Filters List': eqFilters,
+            'ELIMFILTERS SKU': toElimSku(donaldsonSku || inputCode),
+            'Description': `${forceString(d.filter_type)}, ${forceString(d.subtype)}`,
+            'Filter Type': forceString(d.filter_type), // Columna D
+            'Subtype': forceString(d.subtype),         // Columna E
+            'Thread Size': forceString(d.specs?.thread),
+            'Height (mm)': forceString(d.specs?.height_mm),
+            'Micron Rating': forceString(d.specs?.micron),
+            'OEM Codes': forceString(d.oem),           // Columna AJ
+            'Cross Reference Codes': forceString(d.cross), // Columna AK
             'Technical Sheet URL': productUrl
         });
 
         await browser.close();
-        return { status: "EXITO_V61", sku: inputCode };
+        return { status: "EXITO_V63", sku: inputCode };
     } catch (err) {
         if (browser) await browser.close();
-        console.error(err);
         return { status: "ERROR", msg: err.message };
     }
 }
-app.get('/api/search/:code', async (req, res) => res.json(await runV61(req.params.code)));
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V61.00 INFALLIBLE SEARCH ONLINE"));
+app.get('/api/search/:code', async (req, res) => res.json(await runV63(req.params.code)));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V63.00 TAXONOMY MASTER ONLINE"));
