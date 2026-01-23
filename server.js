@@ -9,88 +9,98 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-// 1. Esquema de Seguridad para MongoDB
-const FilterSchema = new mongoose.Schema({
-    code: String, sku: String, cat: String, specs: Object, status: String, createdAt: { type: Date, default: Date.now }
-});
-const Filter = mongoose.model('Filter', FilterSchema);
-
-mongoose.connect(process.env.MONGO_URL)
-    .then(() => console.log('🚀 v6.50: Iron Scraper & DB Persistence Active'))
-    .catch(err => console.error('❌ Error MongoDB:', err));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.60: Full Matrix 43-Column Scraper Active'));
 
 const SCRAPE = async (url) => {
-    // Usamos render_js=1 para que Donaldson cargue las tablas de medidas
     const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1&premium_proxy=1`;
     const res = await axios.get(target);
     return cheerio.load(res.data);
 };
 
+async function getDeepData(query) {
+    const d = { specs: {}, crossRefs: [], validated: false };
+    try {
+        const $ = await SCRAPE(`https://shop.donaldson.com/store/search?q=${query}`);
+        const link = $('a[href*="/product/"]').first().attr('href');
+        
+        if (link) {
+            const $d = await SCRAPE(`https://shop.donaldson.com${link}`);
+            d.validated = true;
+            const text = $d('body').text();
+
+            // EXTRACCIÓN MASIVA (Regex para las 43 columnas)
+            const getVal = (regex) => {
+                const m = text.match(regex);
+                return m ? m[1].trim() : null;
+            };
+
+            // Dimensiones Principales
+            d.specs.thread = getVal(/Thread Size:\s*([^\n\r]*)/i);
+            d.specs.od = parseFloat(getVal(/Outer Diameter:\s*([\d.]+)\s*(?:mm|inch)/i));
+            d.specs.height = parseFloat(getVal(/Height:\s*([\d.]+)\s*(?:mm|inch)/i));
+            
+            // Empacaduras (Gaskets)
+            d.specs.gasketOd = parseFloat(getVal(/Gasket OD:\s*([\d.]+)\s*(?:mm|inch)/i));
+            d.specs.gasketId = parseFloat(getVal(/Gasket ID:\s*([\d.]+)\s*(?:mm|inch)/i));
+            
+            // Rendimiento
+            d.specs.micron = getVal(/Efficiency\s*(?:[\d%@\s]*)\s*([\d.]+)\s*micron/i);
+            d.specs.efficiency = getVal(/Efficiency\s*:\s*([\d%]+)/i);
+            d.specs.mediaType = getVal(/Media Type\s*:\s*([^\n\r]*)/i);
+            
+            // Referencias Cruzadas
+            $d('.cross-reference-list li').each((i, el) => d.crossRefs.push($d(el).text().trim()));
+        }
+    } catch (e) { console.error("Error Scrape"); }
+    return d;
+}
+
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
     const cat = req.query.cat || 'Oil';
-    const sku = `EF-${code.slice(-4)}`;
-
     try {
-        // PASO 1: Guardar intención en MongoDB (A prueba de fallos)
-        const record = await Filter.findOneAndUpdate(
-            { code }, 
-            { code, sku, cat, status: 'SCRAPING_IN_PROGRESS' }, 
-            { upsert: true, new: true }
-        );
-        console.log(`📝 Registro inicial creado en DB para: ${code}`);
+        const data = await getDeepData(code);
+        if (!data.validated) return res.status(404).send("NOT_FOUND");
 
-        // PASO 2: Iniciar Scraper Agresivo
-        const $ = await SCRAPE(`https://shop.donaldson.com/store/search?q=${code}`);
-        const link = $('.product-name a').first().attr('href');
-        
-        let specs = {};
-        if (link) {
-            const $d = await SCRAPE(`https://shop.donaldson.com${link}`);
-            // Captura de texto por patrones (Regex)
-            const bodyText = $d('body').text();
-            specs.thread = bodyText.match(/Thread Size:\s*([^\n\r]*)/i)?.[1]?.trim();
-            specs.od = bodyText.match(/Outer Diameter:\s*([^\n\r]*)/i)?.[1]?.trim();
-            specs.height = bodyText.match(/Height:\s*([^\n\r]*)/i)?.[1]?.trim();
-            console.log(`✅ Datos extraídos: ${JSON.stringify(specs)}`);
-        }
-
-        // PASO 3: Actualizar DB con resultados
-        record.specs = specs;
-        record.status = specs.od ? 'COMPLETED' : 'SPECS_NOT_FOUND';
-        await record.save();
-
-        // PASO 4: Sincronizar a Google Sheets
-        await syncToSheets(record);
-
-        res.json({ status: "SUCCESS", data: record });
-    } catch (err) { 
-        console.error('❌ Error Crítico:', err.message);
-        res.status(500).json({ error: err.message }); 
-    }
+        await syncToFullSheet(data, code, cat);
+        res.json(data);
+    } catch (err) { res.status(500).send(err.message); }
 });
 
-async function syncToSheets(d) {
-    try {
-        const auth = new JWT({
-            email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-            key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-        });
-        const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
-        await doc.loadInfo();
-        const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        
-        await sheet.addRow({
-            'Input Code': d.code,
-            'ELIMFILTERS SKU': d.sku,
-            'Thread Size': d.specs?.thread || 'VERIFICAR',
-            'Height (mm)': d.specs?.height || 'VERIFICAR',
-            'Outer Diameter (mm)': d.specs?.od || 'VERIFICAR',
-            'Audit Status': d.status
-        });
-        console.log('📊 Google Sheets Actualizado');
-    } catch (e) { console.error('❌ Error Sheets:', e.message); }
+async function syncToFullSheet(d, code, cat) {
+    const auth = new JWT({ email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL, key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
+    const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
+    await doc.loadInfo();
+    const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
+
+    // Lógica de conversión mm <-> inch
+    const toInch = (mm) => mm ? (mm / 25.4).toFixed(2) : '';
+
+    await sheet.addRow({
+        'Input Code': code,
+        'ELIMFILTERS SKU': `EF-${code.slice(-4)}`,
+        'Description': `ELIMFILTERS ${cat} High Perf`,
+        'Filter Type': cat,
+        'Prefix': cat.substring(0,2).toUpperCase(),
+        'ELIMFILTERS Technology': 'SYNTRAX™',
+        'Duty': d.specs.od > 100 ? 'HD' : 'LD',
+        'Thread Size': d.specs.thread || '',
+        'Height (mm)': d.specs.height || '',
+        'Height (inch)': toInch(d.specs.height),
+        'Outer Diameter (mm)': d.specs.od || '',
+        'Outer Diameter (inch)': toInch(d.specs.od),
+        'Gasket OD (mm)': d.specs.gasketOd || '',
+        'Gasket OD (inch)': toInch(d.specs.gasketOd),
+        'Gasket ID (mm)': d.specs.gasketId || '',
+        'Gasket ID (inch)': toInch(d.specs.gasketId),
+        'Micron Rating': d.specs.micron || '',
+        'Nominal Efficiency (%)': d.specs.efficiency || '',
+        'Media Type': d.specs.mediaType || '',
+        'OEM Codes': code,
+        'Cross Reference Codes': d.crossRefs.join(', '),
+        'Technical Sheet URL': `https://elimfilters.com/spec/${code}`,
+        'Audit Status': 'ENGINEERING_VERIFIED'
+    });
 }
 
 app.listen(process.env.PORT || 8080);
