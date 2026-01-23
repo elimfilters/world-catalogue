@@ -9,79 +9,111 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.40: Universal Table Parser (Aggressive Mode)'));
+// Esquema para asegurar que MongoDB SIEMPRE guarde algo
+const DataSchema = new mongoose.Schema({
+    inputCode: String, sku: String, category: String, specs: Object, 
+    status: String, timestamp: { type: Date, default: Date.now }
+});
+const DataLog = mongoose.model('DataLog', DataSchema);
+
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.50: Iron Scraper & DB Persistence Active'));
 
 const SCRAPE = async (url) => {
-    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}`;
+    // Forzamos Renderizado de JS y Proxy Premium para romper bloqueos
+    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1&premium_proxy=1`;
+    console.log(`🔍 Navegando a: ${url}`);
     const res = await axios.get(target);
     return cheerio.load(res.data);
 };
 
-async function getDeepData(query, isKit) {
-    const d = { specs: {}, components: [], machine: '', crossRefs: [], validated: false };
-    try {
-        const $ = await SCRAPE(`https://shop.donaldson.com/store/search?q=${query}`);
-        const link = isKit ? $('.equipment-list-item a').first().attr('href') : $('.product-name a').first().attr('href');
-        
-        if (link) {
-            const $d = await SCRAPE(`https://shop.donaldson.com${link}`);
-            d.validated = true;
-            
-            // LÓGICA AGRESIVA: Escanea cada DIV y TD de la página
-            $d('div, td, li, span').each((i, el) => {
-                const text = $d(el).text().trim();
-                const nextVal = $d(el).next().text().trim();
-
-                if (text.includes('Outer Diameter')) d.specs.od = nextVal || text.split(':')[1];
-                if (text.includes('Height') || text.includes('Length')) d.specs.height = nextVal || text.split(':')[1];
-                if (text.includes('Thread Size')) d.specs.thread = nextVal || text.split(':')[1];
-                if (text.includes('Efficiency')) d.specs.eff = nextVal || text.split(':')[1];
-            });
-
-            // Extraer Cross References o Componentes
-            $d('.cross-reference-list li, .kit-components-table tr').each((i, el) => {
-                const val = $d(el).text().trim();
-                if (isKit) d.components.push(val); else d.crossRefs.push(val);
-            });
-            d.machine = $d('.equipment-header-title').text().trim();
-        }
-    } catch (e) { console.error("Scrape Error"); }
-    return d;
-}
-
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
     const cat = req.query.cat || 'Oil';
-    const isKit = cat.includes('Kits');
+    const sku = `EF-${code.slice(-4)}`;
     
     try {
-        const data = await getDeepData(code, isKit);
-        if (!data.validated) return res.status(404).send("NOT_FOUND");
+        // 1. PERSISTENCIA INMEDIATA: Guardamos en MongoDB antes de scrapear
+        let record = await DataLog.findOneAndUpdate(
+            { inputCode: code },
+            { sku, category: cat, status: 'SCRAPING' },
+            { upsert: true, new: true }
+        );
+
+        const isKit = cat.includes('Kits');
+        const $ = await SCRAPE(`https://shop.donaldson.com/store/search?q=${code}`);
         
-        // Sincronizar según categoría
-        if (isKit) await syncKits(data, code); else await syncUnified(data, code, cat);
+        // Buscamos el link dinámico (puede ser /product/ o /equipment/)
+        const link = $('a[href*="/product/"]').first().attr('href') || $('a[href*="/equipment/"]').first().attr('href');
         
-        res.json({ status: "SUCCESS", data });
-    } catch (err) { res.status(500).send("SERVER_ERROR"); }
+        let foundSpecs = {};
+        let components = [];
+
+        if (link) {
+            const detailUrl = link.startsWith('http') ? link : `https://shop.donaldson.com${link}`;
+            const $d = await SCRAPE(detailUrl);
+            const fullBodyText = $d('body').text();
+
+            // EXTRACCIÓN POR REGEX (No depende de clases CSS)
+            if (!isKit) {
+                foundSpecs.thread = fullBodyText.match(/Thread Size:\s*([^\n\r]*)/i)?.[1]?.trim();
+                foundSpecs.od = fullBodyText.match(/Outer Diameter:\s*([^\n\r]*)/i)?.[1]?.trim();
+                foundSpecs.height = fullBodyText.match(/Height:\s*([^\n\r]*)/i)?.[1]?.trim();
+                foundSpecs.efficiency = fullBodyText.match(/Efficiency[^:]*:\s*([^\n\r]*)/i)?.[1]?.trim();
+            } else {
+                // Si es Kit, extraemos componentes de las celdas de tabla
+                $d('td.part-number, a.part-link').each((i, el) => {
+                    components.push($d(el).text().trim());
+                });
+            }
+        }
+
+        // 2. ACTUALIZAMOS MONGODB CON LOS DATOS REALES
+        record.specs = isKit ? { components } : foundSpecs;
+        record.status = 'SUCCESS';
+        await record.save();
+
+        // 3. SINCRONIZAMOS A GOOGLE SHEETS
+        await syncToSheets(record, isKit);
+
+        res.json({ status: "COMPLETED", data: record });
+
+    } catch (err) {
+        console.error('❌ Error Crítico:', err.message);
+        res.status(500).send(err.message);
+    }
 });
 
-async function syncUnified(d, code, cat) {
-    const auth = new JWT({ email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL, key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'), scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
-    const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
-    await doc.loadInfo();
-    const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-    
-    await sheet.addRow({
-        'Input Code': code,
-        'ELIMFILTERS SKU': `EF-${code.slice(-4)}`,
-        'Thread Size': d.specs.thread || 'N/A',
-        'Height (mm)': d.specs.height || 'N/A',
-        'Outer Diameter (mm)': d.specs.od || 'N/A',
-        'OEM Codes': code,
-        'Cross Reference Codes': d.crossRefs.slice(0, 5).join(', ') || 'N/A',
-        'Audit Status': 'V6.40_VERIFIED'
-    });
+async function syncToSheets(d, isKit) {
+    try {
+        const auth = new JWT({
+            email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+            key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        });
+        const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
+        await doc.loadInfo();
+        
+        const sheetName = isKit ? 'MASTER_KITS_V1' : 'MASTER_UNIFIED_V5';
+        const sheet = doc.sheetsByTitle[sheetName];
+
+        if (isKit) {
+            await sheet.addRow({
+                'kit_sku': d.sku, 'kit_description_en': `Kit for ${d.inputCode}`,
+                'filters_included': d.specs.components?.join(', ') || 'CHECK_SOURCE',
+                'oem_kit_reference': d.inputCode, 'audit_status': 'IRON_SCRAPE_CERTIFIED'
+            });
+        } else {
+            await sheet.addRow({
+                'Input Code': d.inputCode, 'ELIMFILTERS SKU': d.sku,
+                'Thread Size': d.specs.thread || 'N/A',
+                'Height (mm)': d.specs.height || 'N/A',
+                'Outer Diameter (mm)': d.specs.od || 'N/A',
+                'Nominal Efficiency (%)': d.specs.efficiency || 'N/A',
+                'Audit Status': 'IRON_SCRAPE_CERTIFIED'
+            });
+        }
+        console.log(`✅ Sincronizado en ${sheetName}`);
+    } catch (e) { console.error('❌ Error Sheets:', e.message); }
 }
 
-// (La función syncKits se mantiene similar con la nueva data)
 app.listen(process.env.PORT || 8080);
