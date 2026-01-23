@@ -16,8 +16,8 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-async function runV33(sku) {
-    console.log(`[V33] 🧐 Extracción profunda para: ${sku}`);
+async function runV34(sku) {
+    console.log(`[V34] 🧹 Limpiando y procesando: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -29,33 +29,38 @@ async function runV33(sku) {
             return link ? link.href : null;
         });
 
-        if (!productUrl) throw new Error("No URL");
+        if (!productUrl) throw new Error("SKU_NOT_FOUND");
 
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        
-        // ESPERA CRÍTICA: Damos tiempo a que las tablas de JavaScript se pinten
-        await new Promise(r => setTimeout(r, 6000)); 
+        await new Promise(r => setTimeout(r, 5000)); 
 
-        const bodyText = await page.evaluate(() => document.body.innerText);
+        // LIMPIEZA DE TEXTO: Solo extraemos texto real, quitamos espacios dobles
+        const cleanText = await page.evaluate(() => {
+            return document.body.innerText.replace(/\s\s+/g, ' ').substring(0, 3000);
+        });
         
-        // IA con el Prompt Refinado
+        console.log("[V34] 🧠 Enviando texto limpio a Groq...");
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama3-8b-8192",
             messages: [
-                { role: "system", content: "Busca 'Thread Size' o 'Rosca'. Responde SOLO el valor. Si no hay, N/A." },
-                { role: "user", content: `Texto: ${bodyText.substring(0, 6000)}` }
+                { role: "system", content: "Extrae el 'Thread Size'. Responde SOLO el valor. Ejemplo: 1-14 UN. Si no hay, N/A." },
+                { role: "user", content: cleanText }
             ]
-        }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
+        }, { 
+            headers: { 
+                'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}`,
+                'Content-Type': 'application/json'
+            } 
+        });
 
         const thread = response.data.choices[0].message.content.trim();
-        console.log(`✅ Resultado Final: ${thread}`);
-
+        
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         await sheet.addRow({
             'Input Code': sku,
             'Thread Size': thread,
-            'Audit Status': `V33_FINAL_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V34_SUCCESS_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -63,12 +68,12 @@ async function runV33(sku) {
 
     } catch (err) {
         await browser.close();
-        return { sku, status: "ERROR", msg: err.message };
+        return { sku, status: "ERROR", msg: err.response ? err.response.data : err.message };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV33(req.params.code.toUpperCase());
+    const result = await runV34(req.params.code.toUpperCase());
     res.json(result);
 });
 
