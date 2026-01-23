@@ -18,8 +18,8 @@ const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
 const flatten = (val) => Array.isArray(val) ? val.join(', ') : (val || "N/A");
 
-async function runV44(sku) {
-    console.log(`[V44] 🦾 Forzando clics en tablas dinámicas para: ${sku}`);
+async function runV45(sku) {
+    console.log(`[V45] 🎯 Extracción Quirúrgica para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -33,48 +33,31 @@ async function runV44(sku) {
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
 
-        // --- RUTINA DE CLICS AGRESIVA ---
+        // RUTINA DE EXPANSIÓN (Igual que V44 pero con limpieza posterior)
         await page.evaluate(async () => {
-            const clickAll = async (selectorText) => {
-                let found = true;
-                while (found) {
-                    const btn = Array.from(document.querySelectorAll('a, button, .show-more')).find(el => 
-                        el.innerText.toUpperCase().includes(selectorText)
-                    );
-                    if (btn && btn.offsetParent !== null) {
-                        btn.click();
-                        await new Promise(r => setTimeout(r, 1500));
-                    } else {
-                        found = false;
-                    }
-                }
+            const clickAll = async (txt) => {
+                const btns = Array.from(document.querySelectorAll('a, button')).filter(el => el.innerText.toUpperCase().includes(txt));
+                for (let b of btns) { b.click(); await new Promise(r => setTimeout(r, 1000)); }
             };
-
-            // Expandir Referencias Cruzadas
             await clickAll('MOSTRAR MÁS');
-
-            // Ir a pestaña de Equipos y expandir
-            const tab = Array.from(document.querySelectorAll('.nav-tabs a, .nav-item')).find(el => 
-                el.innerText.toUpperCase().includes('EQUIPO') || el.innerText.toUpperCase().includes('EQUIPMENT')
-            );
-            if (tab) {
-                tab.click();
-                await new Promise(r => setTimeout(r, 2000));
-                await clickAll('MOSTRAR MÁS');
-            }
+            const tab = Array.from(document.querySelectorAll('.nav-tabs a')).find(el => el.innerText.toUpperCase().includes('EQUIPO'));
+            if (tab) { tab.click(); await new Promise(r => setTimeout(r, 2000)); await clickAll('MOSTRAR MÁS'); }
         });
 
-        const bodyText = await page.evaluate(() => document.body.innerText.replace(/\s\s+/g, ' ').substring(0, 25000));
+        // LIMPIEZA QUIRÚRGICA: Solo agarramos las áreas de datos
+        const cleanData = await page.evaluate(() => {
+            const specs = document.querySelector('.product-specifications')?.innerText || "";
+            const crosses = document.querySelector('.ListCrossReferenceDetailPageComp')?.innerText || "";
+            const equip = document.querySelector('.tab-content')?.innerText || "";
+            return (specs + " " + crosses + " " + equip).replace(/\s\s+/g, ' ').substring(0, 12000);
+        });
         
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
             messages: [
-                { 
-                    role: "system", 
-                    content: `Analiza TODO el texto. Extrae listas completas de OEM_CODES (marcas de maquinaria), CROSS_REF (marcas filtros) y EQUIPMENT_APPS. No resumas, sepáralos por comas.` 
-                },
-                { role: "user", content: `Filtro ${sku}: ${bodyText}` }
+                { role: "system", content: "Extrae JSON: oem_codes, cross_ref_codes, equipment_apps, desc, thread, h_mm, od_mm. Sé exhaustivo con los códigos." },
+                { role: "user", content: `Datos del filtro ${sku}: ${cleanData}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
@@ -88,8 +71,11 @@ async function runV44(sku) {
             'OEM Codes': flatten(d.oem_codes),
             'Cross Reference Codes': flatten(d.cross_ref_codes),
             'Equipment Applications': flatten(d.equipment_apps),
+            'Thread Size': flatten(d.thread),
+            'Height (mm)': flatten(d.h_mm),
+            'Outer Diameter (mm)': flatten(d.od_mm),
             'Technical Sheet URL': productUrl,
-            'Audit Status': `V44_FINAL_SUCCESS_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V45_CLEAN_SUCCESS_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -102,8 +88,8 @@ async function runV44(sku) {
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV44(req.params.code.toUpperCase());
+    const result = await runV45(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V44.00 READY"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V45.00 SURGEON ONLINE"));
