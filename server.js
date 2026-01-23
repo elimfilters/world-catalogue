@@ -18,8 +18,8 @@ const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
 const flatten = (val) => Array.isArray(val) ? val.join(', ') : (val || "N/A");
 
-async function runV43(sku) {
-    console.log(`[V43] 📡 Escaneo Exhaustivo de Columnas para: ${sku}`);
+async function runV44(sku) {
+    console.log(`[V44] 🦾 Forzando clics en tablas dinámicas para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -32,9 +32,39 @@ async function runV43(sku) {
 
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        await new Promise(r => setTimeout(r, 6000)); 
 
-        const bodyText = await page.evaluate(() => document.body.innerText.replace(/\s\s+/g, ' ').substring(0, 15000));
+        // --- RUTINA DE CLICS AGRESIVA ---
+        await page.evaluate(async () => {
+            const clickAll = async (selectorText) => {
+                let found = true;
+                while (found) {
+                    const btn = Array.from(document.querySelectorAll('a, button, .show-more')).find(el => 
+                        el.innerText.toUpperCase().includes(selectorText)
+                    );
+                    if (btn && btn.offsetParent !== null) {
+                        btn.click();
+                        await new Promise(r => setTimeout(r, 1500));
+                    } else {
+                        found = false;
+                    }
+                }
+            };
+
+            // Expandir Referencias Cruzadas
+            await clickAll('MOSTRAR MÁS');
+
+            // Ir a pestaña de Equipos y expandir
+            const tab = Array.from(document.querySelectorAll('.nav-tabs a, .nav-item')).find(el => 
+                el.innerText.toUpperCase().includes('EQUIPO') || el.innerText.toUpperCase().includes('EQUIPMENT')
+            );
+            if (tab) {
+                tab.click();
+                await new Promise(r => setTimeout(r, 2000));
+                await clickAll('MOSTRAR MÁS');
+            }
+        });
+
+        const bodyText = await page.evaluate(() => document.body.innerText.replace(/\s\s+/g, ' ').substring(0, 25000));
         
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
@@ -42,14 +72,9 @@ async function runV43(sku) {
             messages: [
                 { 
                     role: "system", 
-                    content: `Eres un ingeniero experto en filtros. Extrae CADA detalle técnico. 
-                    Mapea a estas llaves JSON: 
-                    desc, type, subtype, thread, h_mm, h_in, od_mm, od_in, id_mm, god_mm, god_in, gid_mm, gid_in, 
-                    iso_std, micron, beta, efficiency, flow_lpm, flow_gpm, flow_cfm, p_max, p_burst, p_collapse, p_bypass, 
-                    p_valve, media, anti_drain, tech, features, oem, cross, equip, engine. 
-                    Diferencia bien OEM (marcas de máquinas) de Cross Reference (marcas de filtros).` 
+                    content: `Analiza TODO el texto. Extrae listas completas de OEM_CODES (marcas de maquinaria), CROSS_REF (marcas filtros) y EQUIPMENT_APPS. No resumas, sepáralos por comas.` 
                 },
-                { role: "user", content: `Analiza este texto y llena todos los campos para el filtro ${sku}: ${bodyText}` }
+                { role: "user", content: `Filtro ${sku}: ${bodyText}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
@@ -60,39 +85,11 @@ async function runV43(sku) {
         await sheet.addRow({
             'Input Code': sku,
             'Description': flatten(d.desc),
-            'Filter Type': flatten(d.type),
-            'Subtype': flatten(d.subtype),
-            'Thread Size': flatten(d.thread),
-            'Height (mm)': flatten(d.h_mm),
-            'Height (inch)': flatten(d.h_in),
-            'Outer Diameter (mm)': flatten(d.od_mm),
-            'Outer Diameter (inch)': flatten(d.od_in),
-            'Inner Diameter (mm)': flatten(d.id_mm),
-            'Gasket OD (mm)': flatten(d.god_mm),
-            'Gasket OD (inch)': flatten(d.god_in),
-            'Gasket ID (mm)': flatten(d.gid_mm),
-            'Gasket ID (inch)': flatten(d.gid_in),
-            'ISO Test Method': flatten(d.iso_std),
-            'Micron Rating': flatten(d.micron),
-            'Beta Ratio': flatten(d.beta),
-            'Nominal Efficiency (%)': flatten(d.efficiency),
-            'Rated Flow (L/min)': flatten(d.flow_lpm),
-            'Rated Flow (GPM)': flatten(d.flow_gpm),
-            'Max Pressure (PSI)': flatten(d.p_max),
-            'Burst Pressure (PSI)': flatten(d.p_burst),
-            'Collapse Pressure (PSI)': flatten(d.p_collapse),
-            'Bypass Valve Pressure (PSI)': flatten(d.p_bypass),
-            'Pressure Valve': flatten(d.p_valve),
-            'Media Type': flatten(d.media),
-            'Anti-Drainback Valve': flatten(d.anti_drain),
-            'Filtration Technology': flatten(d.tech),
-            'Special Features': flatten(d.features),
-            'OEM Codes': flatten(d.oem),
-            'Cross Reference Codes': flatten(d.cross),
-            'Equipment Applications': flatten(d.equip),
-            'Engine Applications': flatten(d.engine),
+            'OEM Codes': flatten(d.oem_codes),
+            'Cross Reference Codes': flatten(d.cross_ref_codes),
+            'Equipment Applications': flatten(d.equipment_apps),
             'Technical Sheet URL': productUrl,
-            'Audit Status': `V43_FULL_SCAN_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V44_FINAL_SUCCESS_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -105,8 +102,8 @@ async function runV43(sku) {
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV43(req.params.code.toUpperCase());
+    const result = await runV44(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080);
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V44.00 READY"));
