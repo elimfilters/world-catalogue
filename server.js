@@ -16,15 +16,21 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-const flatten = (val) => Array.isArray(val) ? val.join(', ') : (val || "N/A");
+// LIMPIEZA ABSOLUTA DE DATOS
+const cleanValue = (v) => {
+    if (v === null || v === undefined) return "N/A";
+    if (Array.isArray(v)) return v.map(i => (typeof i === 'object' ? JSON.stringify(i) : i)).join(', ');
+    if (typeof v === 'object') return JSON.stringify(v);
+    return String(v).trim();
+};
 
-async function runV46(sku) {
-    console.log(`[V46] 🦾 Extracción de Fuerza Bruta para: ${sku}`);
+async function runV48(sku) {
+    console.log(`[V48] 🛠️ Ejecutando Mazo de Demolición: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
     try {
-        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2', timeout: 60000 });
         const productUrl = await page.evaluate(() => {
             const link = document.querySelector('a.donaldson-part-details') || document.querySelector('a[href*="/product/"]');
             return link ? link.href : null;
@@ -33,37 +39,39 @@ async function runV46(sku) {
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
 
-        // --- RUTINA DE EXPANSIÓN REFORZADA ---
+        // --- CARGA TOTAL (SCROLL + CLICS) ---
         await page.evaluate(async () => {
-            const clickAll = async (txt) => {
-                let btns = Array.from(document.querySelectorAll('a, button')).filter(el => el.innerText.toUpperCase().includes(txt));
-                for (let b of btns) { 
-                    b.click(); 
-                    await new Promise(r => setTimeout(r, 2000)); // Espera a que el DOM se actualice
-                }
-            };
+            // Scroll al fondo para activar Lazy Loading
+            window.scrollTo(0, document.body.scrollHeight);
+            await new Promise(r => setTimeout(r, 2000));
             
-            await clickAll('MOSTRAR MÁS');
-            const tab = Array.from(document.querySelectorAll('.nav-tabs a')).find(el => el.innerText.toUpperCase().includes('EQUIPO'));
-            if (tab) { 
-                tab.click(); 
-                await new Promise(r => setTimeout(r, 3000)); 
-                await clickAll('MOSTRAR MÁS');
-            }
+            // Clic recursivo en "Mostrar Más"
+            const expand = async () => {
+                const btns = Array.from(document.querySelectorAll('a, button')).filter(b => b.innerText.includes('MOSTRAR MÁS') || b.innerText.includes('SHOW MORE'));
+                for (let b of btns) { b.click(); await new Promise(r => setTimeout(r, 1500)); }
+            };
+            await expand();
+
+            // Forzar pestaña de Equipo
+            const tab = Array.from(document.querySelectorAll('.nav-link, .nav-tabs a')).find(t => t.innerText.includes('EQUIP'));
+            if (tab) { tab.click(); await new Promise(r => setTimeout(r, 2000)); await expand(); }
         });
 
-        // Captura más amplia pero limpia
-        const fullContent = await page.evaluate(() => {
-            const main = document.querySelector('.product-detail-page') || document.body;
-            return main.innerText.replace(/\s\s+/g, ' ').substring(0, 18000);
-        });
+        const fullBodyText = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '));
         
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
             messages: [
-                { role: "system", content: "Eres un extractor de datos técnicos. Tu objetivo es NO omitir ningún código. Si hay 50 códigos de cruce, escribe los 50 separados por comas. JSON keys: oem_codes, cross_ref_codes, equipment_apps, desc, thread, h_mm, od_mm, micron, efficiency." },
-                { role: "user", content: `Filtro ${sku}: ${fullContent}` }
+                { 
+                    role: "system", 
+                    content: `Eres un extractor de datos industriales. No resumas NADA. 
+                    JSON: desc, h_mm, h_in, od_mm, od_in, id_mm, thread, micron, efficiency, oem_codes, cross_ref, equipment. 
+                    - oem_codes: marcas de equipo (CAT, JD, etc).
+                    - cross_ref: marcas de filtros (Baldwin, etc).
+                    - equipment: modelos de maquinas.` 
+                },
+                { role: "user", content: `Filtro ${sku}: ${fullBodyText.substring(0, 20000)}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
@@ -73,17 +81,18 @@ async function runV46(sku) {
         
         await sheet.addRow({
             'Input Code': sku,
-            'Description': flatten(d.desc),
-            'OEM Codes': flatten(d.oem_codes),
-            'Cross Reference Codes': flatten(d.cross_ref_codes),
-            'Equipment Applications': flatten(d.equipment_apps),
-            'Thread Size': flatten(d.thread),
-            'Height (mm)': flatten(d.h_mm),
-            'Outer Diameter (mm)': flatten(d.od_mm),
-            'Micron Rating': flatten(d.micron),
-            'Nominal Efficiency (%)': flatten(d.efficiency),
+            'Description': cleanValue(d.desc),
+            'Thread Size': cleanValue(d.thread),
+            'Height (mm)': cleanValue(d.h_mm),
+            'Height (inch)': cleanValue(d.h_in),
+            'Outer Diameter (mm)': cleanValue(d.od_mm),
+            'Micron Rating': cleanValue(d.micron),
+            'Nominal Efficiency (%)': cleanValue(d.efficiency),
+            'OEM Codes': cleanValue(d.oem_codes),
+            'Cross Reference Codes': cleanValue(d.cross_ref),
+            'Equipment Applications': cleanValue(d.equipment),
             'Technical Sheet URL': productUrl,
-            'Audit Status': `V46_FULL_FORCE_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V48_FIX_FINAL_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -96,8 +105,8 @@ async function runV46(sku) {
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV46(req.params.code.toUpperCase());
+    const result = await runV48(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V46.00 FULL FORCE ONLINE"));
+app.listen(process.env.PORT || 8080);
