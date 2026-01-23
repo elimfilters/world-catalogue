@@ -16,8 +16,26 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-async function runV50(sku) {
-    console.log(`[V50] 🔍 Usando librería de Jules para: ${sku}`);
+// FUNCIÓN MAESTRA PARA APLANAR OBJETOS DE LA IA
+const flattenToText = (val) => {
+    if (!val) return "N/A";
+    if (Array.isArray(val)) {
+        return val.map(item => {
+            if (typeof item === 'object' && item !== null) {
+                // Si es un objeto tipo {manufacturer, part}, lo unimos
+                const m = item.manufacturer || item.brand || "";
+                const p = item.part || item.code || "";
+                return `${m} ${p}`.trim();
+            }
+            return String(item);
+        }).join(', ');
+    }
+    if (typeof val === 'object') return JSON.stringify(val);
+    return String(val);
+};
+
+async function runV51(sku) {
+    console.log(`[V51] 🛠️ Aplanando datos complejos para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
     
@@ -27,46 +45,45 @@ async function runV50(sku) {
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
         
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 10000));
+        await new Promise(r => setTimeout(r, 3000)); // Espera para carga dinámica
+        const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 15000));
         
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
-            messages: [{ role: "system", content: "Extrae JSON: desc, oem, cross, equip" }, { role: "user", content: bodyText }]
+            messages: [
+                { role: "system", content: "Extrae JSON: desc, oem_codes, cross_ref, equipment. Los códigos deben ser listas." },
+                { role: "user", content: bodyText }
+            ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
         const d = JSON.parse(response.data.choices[0].message.content);
 
-        // --- CONEXIÓN PURA CON JULES ---
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         
-        // Verificamos qué columnas ve Jules en tu Sheet
-        await sheet.loadHeaderRow();
-        console.log("[V50] 📋 Columnas detectadas en tu Sheet:", sheet.headerValues);
-
         const rowData = {
             'Input Code': sku,
-            'Description': d.desc || "N/A",
-            'OEM Codes': d.oem || "N/A",
-            'Cross Reference Codes': d.cross || "N/A",
-            'Equipment Applications': d.equip || "N/A",
+            'Description': flattenToText(d.desc),
+            'OEM Codes': flattenToText(d.oem_codes),
+            'Cross Reference Codes': flattenToText(d.cross_ref),
+            'Equipment Applications': flattenToText(d.equipment),
             'Technical Sheet URL': productUrl
         };
 
-        console.log("[V50] 📤 Intentando escribir fila...");
+        console.log("[V51] 📤 Enviando datos aplanados a Google...");
         await sheet.addRow(rowData);
         
         await browser.close();
-        console.log("✅ ¡ESCRITO!");
-        return { sku, status: "EXITO_REAL" };
+        console.log("✅ ¡POR FIN ESCRITO EN EL SHEET!");
+        return { sku, status: "EXITO" };
 
     } catch (err) {
         if (browser) await browser.close();
-        console.error(`[V50] ❌ ERROR: ${err.message}`);
+        console.error(`[V51] ❌ ERROR: ${err.message}`);
         return { sku, status: "ERROR", msg: err.message };
     }
 }
 
-app.get('/api/search/:code', async (req, res) => res.json(await runV50(req.params.code.toUpperCase())));
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V50.00 JULES EDITION ONLINE"));
+app.get('/api/search/:code', async (req, res) => res.json(await runV51(req.params.code.toUpperCase())));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V51.00 THE FLATTENER ONLINE"));
