@@ -16,76 +16,66 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-// 🧠 FUNCIÓN DE INTELIGENCIA ARTIFICIAL (GROQ)
 async function extractWithAI(rawText) {
     try {
-        console.log("[V31] 🤖 Consultando a la IA Llama 3...");
+        console.log("[V32] 🤖 Consultando a Groq...");
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama3-8b-8192",
             messages: [
-                { role: "system", content: "Eres un extractor de datos técnicos. Tu única misión es encontrar el 'Thread Size' (Rosca) en el texto. Responde SOLO el valor (ej: 1-14 UN). Si no existe, responde 'N/A'." },
-                { role: "user", content: `Extrae la rosca de este texto: ${rawText.substring(0, 4000)}` }
+                { role: "system", content: "Extrae solo el 'Thread Size'. Responde SOLO el valor. Si no hay, N/A." },
+                { role: "user", content: `Texto: ${rawText.substring(0, 4000)}` }
             ]
-        }, {
-            headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` }
-        });
+        }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
         return response.data.choices[0].message.content.trim();
-    } catch (e) { return "N/A_AI_ERROR"; }
+    } catch (e) { return "N/A"; }
 }
 
-async function runV31(sku) {
-    console.log(`[V31] 🛡️ Iniciando Misión Final para: ${sku}`);
+async function runV32(sku) {
+    console.log(`[V32] ⚡ Teletransportando a: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
     try {
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
         
-        // Clic en el producto
-        await page.waitForSelector('a[href*="/product/"]', { timeout: 8000 });
-        await page.click('a[href*="/product/"]');
-        await new Promise(r => setTimeout(r, 4000)); // Espera de carga humana
-
-        // Capturamos TODO el texto de la página
-        const bodyText = await page.evaluate(() => document.body.innerText);
-        
-        // PLAN A: Búsqueda rápida por código
-        let thread = await page.evaluate(() => {
-            const row = Array.from(document.querySelectorAll('tr')).find(r => r.innerText.includes('Thread Size'));
-            return row ? row.querySelector('td:last-child').innerText.trim() : null;
+        // CAMBIO CRÍTICO: En lugar de click, obtenemos el link y navegamos
+        const productUrl = await page.evaluate(() => {
+            const link = document.querySelector('a.donaldson-part-details') || document.querySelector('a[href*="/product/"]');
+            return link ? link.href : null;
         });
 
-        // PLAN B: Si falló, Groq entra al rescate
-        let method = "CODIGO_DIRECTO";
-        if (!thread || thread === "N/A") {
-            thread = await extractWithAI(bodyText);
-            method = "IA_GROQ";
-        }
+        if (!productUrl) throw new Error("Producto no encontrado en la búsqueda");
 
-        console.log(`✅ CAPTURADO (${method}): ${thread}`);
+        console.log(`🔗 Saltando directo a: ${productUrl}`);
+        await page.goto(productUrl, { waitUntil: 'networkidle2' });
+        await new Promise(r => setTimeout(r, 3000)); // Pausa humana
 
-        // GUARDAR EN GOOGLE
+        const bodyText = await page.evaluate(() => document.body.innerText);
+        const thread = await extractWithAI(bodyText);
+
+        console.log(`✅ IA Capturó: ${thread}`);
+
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         await sheet.addRow({
             'Input Code': sku,
             'Thread Size': thread,
-            'Audit Status': `V31_${method}_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V32_SUCCESS_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
-        return { sku, thread, method };
+        return { sku, thread };
 
     } catch (err) {
         await browser.close();
-        console.error("❌ FALLO TOTAL:", err.message);
+        console.error("❌ ERROR:", err.message);
         return { sku, status: "ERROR", msg: err.message };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV31(req.params.code.toUpperCase());
+    const result = await runV32(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V31.00 IA-STEALTH ONLINE"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V32.00 TELEPORT ONLINE"));
