@@ -16,8 +16,8 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-async function runV40(sku) {
-    console.log(`[V40] 🎯 Clasificando OEM y Cross-Ref para: ${sku}`);
+async function runV41(sku) {
+    console.log(`[V41] 🕵️ Analizando patrones de códigos para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -29,10 +29,7 @@ async function runV40(sku) {
         });
 
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
-
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        
-        // Esperamos a que el componente de Referencia Cruzada esté disponible
         await new Promise(r => setTimeout(r, 6000)); 
 
         const bodyText = await page.evaluate(() => document.body.innerText.replace(/\s\s+/g, ' ').substring(0, 15000));
@@ -43,12 +40,14 @@ async function runV40(sku) {
             messages: [
                 { 
                     role: "system", 
-                    content: `Eres un experto en filtración industrial. Clasifica las referencias cruzadas:
-                    1. OEM CODES: Códigos de marcas de equipo original (CAT, Caterpillar, Cummins, John Deere, Komatsu, Volvo, etc.).
-                    2. CROSS REFERENCE CODES: Códigos de otras marcas de filtros (Baldwin, Fleetguard, Wix, Mann, Fram, Sakura, etc.).
-                    Devuelve un JSON con: oem_codes, cross_ref_codes, desc, thread, height_mm, od_mm.` 
+                    content: `Eres un experto en inteligencia de filtros. Los nombres de fabricantes no aparecen por razones legales. 
+                    Tu tarea es identificar el fabricante por el PATRÓN del código:
+                    1. OEM CODES: Identifica códigos de maquinaria (ej: Caterpillar, Cummins, Komatsu, Volvo, John Deere).
+                    2. CROSS REFERENCE: Identifica marcas de filtros (ej: Baldwin, Fleetguard, Wix, Mann, Fram, Parker).
+                    3. INCLUYE SIEMPRE DONALDSON como el fabricante de origen si el SKU coincide.
+                    Responde en JSON: oem_codes, cross_ref_codes, desc, thread, height_mm, od_mm.` 
                 },
-                { role: "user", content: `Analiza el texto y separa las marcas de equipo de las marcas de filtros para el SKU ${sku}: ${bodyText}` }
+                { role: "user", content: `Analiza esta lista de códigos para el filtro ${sku}. Identifica cuáles son de equipo original (OEM) y cuáles de competencia (filtros) según su nomenclatura: ${bodyText}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
@@ -60,13 +59,13 @@ async function runV40(sku) {
         await sheet.addRow({
             'Input Code': sku,
             'Description': d.desc || `Donaldson ${sku}`,
-            'OEM Codes': d.oem_codes, // Clasificado por IA
-            'Cross Reference Codes': d.cross_ref_codes, // Clasificado por IA
+            'OEM Codes': d.oem_codes,
+            'Cross Reference Codes': d.cross_ref_codes,
             'Thread Size': d.thread,
             'Height (mm)': d.height_mm,
             'Outer Diameter (mm)': d.od_mm,
             'Technical Sheet URL': productUrl,
-            'Audit Status': `V40_CLASSIFIED_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V41_PATTERN_DETECTED_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -79,7 +78,7 @@ async function runV40(sku) {
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV40(req.params.code.toUpperCase());
+    const result = await runV41(req.params.code.toUpperCase());
     res.json(result);
 });
 
