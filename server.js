@@ -16,74 +16,101 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-// FUNCIÓN MAESTRA PARA APLANAR OBJETOS DE LA IA
-const flattenToText = (val) => {
-    if (!val) return "N/A";
-    if (Array.isArray(val)) {
-        return val.map(item => {
-            if (typeof item === 'object' && item !== null) {
-                // Si es un objeto tipo {manufacturer, part}, lo unimos
-                const m = item.manufacturer || item.brand || "";
-                const p = item.part || item.code || "";
-                return `${m} ${p}`.trim();
-            }
-            return String(item);
-        }).join(', ');
-    }
-    if (typeof val === 'object') return JSON.stringify(val);
-    return String(val);
+const toElimSku = (sku, isKit) => {
+    if (!sku) return "";
+    let s = sku.replace(/[^a-zA-Z0-9]/g, '');
+    if (isKit) return s.replace(/^P/, 'EK');
+    if (s.startsWith('P55') || s.startsWith('DBF')) return s.replace(/^(P55|DBF)/, 'EL8');
+    return `EL8${s}`;
 };
 
-async function runV51(sku) {
-    console.log(`[V51] 🛠️ Aplanando datos complejos para: ${sku}`);
+async function runV60(inputCode) {
+    console.log(`[V60] 🏭 Iniciando búsqueda profunda: ${inputCode}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
-    
     try {
-        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
+        await page.goto('https://shop.donaldson.com/store/es-us/home', { waitUntil: 'networkidle2' });
+        await page.type('input[name="Ntt"]', inputCode);
+        await page.keyboard.press('Enter');
+        await page.waitForSelector('.donaldson-part-details', { timeout: 15000 });
         const productUrl = await page.evaluate(() => document.querySelector('a.donaldson-part-details')?.href);
-        if (!productUrl) throw new Error("SKU_NOT_FOUND");
-        
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        await new Promise(r => setTimeout(r, 3000)); // Espera para carga dinámica
-        const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 15000));
-        
+
+        // 1. EXTRAER ALTERNATIVOS
+        const alternates = await page.evaluate(() => 
+            Array.from(document.querySelectorAll('.comapreProdListSection .donaldson-part-details span:first-child')).map(i => i.innerText.trim())
+        );
+
+        // 2. EXTRAER ATRIBUTOS
+        await page.evaluate(() => {
+            document.querySelector('a[data-target=".prodSpecInfoDiv"]')?.click();
+            setTimeout(() => document.querySelector('#showMoreProductSpecsButton')?.click(), 1000);
+        });
+        await new Promise(r => setTimeout(r, 2000));
+
+        // 3. EXTRAER REFERENCIAS (AJ/AK)
+        await page.evaluate(() => document.querySelector('a[data-target=".ListCrossReferenceDetailPageComp"]')?.click());
+        await new Promise(r => setTimeout(r, 1500));
+        let moreRefs = true;
+        while (moreRefs) {
+            moreRefs = await page.evaluate(() => {
+                const b = document.querySelector('#showAllCrossReferenceListButton');
+                if (b && b.style.display !== 'none') { b.click(); return true; }
+                return false;
+            });
+            if (moreRefs) await new Promise(r => setTimeout(r, 1000));
+        }
+
+        // 4. DEEP LINK: EQUIPOS Y SUS FILTROS
+        console.log("🚜 Navegando en equipos para extraer listas de filtros...");
+        await page.evaluate(() => document.querySelector('a[data-target=".ListEquipmentDetailPageComp"]')?.click());
+        await new Promise(r => setTimeout(r, 1000));
+        const deepLinks = await page.evaluate(() => 
+            Array.from(document.querySelectorAll('.ListEquipmentDetailPageComp table tbody tr'))
+                .slice(0, 3) 
+                .map(row => ({ name: row.innerText.split('\t')[0].trim(), url: row.querySelector('a')?.href }))
+        );
+
+        let equipmentFilters = [];
+        for (let linkObj of deepLinks) {
+            if (linkObj.url) {
+                const p2 = await browser.newPage();
+                await p2.goto(linkObj.url, { waitUntil: 'networkidle2' });
+                const f = await p2.evaluate(() => Array.from(document.querySelectorAll('.donaldson-part-details span:first-child')).map(s => s.innerText.trim()));
+                equipmentFilters.push(`${linkObj.name}: [${f.join(' | ')}]`);
+                await p2.close();
+            }
+        }
+
+        const rawBody = await page.evaluate(() => document.body.innerText);
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
-            messages: [
-                { role: "system", content: "Extrae JSON: desc, oem_codes, cross_ref, equipment. Los códigos deben ser listas." },
-                { role: "user", content: bodyText }
-            ]
+            messages: [{ role: "system", content: "Extrae JSON: desc, kits, oem, cross, specs." }, { role: "user", content: rawBody.substring(0, 18000) }]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
         const d = JSON.parse(response.data.choices[0].message.content);
-
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        
-        const rowData = {
-            'Input Code': sku,
-            'Description': flattenToText(d.desc),
-            'OEM Codes': flattenToText(d.oem_codes),
-            'Cross Reference Codes': flattenToText(d.cross_ref),
-            'Equipment Applications': flattenToText(d.equipment),
+
+        await sheet.addRow({
+            'Input Code': inputCode,
+            'ELIMFILTERS SKU': toElimSku(inputCode, false),
+            'Description': d.desc,
+            'OEM Codes': Array.isArray(d.oem) ? d.oem.join(', ') : d.oem,
+            'Cross Reference Codes': Array.isArray(d.cross) ? d.cross.join(', ') : d.cross,
+            'Equipment Applications': deepLinks.map(l => l.name).join(', '),
+            'Alternative Products': alternates.join(', '),
+            'Equipment Filters List': equipmentFilters.join(' || '),
             'Technical Sheet URL': productUrl
-        };
+        });
 
-        console.log("[V51] 📤 Enviando datos aplanados a Google...");
-        await sheet.addRow(rowData);
-        
         await browser.close();
-        console.log("✅ ¡POR FIN ESCRITO EN EL SHEET!");
-        return { sku, status: "EXITO" };
-
+        return { status: "EXITO_V60", code: inputCode };
     } catch (err) {
         if (browser) await browser.close();
-        console.error(`[V51] ❌ ERROR: ${err.message}`);
-        return { sku, status: "ERROR", msg: err.message };
+        return { status: "ERROR", msg: err.message };
     }
 }
-
-app.get('/api/search/:code', async (req, res) => res.json(await runV51(req.params.code.toUpperCase())));
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V51.00 THE FLATTENER ONLINE"));
+app.get('/api/search/:code', async (req, res) => res.json(await runV60(req.params.code)));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V60.00 FINAL MASTER ONLINE"));
