@@ -8,86 +8,105 @@ require('dotenv').config();
 puppeteer.use(StealthPlugin());
 const app = express();
 
-async function runStealth(code) {
-    console.log(`[V26.00] 👤 Navegador Humano Activo para: ${code}`);
-    
-    const browser = await puppeteer.launch({
-        headless: "new",
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
-    });
+const auth = new JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets']
+});
+const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
+async function processSkuWithLogic(sku) {
+    console.log(`[V28] 🛡️ Validando lógica para: ${sku}`);
     try {
-        const page = await browser.newPage();
-        await page.setViewport({ width: 1280, height: 800 });
+        await doc.loadInfo();
+        const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
+        const rows = await sheet.getRows();
+
+        // 1. APLICAR LÓGICA DE CONVERSACIÓN: ¿Ya lo tenemos procesado?
+        const existingRow = rows.find(r => r.get('Input Code') === sku);
         
-        // Simular que somos un usuario de Windows real
+        if (existingRow) {
+            const currentThread = existingRow.get('Thread Size');
+            if (currentThread && currentThread !== 'N/A' && currentThread !== '') {
+                console.log(`[V28] ✅ SKU ${sku} ya tiene datos técnicos. Abortando para ahorrar recursos.`);
+                return { status: "SKIPPED", message: "Ya existe en Master Sheet.", data: currentThread };
+            }
+            console.log(`[V28] ⚠️ SKU existe pero con N/A. Re-intentando búsqueda...`);
+        }
+
+        // 2. SI NO EXISTE O TIENE N/A: Lanzar el "Disfraz Humano"
+        console.log(`[V28] 👤 Iniciando Chrome Stealth para: ${sku}`);
+        const browser = await puppeteer.launch({
+            headless: "new",
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        });
+        const page = await browser.newPage();
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-        console.log(`🔎 Buscando ${code}...`);
-        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`, { waitUntil: 'networkidle2' });
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
         
-        // Esperar al mosaico y entrar
-        await page.waitForSelector('a.donaldson-part-details', { timeout: 15000 });
-        await page.click('a.donaldson-part-details');
-
-        // Pestaña de atributos
-        await page.waitForSelector("a[data-target='.prodSpecInfoDiv']", { timeout: 15000 });
-        await page.click("a[data-target='.prodSpecInfoDiv']");
-
-        // Botón Mostrar Más
         try {
-            await page.waitForSelector("#showMoreProductSpecsButton", { timeout: 5000 });
-            await page.click("#showMoreProductSpecsButton");
-        } catch (e) { console.log("Botón mostrar más no necesario o no hallado."); }
+            await page.waitForSelector('a.donaldson-part-details', { timeout: 8000 });
+            await page.click('a.donaldson-part-details');
+            
+            await page.waitForSelector("a[data-target='.prodSpecInfoDiv']", { timeout: 8000 });
+            await page.click("a[data-target='.prodSpecInfoDiv']");
+            
+            try {
+                await page.waitForSelector("#showMoreProductSpecsButton", { timeout: 3000 });
+                await page.click("#showMoreProductSpecsButton");
+            } catch (e) {}
 
-        // Esperar 2 segundos para que el JS termine de pintar la tabla
-        await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 2000));
 
-        // Extraer datos directamente del DOM de Donaldson
-        const specs = await page.evaluate(() => {
-            const getVal = (text) => {
-                const td = Array.from(document.querySelectorAll('td')).find(el => el.innerText.includes(text));
-                return td ? td.nextElementSibling.innerText.trim() : "N/A";
-            };
-            return {
-                title: document.querySelector('h1')?.innerText.trim() || "Filtro Detectado",
-                thread: getVal("Thread Size"),
-                od: getVal("Outer Diameter")
-            };
-        });
+            const specs = await page.evaluate(() => {
+                const getVal = (text) => {
+                    const td = Array.from(document.querySelectorAll('td')).find(el => el.innerText.includes(text));
+                    return td ? td.nextElementSibling.innerText.trim() : "N/A";
+                };
+                return {
+                    title: document.querySelector('h1')?.innerText.trim() || "Filtro Detectado",
+                    thread: getVal("Thread Size"),
+                    od: getVal("Outer Diameter")
+                };
+            });
 
-        console.log(`✅ EXTRACCIÓN EXITOSA: ${specs.thread}`);
-        await syncToGoogle({ ...specs, mainCode: code });
+            // 3. ACTUALIZAR O AÑADIR SEGÚN TU LÓGICA
+            if (existingRow) {
+                existingRow.set('Description', specs.title);
+                existingRow.set('Thread Size', specs.thread);
+                existingRow.set('Audit Status', `V28_UPDATED_${new Date().toLocaleTimeString()}`);
+                await existingRow.save();
+            } else {
+                await sheet.addRow({
+                    'Input Code': sku,
+                    'Description': specs.title,
+                    'Thread Size': specs.thread,
+                    'Audit Status': `V28_NEW_${new Date().toLocaleTimeString()}`
+                });
+            }
+
+            await browser.close();
+            return { status: "SUCCESS", thread: specs.thread };
+
+        } catch (error) {
+            await browser.close();
+            console.log(`[V28] ❌ No se encontró el producto en Donaldson.`);
+            if (!existingRow) {
+                await sheet.addRow({ 'Input Code': sku, 'Audit Status': 'V28_NOT_FOUND_ON_WEB' });
+            }
+            return { status: "NOT_FOUND" };
+        }
 
     } catch (err) {
-        console.error("❌ ERROR EN NAVEGACIÓN:", err.message);
-    } finally {
-        await browser.close();
+        console.error("❌ ERROR MAESTRO:", err.message);
+        return { status: "ERROR", msg: err.message };
     }
 }
 
-async function syncToGoogle(d) {
-    try {
-        const auth = new JWT({
-            email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-            key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-            scopes: ['https://www.googleapis.com/auth/spreadsheets']
-        });
-        const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
-        await doc.loadInfo();
-        const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        await sheet.addRow({
-            'Input Code': d.mainCode,
-            'Description': d.title,
-            'Thread Size': d.thread,
-            'Audit Status': `V26_STEALTH_${new Date().toLocaleTimeString()}`
-        });
-    } catch (e) { console.error("Error Google:", e.message); }
-}
-
-app.get('/api/search/:code', (req, res) => {
-    runStealth(req.params.code.toUpperCase());
-    res.json({ status: "STEALTH_ON", message: "Procesando con Navegador Indetectable. Revisa Railway Logs." });
+app.get('/api/search/:code', async (req, res) => {
+    const result = await processSkuWithLogic(req.params.code.toUpperCase());
+    res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V26.00 STEALTH ONLINE"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V28.00 LÓGICA MAESTRA ONLINE"));
