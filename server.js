@@ -16,8 +16,8 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-async function runV34(sku) {
-    console.log(`[V34] 🧹 Limpiando y procesando: ${sku}`);
+async function runV35(sku) {
+    console.log(`[V35] 🧠 Usando Llama 3.3 Versatile para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -34,16 +34,15 @@ async function runV34(sku) {
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
         await new Promise(r => setTimeout(r, 5000)); 
 
-        // LIMPIEZA DE TEXTO: Solo extraemos texto real, quitamos espacios dobles
         const cleanText = await page.evaluate(() => {
             return document.body.innerText.replace(/\s\s+/g, ' ').substring(0, 3000);
         });
         
-        console.log("[V34] 🧠 Enviando texto limpio a Groq...");
+        // ACTUALIZACIÓN DEL MODELO A LLAMA 3.3 70B
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-            model: "llama3-8b-8192",
+            model: "llama-3.3-70b-versatile",
             messages: [
-                { role: "system", content: "Extrae el 'Thread Size'. Responde SOLO el valor. Ejemplo: 1-14 UN. Si no hay, N/A." },
+                { role: "system", content: "Extrae el 'Thread Size'. Responde SOLO el valor (ej: 1-14 UN). Si no hay, N/A." },
                 { role: "user", content: cleanText }
             ]
         }, { 
@@ -60,7 +59,7 @@ async function runV34(sku) {
         await sheet.addRow({
             'Input Code': sku,
             'Thread Size': thread,
-            'Audit Status': `V34_SUCCESS_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V35_Llama3.3_SUCCESS_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -68,12 +67,13 @@ async function runV34(sku) {
 
     } catch (err) {
         await browser.close();
-        return { sku, status: "ERROR", msg: err.response ? err.response.data : err.message };
+        const errorMsg = err.response ? err.response.data.error.message : err.message;
+        return { sku, status: "ERROR", msg: errorMsg };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV34(req.params.code.toUpperCase());
+    const result = await runV35(req.params.code.toUpperCase());
     res.json(result);
 });
 
