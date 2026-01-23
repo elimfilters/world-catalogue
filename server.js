@@ -16,8 +16,11 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-async function runV41(sku) {
-    console.log(`[V41] 🕵️ Analizando patrones de códigos para: ${sku}`);
+// Función para convertir listas de la IA en texto plano para Google
+const flatten = (val) => Array.isArray(val) ? val.join(', ') : (val || "N/A");
+
+async function runV42(sku) {
+    console.log(`[V42] 🛠️ Corrigiendo formato y procesando: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -40,14 +43,9 @@ async function runV41(sku) {
             messages: [
                 { 
                     role: "system", 
-                    content: `Eres un experto en inteligencia de filtros. Los nombres de fabricantes no aparecen por razones legales. 
-                    Tu tarea es identificar el fabricante por el PATRÓN del código:
-                    1. OEM CODES: Identifica códigos de maquinaria (ej: Caterpillar, Cummins, Komatsu, Volvo, John Deere).
-                    2. CROSS REFERENCE: Identifica marcas de filtros (ej: Baldwin, Fleetguard, Wix, Mann, Fram, Parker).
-                    3. INCLUYE SIEMPRE DONALDSON como el fabricante de origen si el SKU coincide.
-                    Responde en JSON: oem_codes, cross_ref_codes, desc, thread, height_mm, od_mm.` 
+                    content: `Extrae datos técnicos. oem_codes, cross_ref_codes y equipment_apps deben ser strings o listas. JSON keys: oem_codes, cross_ref_codes, equipment_apps, desc, thread, h_mm, od_mm.` 
                 },
-                { role: "user", content: `Analiza esta lista de códigos para el filtro ${sku}. Identifica cuáles son de equipo original (OEM) y cuáles de competencia (filtros) según su nomenclatura: ${bodyText}` }
+                { role: "user", content: `Analiza: ${bodyText}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
@@ -56,16 +54,18 @@ async function runV41(sku) {
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         
+        // APLICAMOS EL APLANADOR (.join) para que Google no de error 400
         await sheet.addRow({
             'Input Code': sku,
-            'Description': d.desc || `Donaldson ${sku}`,
-            'OEM Codes': d.oem_codes,
-            'Cross Reference Codes': d.cross_ref_codes,
-            'Thread Size': d.thread,
-            'Height (mm)': d.height_mm,
-            'Outer Diameter (mm)': d.od_mm,
+            'Description': flatten(d.desc),
+            'OEM Codes': flatten(d.oem_codes),
+            'Cross Reference Codes': flatten(d.cross_ref_codes),
+            'Equipment Applications': flatten(d.equipment_apps),
+            'Thread Size': flatten(d.thread),
+            'Height (mm)': flatten(d.h_mm),
+            'Outer Diameter (mm)': flatten(d.od_mm),
             'Technical Sheet URL': productUrl,
-            'Audit Status': `V41_PATTERN_DETECTED_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V42_FIXED_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -73,13 +73,14 @@ async function runV41(sku) {
 
     } catch (err) {
         if (browser) await browser.close();
+        console.error("❌ ERROR DETECTADO:", err.message);
         return { sku, status: "ERROR", msg: err.message };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV41(req.params.code.toUpperCase());
+    const result = await runV42(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080);
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V42.00 FIX ONLINE"));
