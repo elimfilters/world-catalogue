@@ -16,69 +16,65 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-const cleanValue = (v) => {
-    if (v === null || v === undefined) return "N/A";
-    if (Array.isArray(v)) return v.map(i => (typeof i === 'object' ? JSON.stringify(i) : i)).join(', ');
-    if (typeof v === 'object') return JSON.stringify(v);
-    return String(v).trim();
-};
+const cleanValue = (v) => (v === null || v === undefined) ? "N/A" : String(v).trim();
 
-async function runV48(sku) {
-    console.log(`[V48] 🛠️ Mazo de Demolición en acción: ${sku}`);
-    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+async function runV49(sku) {
+    console.log(`[V49] 📡 Iniciando rastreo para: ${sku}`);
+    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
+    
     try {
-        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2', timeout: 60000 });
-        const productUrl = await page.evaluate(() => {
-            const link = document.querySelector('a.donaldson-part-details') || document.querySelector('a[href*="/product/"]');
-            return link ? link.href : null;
-        });
+        await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
+        const productUrl = await page.evaluate(() => document.querySelector('a.donaldson-part-details')?.href);
+
         if (!productUrl) throw new Error("SKU_NOT_FOUND");
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        await page.evaluate(async () => {
-            window.scrollTo(0, document.body.scrollHeight);
-            await new Promise(r => setTimeout(r, 2000));
-            const expand = async () => {
-                const btns = Array.from(document.querySelectorAll('a, button')).filter(b => b.innerText.includes('MOSTRAR MÁS') || b.innerText.includes('SHOW MORE'));
-                for (let b of btns) { b.click(); await new Promise(r => setTimeout(r, 1500)); }
-            };
-            await expand();
-            const tab = Array.from(document.querySelectorAll('.nav-link, .nav-tabs a')).find(t => t.innerText.includes('EQUIP'));
-            if (tab) { tab.click(); await new Promise(r => setTimeout(r, 2000)); await expand(); }
-        });
-        const fullBodyText = await page.evaluate(() => document.body.innerText.replace(/\s+/g, ' '));
+        await new Promise(r => setTimeout(r, 4000));
+
+        const fullText = await page.evaluate(() => document.body.innerText.substring(0, 15000));
+        
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
             messages: [
-                { role: "system", content: "Extrae JSON técnico: desc, h_mm, h_in, od_mm, od_in, id_mm, thread, micron, efficiency, oem_codes, cross_ref, equipment. No resumas códigos." },
-                { role: "user", content: `Filtro ${sku}: ${fullBodyText.substring(0, 20000)}` }
+                { role: "system", content: "Extrae JSON: desc, oem_codes, cross_ref, equipment." }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
+
         const d = JSON.parse(response.data.choices[0].message.content);
+        
+        // --- LOG DE CONTROL ---
+        console.log(`[V49] 📝 Datos preparados para enviar: ${d.desc.substring(0, 30)}...`);
+
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        await sheet.addRow({
+        
+        if (!sheet) {
+            console.error("❌ ERROR: No se encontró la pestaña 'MASTER_UNIFIED_V5'");
+            return { sku, status: "ERROR_TAB_NOT_FOUND" };
+        }
+
+        const newRow = {
             'Input Code': sku,
             'Description': cleanValue(d.desc),
-            'Thread Size': cleanValue(d.thread),
-            'Height (mm)': cleanValue(d.h_mm),
-            'Height (inch)': cleanValue(d.h_in),
-            'Outer Diameter (mm)': cleanValue(d.od_mm),
-            'Micron Rating': cleanValue(d.micron),
-            'Nominal Efficiency (%)': cleanValue(d.efficiency),
             'OEM Codes': cleanValue(d.oem_codes),
             'Cross Reference Codes': cleanValue(d.cross_ref),
             'Equipment Applications': cleanValue(d.equipment),
-            'Technical Sheet URL': productUrl,
-            'Audit Status': `V48_FIX_FINAL_${new Date().toLocaleTimeString()}`
-        });
+            'Technical Sheet URL': productUrl
+        };
+
+        await sheet.addRow(newRow);
+        console.log(`[V49] ✅ FILA ESCRITA CON ÉXITO EN GOOGLE SHEETS`);
+
         await browser.close();
         return { sku, status: "EXITO" };
+
     } catch (err) {
         if (browser) await browser.close();
+        console.error(`[V49] ❌ ERROR CRÍTICO: ${err.message}`);
         return { sku, status: "ERROR", msg: err.message };
     }
 }
-app.get('/api/search/:code', async (req, res) => { res.json(await runV48(req.params.code.toUpperCase())); });
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V48.00 FIX FINAL ONLINE"));
+
+app.get('/api/search/:code', async (req, res) => { res.json(await runV49(req.params.code.toUpperCase())); });
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V49.00 TRACKER ONLINE"));
