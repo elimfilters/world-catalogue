@@ -16,76 +16,76 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-// FUNCIÓN PARA CONSULTAR A GROQ (EL CEREBRO)
-async function askGroq(pageContent) {
+// 🧠 FUNCIÓN DE INTELIGENCIA ARTIFICIAL (GROQ)
+async function extractWithAI(rawText) {
     try {
+        console.log("[V31] 🤖 Consultando a la IA Llama 3...");
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama3-8b-8192",
             messages: [
-                { role: "system", content: "Eres un experto en filtros industriales. Extrae solo el 'Thread Size' del texto. Si no lo ves, responde 'N/A'. Solo responde el valor, nada de explicaciones." },
-                { role: "user", content: `Del siguiente texto de una web de Donaldson, dime la rosca (Thread Size): ${pageContent.substring(0, 5000)}` }
+                { role: "system", content: "Eres un extractor de datos técnicos. Tu única misión es encontrar el 'Thread Size' (Rosca) en el texto. Responde SOLO el valor (ej: 1-14 UN). Si no existe, responde 'N/A'." },
+                { role: "user", content: `Extrae la rosca de este texto: ${rawText.substring(0, 4000)}` }
             ]
         }, {
-            headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' }
+            headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` }
         });
         return response.data.choices[0].message.content.trim();
-    } catch (e) { return "ERROR_AI"; }
+    } catch (e) { return "N/A_AI_ERROR"; }
 }
 
-async function processSkuV30(sku) {
-    console.log(`[V30] 🧠 Iniciando IA + Stealth para: ${sku}`);
+async function runV31(sku) {
+    console.log(`[V31] 🛡️ Iniciando Misión Final para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
     try {
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
         
-        // Intentamos encontrar el producto
-        const productLink = await page.$('a[href*="/product/"]');
-        if (productLink) {
-            await productLink.click();
-            await page.waitForTimeout(5000); // Esperamos que cargue la ficha
-            
-            // CAPTURA DE TEXTO CRUDA (Para Groq)
-            const bodyText = await page.evaluate(() => document.body.innerText);
-            
-            // PLAN A: Extracción por Código
-            let thread = await page.evaluate(() => {
-                const td = Array.from(document.querySelectorAll('td')).find(el => el.innerText.includes('Thread Size'));
-                return td ? td.nextElementSibling.innerText.trim() : null;
-            });
+        // Clic en el producto
+        await page.waitForSelector('a[href*="/product/"]', { timeout: 8000 });
+        await page.click('a[href*="/product/"]');
+        await new Promise(r => setTimeout(r, 4000)); // Espera de carga humana
 
-            // PLAN B: Si el código falla, entra la IA (Groq)
-            if (!thread || thread === "N/A") {
-                console.log("[V30] 🤖 El código falló. Consultando a Groq...");
-                thread = await askGroq(bodyText);
-            }
+        // Capturamos TODO el texto de la página
+        const bodyText = await page.evaluate(() => document.body.innerText);
+        
+        // PLAN A: Búsqueda rápida por código
+        let thread = await page.evaluate(() => {
+            const row = Array.from(document.querySelectorAll('tr')).find(r => r.innerText.includes('Thread Size'));
+            return row ? row.querySelector('td:last-child').innerText.trim() : null;
+        });
 
-            console.log(`✅ Resultado Final: ${thread}`);
-            
-            // GUARDAR EN GOOGLE
-            await doc.loadInfo();
-            const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-            await sheet.addRow({
-                'Input Code': sku,
-                'Thread Size': thread,
-                'Audit Status': `V30_AI_CHECKED_${new Date().toLocaleTimeString()}`
-            });
-
-            await browser.close();
-            return { sku, thread, method: thread.includes("AI") ? "GROQ" : "CSS" };
-        } else {
-            throw new Error("Producto no visible");
+        // PLAN B: Si falló, Groq entra al rescate
+        let method = "CODIGO_DIRECTO";
+        if (!thread || thread === "N/A") {
+            thread = await extractWithAI(bodyText);
+            method = "IA_GROQ";
         }
+
+        console.log(`✅ CAPTURADO (${method}): ${thread}`);
+
+        // GUARDAR EN GOOGLE
+        await doc.loadInfo();
+        const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
+        await sheet.addRow({
+            'Input Code': sku,
+            'Thread Size': thread,
+            'Audit Status': `V31_${method}_${new Date().toLocaleTimeString()}`
+        });
+
+        await browser.close();
+        return { sku, thread, method };
+
     } catch (err) {
         await browser.close();
-        return { sku, status: "NOT_FOUND", error: err.message };
+        console.error("❌ FALLO TOTAL:", err.message);
+        return { sku, status: "ERROR", msg: err.message };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await processSkuV30(req.params.code.toUpperCase());
+    const result = await runV31(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080);
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V31.00 IA-STEALTH ONLINE"));
