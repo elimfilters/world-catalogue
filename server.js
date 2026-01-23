@@ -16,53 +16,46 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-async function extractWithAI(rawText) {
-    try {
-        console.log("[V32] 🤖 IA analizando texto de la página...");
-        const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-            model: "llama3-8b-8192",
-            messages: [
-                { role: "system", content: "Extrae solo el 'Thread Size'. Responde SOLO el valor (ej: 1-14 UN). Si no hay, responde N/A." },
-                { role: "user", content: `Texto: ${rawText.substring(0, 5000)}` }
-            ]
-        }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
-        return response.data.choices[0].message.content.trim();
-    } catch (e) { return "N/A"; }
-}
-
-async function runV32(sku) {
-    console.log(`[V32] 🚀 Iniciando salto directo para: ${sku}`);
-    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+async function runV33(sku) {
+    console.log(`[V33] 🧐 Extracción profunda para: ${sku}`);
+    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
     try {
-        // 1. Ir a la búsqueda
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
         
-        // 2. EXTRAER LA URL DIRECTA (SIN HACER CLIC)
         const productUrl = await page.evaluate(() => {
             const link = document.querySelector('a.donaldson-part-details') || document.querySelector('a[href*="/product/"]');
             return link ? link.href : null;
         });
 
-        if (!productUrl) throw new Error("SKU no encontrado en Donaldson");
+        if (!productUrl) throw new Error("No URL");
 
-        // 3. NAVEGACIÓN DIRECTA
-        console.log(`🔗 Saltando a la ficha técnica: ${productUrl}`);
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
         
-        // 4. CAPTURA TOTAL PARA GROQ
-        const bodyText = await page.evaluate(() => document.body.innerText);
-        const thread = await extractWithAI(bodyText);
+        // ESPERA CRÍTICA: Damos tiempo a que las tablas de JavaScript se pinten
+        await new Promise(r => setTimeout(r, 6000)); 
 
-        console.log(`✅ Resultado IA: ${thread}`);
+        const bodyText = await page.evaluate(() => document.body.innerText);
+        
+        // IA con el Prompt Refinado
+        const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+            model: "llama3-8b-8192",
+            messages: [
+                { role: "system", content: "Busca 'Thread Size' o 'Rosca'. Responde SOLO el valor. Si no hay, N/A." },
+                { role: "user", content: `Texto: ${bodyText.substring(0, 6000)}` }
+            ]
+        }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
+
+        const thread = response.data.choices[0].message.content.trim();
+        console.log(`✅ Resultado Final: ${thread}`);
 
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         await sheet.addRow({
             'Input Code': sku,
             'Thread Size': thread,
-            'Audit Status': `V32_TELEPORT_SUCCESS_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V33_FINAL_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -70,14 +63,13 @@ async function runV32(sku) {
 
     } catch (err) {
         await browser.close();
-        console.error("❌ ERROR:", err.message);
         return { sku, status: "ERROR", msg: err.message };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV32(req.params.code.toUpperCase());
+    const result = await runV33(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V32.00 TELEPORT ONLINE"));
+app.listen(process.env.PORT || 8080);
