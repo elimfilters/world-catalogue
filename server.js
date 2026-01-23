@@ -9,35 +9,28 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v9.00: Master Intelligence Active (Matrix Protocol)'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v10.00: Non-Blocking Matrix Engine Active'));
 
-const SCRAPE = async (url, actions) => {
-    // Timeout de 120 segundos para asegurar que Donaldson procese todos los clics de la matriz
-    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1&premium_proxy=1&timeout=120000&actions=${encodeURIComponent(JSON.stringify(actions))}`;
-    const res = await axios.get(target);
-    return cheerio.load(res.data);
-};
-
-app.get('/api/search/:code', async (req, res) => {
-    const code = req.params.code.toUpperCase().trim();
+// FUNCIÓN MAESTRA DE SCRAPING (Ejecuta tu matriz punto por punto)
+async function executeVictorMatrix(code) {
+    console.log(`🛠️ Iniciando Proceso de Fondo para: ${code}`);
     const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`;
-
-    // IMPLEMENTACIÓN DE LA MATRIZ DE VÍCTOR
+    
+    // Matriz exacta de clics que tú definiste
     const actions = [
-        { "click": ".listTile a.donaldson-part-details" }, { "wait": 4000 }, // Espera carga de ficha
-        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 1000 }, 
-        { "click": "#showMoreProductSpecsButton" }, { "wait": 1000 },        // Pestaña 1
-        { "click": "a[data-target='.comapreProdListSection']" }, { "wait": 1500 }, // Pestaña 2
-        { "click": "a[data-target='.ListCrossReferenceDetailPageComp']" }, { "wait": 1000 },
-        { "click": "#showMorePdpListButton" }, { "wait": 1500 },             // Pestaña 3
-        { "click": "a[data-target='.ListPartDetailPageComp']" }, { "wait": 1000 },
-        { "click": "#showMorePdpListButton" }, { "wait": 2000 }              // Pestaña 4
+        { "click": ".listTile a.donaldson-part-details" }, { "wait": 5000 },
+        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "click": "#showMoreProductSpecsButton" }, { "wait": 1000 },
+        { "click": "a[data-target='.comapreProdListSection']" }, { "wait": 2000 },
+        { "click": "a[data-target='.ListCrossReferenceDetailPageComp']" }, { "click": "#showMorePdpListButton" }, { "wait": 1000 },
+        { "click": "a[data-target='.ListPartDetailPageComp']" }, { "click": "#showMorePdpListButton" }, { "wait": 2000 }
     ];
 
     try {
-        const $ = await SCRAPE(searchUrl, actions);
+        const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&timeout=120000&actions=${encodeURIComponent(JSON.stringify(actions))}`;
+        const res = await axios.get(target);
+        const $ = cheerio.load(res.data);
         const bodyText = $('body').text();
-        
+
         const data = {
             code,
             description: $('.donaldson-product-details').first().text().trim(),
@@ -48,28 +41,36 @@ app.get('/api/search/:code', async (req, res) => {
             },
             alternatives: [],
             crossRefs: [],
-            oemCodes: [],
             equipment: []
         };
 
-        // Extracción según la matriz
         $('.comapreProdListSection .product-name').each((i, el) => data.alternatives.push($(el).text().trim()));
-        
         $('.ListCrossReferenceDetailPageComp tr').each((i, el) => {
             const raw = $(el).find('td').first().text().trim().split(/\s+/)[0];
-            if (raw && raw !== "Fabricante") {
-                if (i < 4) data.oemCodes.push(raw); else data.crossRefs.push(raw);
-            }
+            if (raw && raw !== "Fabricante") data.crossRefs.push(raw);
         });
-
         $('.ListPartDetailPageComp .equipment-name').each((i, el) => data.equipment.push($(el).text().trim()));
 
+        // Sincronizar al final
         await syncToSheet(data);
-        res.json({ status: "SUCCESS", data });
+        console.log(`✅ Tarea completada con éxito para ${code}`);
 
     } catch (err) {
-        res.status(500).json({ error: "Falla en Matriz V9.00", detail: err.message });
+        console.error(`❌ Error en segundo plano para ${code}:`, err.message);
     }
+}
+
+app.get('/api/search/:code', (req, res) => {
+    const code = req.params.code.toUpperCase().trim();
+    
+    // RESPUESTA INMEDIATA A JULES PARA QUE NO SE CUELGUE
+    res.json({ 
+        status: "PROCESSING", 
+        message: `Víctor, he iniciado la extracción de ${code} siguiendo tu matriz. Los datos aparecerán en la Google Sheet en unos 90 segundos. No necesitas esperar aquí.` 
+    });
+
+    // EJECUCIÓN EN SEGUNDO PLANO
+    executeVictorMatrix(code);
 });
 
 async function syncToSheet(d) {
@@ -85,10 +86,9 @@ async function syncToSheet(d) {
         'Height (mm)': d.specs.height || 'N/A',
         'Outer Diameter (mm)': d.specs.od || 'N/A',
         'Alternative Products': d.alternatives.join(', '),
-        'OEM Codes': d.oemCodes.join(', '),
         'Cross Reference Codes': d.crossRefs.join(', '),
         'Equipment Applications': d.equipment.slice(0, 15).join('; '),
-        'Audit Status': 'V9.00_MATRIX_CERTIFIED'
+        'Audit Status': 'V10.00_ASYNC_SUCCESS'
     });
 }
 
