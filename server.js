@@ -18,12 +18,12 @@ const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
 async function extractWithAI(rawText) {
     try {
-        console.log("[V32] 🤖 Consultando a Groq...");
+        console.log("[V32] 🤖 IA analizando texto de la página...");
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama3-8b-8192",
             messages: [
-                { role: "system", content: "Extrae solo el 'Thread Size'. Responde SOLO el valor. Si no hay, N/A." },
-                { role: "user", content: `Texto: ${rawText.substring(0, 4000)}` }
+                { role: "system", content: "Extrae solo el 'Thread Size'. Responde SOLO el valor (ej: 1-14 UN). Si no hay, responde N/A." },
+                { role: "user", content: `Texto: ${rawText.substring(0, 5000)}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
         return response.data.choices[0].message.content.trim();
@@ -31,40 +31,42 @@ async function extractWithAI(rawText) {
 }
 
 async function runV32(sku) {
-    console.log(`[V32] ⚡ Teletransportando a: ${sku}`);
-    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    console.log(`[V32] 🚀 Iniciando salto directo para: ${sku}`);
+    const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
     const page = await browser.newPage();
     
     try {
+        // 1. Ir a la búsqueda
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${sku}*`, { waitUntil: 'networkidle2' });
         
-        // CAMBIO CRÍTICO: En lugar de click, obtenemos el link y navegamos
+        // 2. EXTRAER LA URL DIRECTA (SIN HACER CLIC)
         const productUrl = await page.evaluate(() => {
             const link = document.querySelector('a.donaldson-part-details') || document.querySelector('a[href*="/product/"]');
             return link ? link.href : null;
         });
 
-        if (!productUrl) throw new Error("Producto no encontrado en la búsqueda");
+        if (!productUrl) throw new Error("SKU no encontrado en Donaldson");
 
-        console.log(`🔗 Saltando directo a: ${productUrl}`);
+        // 3. NAVEGACIÓN DIRECTA
+        console.log(`🔗 Saltando a la ficha técnica: ${productUrl}`);
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        await new Promise(r => setTimeout(r, 3000)); // Pausa humana
-
+        
+        // 4. CAPTURA TOTAL PARA GROQ
         const bodyText = await page.evaluate(() => document.body.innerText);
         const thread = await extractWithAI(bodyText);
 
-        console.log(`✅ IA Capturó: ${thread}`);
+        console.log(`✅ Resultado IA: ${thread}`);
 
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         await sheet.addRow({
             'Input Code': sku,
             'Thread Size': thread,
-            'Audit Status': `V32_SUCCESS_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V32_TELEPORT_SUCCESS_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
-        return { sku, thread };
+        return { sku, thread, status: "EXITO" };
 
     } catch (err) {
         await browser.close();
