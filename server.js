@@ -9,62 +9,71 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.80: Click & Expand Logic Active'));
+mongoose.connect(process.env.MONGO_URL).then(() => console.log('🚀 v6.90: Full Intelligence Matrix (Alternatives/Cross/Equip) Active'));
 
 const SCRAPE = async (url) => {
-    // Definimos las acciones que descubriste en el DevTools
+    // SECUENCIA MAESTRA DE CLICS (Según tu análisis)
     const actions = encodeURIComponent(JSON.stringify([
-        { "click": "a[data-target='.prodSpecInfoDiv']" },
-        { "wait": 1000 },
-        { "click": "#showMoreProductSpecsButton" },
-        { "wait": 1000 }
+        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 500 },
+        { "click": "#showMoreProductSpecsButton" }, { "wait": 500 },
+        { "click": "a[data-target='.comapreProdListSection']" }, { "wait": 800 }, // Alternativos
+        { "click": "a[data-target='.ListCrossReferenceDetailPageComp']" }, { "wait": 500 },
+        { "click": "#showMorePdpListButton" }, { "wait": 800 }, // Referencia Cruzada
+        { "click": "a[data-target='.ListPartDetailPageComp']" }, { "wait": 500 },
+        { "click": "#showMorePdpListButton" }, { "wait": 800 }  // Equipos
     ]));
 
-    // Enviamos las acciones a Scrapestack
     const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(url)}&render_js=1&premium_proxy=1&actions=${actions}`;
-    
-    console.log(`🖱️ Interactuando con la página: ${url}`);
     const res = await axios.get(target);
     return cheerio.load(res.data);
 };
 
-async function getDeepData(query) {
-    const d = { specs: {}, crossRefs: [], validated: false };
+async function getFullIntelligence(query) {
+    const d = { specs: {}, alts: [], crossRefs: [], oemCodes: [], equipment: [], validated: false };
     try {
         const $search = await SCRAPE(`https://shop.donaldson.com/store/search?q=${query}`);
         const link = $search('a[href*="/product/"]').first().attr('href');
         
         if (link) {
-            const detailUrl = link.startsWith('http') ? link : `https://shop.donaldson.com${link}`;
-            const $d = await SCRAPE(detailUrl); // Aquí es donde se ejecutan los clics de Atributos y Mostrar Más
+            const $d = await SCRAPE(link.startsWith('http') ? link : `https://shop.donaldson.com${link}`);
             d.validated = true;
 
-            // Ahora que la tabla está expandida, leemos TODO el texto
+            // 1. PRODUCTOS ALTERNATIVOS (Creación de variantes)
+            $d('.comapreProdListSection .product-card').each((i, el) => {
+                const altCode = $d(el).find('.product-name').text().trim();
+                if (altCode) d.alts.push(altCode);
+            });
+
+            // 2. REFERENCIAS CRUZADAS (Limpieza de Fabricantes)
+            $d('.ListCrossReferenceDetailPageComp tr').each((i, el) => {
+                const rawText = $d(el).find('td').first().text().trim();
+                const codeOnly = rawText.split(/\s+/)[0]; // Toma solo el primer bloque (el código)
+                if (codeOnly) {
+                    if (i < 3) d.oemCodes.push(codeOnly); // Los primeros suelen ser OEM
+                    else d.crossRefs.push(codeOnly);
+                }
+            });
+
+            // 3. PRODUCTOS DEL EQUIPO (Aplicaciones)
+            $d('.ListPartDetailPageComp .equipment-name').each((i, el) => {
+                d.equipment.push($d(el).text().trim());
+            });
+
+            // 4. ATRIBUTOS TÉCNICOS
             const bodyText = $d('body').text();
-            
-            const extract = (regex) => {
-                const match = bodyText.match(regex);
-                return match ? match[1].trim() : null;
-            };
-
-            d.specs.thread = extract(/Thread Size:\s*([^\n\r]*)/i);
-            d.specs.od = extract(/Outer Diameter:\s*([\d.]+)\s*(?:mm|inch)/i);
-            d.specs.height = extract(/Height:\s*([\d.]+)\s*(?:mm|inch)/i);
-            d.specs.gasketOd = extract(/Gasket OD:\s*([\d.]+)\s*(?:mm|inch)/i);
-            d.specs.gasketId = extract(/Gasket ID:\s*([\d.]+)\s*(?:mm|inch)/i);
-            d.specs.micron = extract(/Efficiency[^:]*:\s*([^\n\r]*)/i);
-
-            $d('.cross-reference-list li').each((i, el) => d.crossRefs.push($d(el).text().trim()));
+            d.specs.thread = bodyText.match(/Thread Size:\s*([^\n\r]*)/i)?.[1]?.trim();
+            d.specs.od = bodyText.match(/Outer Diameter:\s*([\d.]+)/i)?.[1]?.trim();
+            d.specs.height = bodyText.match(/Height:\s*([\d.]+)/i)?.[1]?.trim();
         }
-    } catch (e) { console.error("Error en interacción:", e.message); }
+    } catch (e) { console.error("Error Matrix:", e.message); }
     return d;
 }
 
 app.get('/api/search/:code', async (req, res) => {
     const code = req.params.code.toUpperCase();
     try {
-        const data = await getDeepData(code);
-        if (!data.validated) return res.status(404).send("NOT_FOUND_AFTER_INTERACTION");
+        const data = await getFullIntelligence(code);
+        if (!data.validated) return res.status(404).send("NOT_FOUND_IN_MATRIX");
 
         await syncToSheet(data, code);
         res.json({ status: "SUCCESS", data });
@@ -81,12 +90,11 @@ async function syncToSheet(d, code) {
         'Input Code': code,
         'ELIMFILTERS SKU': `EF-${code.slice(-4)}`,
         'Thread Size': d.specs.thread || 'N/A',
-        'Height (mm)': d.specs.height || 'N/A',
-        'Outer Diameter (mm)': d.specs.od || 'N/A',
-        'Gasket OD (mm)': d.specs.gasketOd || 'N/A',
-        'Micron Rating': d.specs.micron || 'N/A',
+        'OEM Codes': d.oemCodes.join(', '),
         'Cross Reference Codes': d.crossRefs.join(', '),
-        'Audit Status': 'V6.80_INTERACTIVE_VALIDATED'
+        'Alternative Products': d.alts.join(', '), // Columna para crear los otros 3 SKU
+        'Equipment Applications': d.equipment.slice(0, 15).join('; '),
+        'Audit Status': 'V6.90_FULL_INTELLIGENCE'
     });
 }
 
