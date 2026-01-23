@@ -16,11 +16,10 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-// Función para convertir listas de la IA en texto plano para Google
 const flatten = (val) => Array.isArray(val) ? val.join(', ') : (val || "N/A");
 
-async function runV42(sku) {
-    console.log(`[V42] 🛠️ Corrigiendo formato y procesando: ${sku}`);
+async function runV43(sku) {
+    console.log(`[V43] 📡 Escaneo Exhaustivo de Columnas para: ${sku}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     
@@ -43,29 +42,57 @@ async function runV42(sku) {
             messages: [
                 { 
                     role: "system", 
-                    content: `Extrae datos técnicos. oem_codes, cross_ref_codes y equipment_apps deben ser strings o listas. JSON keys: oem_codes, cross_ref_codes, equipment_apps, desc, thread, h_mm, od_mm.` 
+                    content: `Eres un ingeniero experto en filtros. Extrae CADA detalle técnico. 
+                    Mapea a estas llaves JSON: 
+                    desc, type, subtype, thread, h_mm, h_in, od_mm, od_in, id_mm, god_mm, god_in, gid_mm, gid_in, 
+                    iso_std, micron, beta, efficiency, flow_lpm, flow_gpm, flow_cfm, p_max, p_burst, p_collapse, p_bypass, 
+                    p_valve, media, anti_drain, tech, features, oem, cross, equip, engine. 
+                    Diferencia bien OEM (marcas de máquinas) de Cross Reference (marcas de filtros).` 
                 },
-                { role: "user", content: `Analiza: ${bodyText}` }
+                { role: "user", content: `Analiza este texto y llena todos los campos para el filtro ${sku}: ${bodyText}` }
             ]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
         const d = JSON.parse(response.data.choices[0].message.content);
-        
         await doc.loadInfo();
         const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
         
-        // APLICAMOS EL APLANADOR (.join) para que Google no de error 400
         await sheet.addRow({
             'Input Code': sku,
             'Description': flatten(d.desc),
-            'OEM Codes': flatten(d.oem_codes),
-            'Cross Reference Codes': flatten(d.cross_ref_codes),
-            'Equipment Applications': flatten(d.equipment_apps),
+            'Filter Type': flatten(d.type),
+            'Subtype': flatten(d.subtype),
             'Thread Size': flatten(d.thread),
             'Height (mm)': flatten(d.h_mm),
+            'Height (inch)': flatten(d.h_in),
             'Outer Diameter (mm)': flatten(d.od_mm),
+            'Outer Diameter (inch)': flatten(d.od_in),
+            'Inner Diameter (mm)': flatten(d.id_mm),
+            'Gasket OD (mm)': flatten(d.god_mm),
+            'Gasket OD (inch)': flatten(d.god_in),
+            'Gasket ID (mm)': flatten(d.gid_mm),
+            'Gasket ID (inch)': flatten(d.gid_in),
+            'ISO Test Method': flatten(d.iso_std),
+            'Micron Rating': flatten(d.micron),
+            'Beta Ratio': flatten(d.beta),
+            'Nominal Efficiency (%)': flatten(d.efficiency),
+            'Rated Flow (L/min)': flatten(d.flow_lpm),
+            'Rated Flow (GPM)': flatten(d.flow_gpm),
+            'Max Pressure (PSI)': flatten(d.p_max),
+            'Burst Pressure (PSI)': flatten(d.p_burst),
+            'Collapse Pressure (PSI)': flatten(d.p_collapse),
+            'Bypass Valve Pressure (PSI)': flatten(d.p_bypass),
+            'Pressure Valve': flatten(d.p_valve),
+            'Media Type': flatten(d.media),
+            'Anti-Drainback Valve': flatten(d.anti_drain),
+            'Filtration Technology': flatten(d.tech),
+            'Special Features': flatten(d.features),
+            'OEM Codes': flatten(d.oem),
+            'Cross Reference Codes': flatten(d.cross),
+            'Equipment Applications': flatten(d.equip),
+            'Engine Applications': flatten(d.engine),
             'Technical Sheet URL': productUrl,
-            'Audit Status': `V42_FIXED_${new Date().toLocaleTimeString()}`
+            'Audit Status': `V43_FULL_SCAN_${new Date().toLocaleTimeString()}`
         });
 
         await browser.close();
@@ -73,14 +100,13 @@ async function runV42(sku) {
 
     } catch (err) {
         if (browser) await browser.close();
-        console.error("❌ ERROR DETECTADO:", err.message);
         return { sku, status: "ERROR", msg: err.message };
     }
 }
 
 app.get('/api/search/:code', async (req, res) => {
-    const result = await runV42(req.params.code.toUpperCase());
+    const result = await runV43(req.params.code.toUpperCase());
     res.json(result);
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V42.00 FIX ONLINE"));
+app.listen(process.env.PORT || 8080);
