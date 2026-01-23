@@ -8,50 +8,53 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-app.get('/', (req, res) => res.send('<h1>🚀 V23.00 Bloodhound - Online</h1><p>Donaldson no pudo con el Sniper, ahora va el Rastreador.</p>'));
+app.get('/', (req, res) => res.send('<h1>🚀 V25.00 X-Ray - Online</h1>'));
 
-async function runBloodhound(code) {
-    console.log(`[V23.00] 🐕 Rastreando producto: ${code}`);
-    
-    // Volvemos al buscador que SÍ funciona
+async function runXRayProtocol(code) {
+    console.log(`[V25.00] ☢️ Escaneando con Rayos X: ${code}`);
     const searchUrl = `https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`;
     
     const actions = [
-        { "wait_for": "a[href*='/product/']" }, // Espera a CUALQUIER enlace de producto
-        { "click": "a[href*='/product/']:first" }, // Haz clic en el primerito que salga
-        { "wait_for": ".prodSpecInfoDiv" }, 
-        { "click": "a[data-target='.prodSpecInfoDiv']" }, { "wait": 2000 },
-        { "click": "#showMoreProductSpecsButton" }, { "wait": 3000 }
+        { "wait_for": "a[href*='/product/']" },
+        { "click": "a[href*='/product/']:first" },
+        { "wait": 10000 }, // Espera agresiva de 10 segundos para que el JS cargue sí o sí
+        { "click": "a[data-target='.prodSpecInfoDiv']" },
+        { "click": "#showMoreProductSpecsButton" },
+        { "wait": 2000 }
     ];
 
-    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&proxy_type=residential&country_code=us&actions=${encodeURIComponent(JSON.stringify(actions))}`;
+    // USAMOS "ULTRASTEALTH" (keep_headers + residential + desktop)
+    const target = `https://api.scrapestack.com/scrape?access_key=${process.env.SCRAPESTACK_KEY}&url=${encodeURIComponent(searchUrl)}&render_js=1&premium_proxy=1&proxy_type=residential&keep_headers=1&device=desktop&actions=${encodeURIComponent(JSON.stringify(actions))}`;
 
     try {
         const res = await axios.get(target);
         const $ = cheerio.load(res.data);
         const html = $('body').html() || "";
+        const text = $('body').text();
 
-        // Si vemos el 404 de nuevo, lo registramos para insultarlos con pruebas
-        if (html.includes("404") || html.includes("no encontramos la página")) {
-            throw new Error("Donaldson lanzó un 404 en el buscador.");
-        }
+        // LOG DE DIAGNÓSTICO: ¿Vemos la palabra Thread en algún lado?
+        console.log(`🔍 ¿Palabra 'Thread' presente?: ${text.includes("Thread")}`);
+
+        // EXTRACCIÓN MULTI-ZONA
+        const threadMatch = html.match(/Thread Size<\/td>\s*<td>([^<]*)<\/td>/i) || 
+                            text.match(/Thread Size:\s*([^\n\r]*)/i) ||
+                            text.match(/Tamaño de la rosca:\s*([^\n\r]*)/i);
 
         const data = {
             mainCode: code,
-            description: $('h1').first().text().trim() || "Filtro Encontrado",
+            description: $('h1').first().text().trim() || "BLOQUEO_VISUAL",
             specs: {
-                thread: html.match(/Thread Size<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A",
-                od: html.match(/Outer Diameter<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A",
-                height: html.match(/Height<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A"
+                thread: threadMatch ? threadMatch[1].trim() : "N/A",
+                od: html.match(/Outer Diameter<\/td>\s*<td>([^<]*)<\/td>/i)?.[1]?.trim() || "N/A"
             }
         };
 
-        console.log(`✅ ¡Lo tenemos! -> ${data.description} | Rosca: ${data.specs.thread}`);
-        await syncToGoogle(data, "EXITO_V23");
+        console.log(`✅ Resultado: ${data.description} | Rosca: ${data.specs.thread}`);
+        await syncToGoogle(data, text.includes("Thread") ? "XRAY_SUCCESS" : "XRAY_BLOCKED");
 
     } catch (err) {
-        console.error("❌ ERROR SUCIO:", err.message);
-        await syncToGoogle({ mainCode: code, description: "DONALDSON_FALLO_WEB" }, `ERROR: ${err.message}`);
+        console.error("❌ FALLO X-RAY:", err.message);
+        await syncToGoogle({ mainCode: code, description: "ERROR_V25" }, err.message);
     }
 }
 
@@ -64,15 +67,15 @@ async function syncToGoogle(d, status) {
         await sheet.addRow({
             'Input Code': d.mainCode,
             'Description': d.description,
-            'Thread Size': d.specs?.thread || "N/A",
-            'Audit Status': status
+            'Thread Size': d.specs.thread || "N/A",
+            'Audit Status': `V25_${status}_${new Date().toLocaleTimeString()}`
         });
     } catch (e) { console.error("Error Sheet:", e.message); }
 }
 
 app.get('/api/search/:code', (req, res) => {
-    runBloodhound(req.params.code.toUpperCase());
-    res.json({ status: "HUNTING", message: "V23: Rastreando el filtro. Esquivando sus 404 de porquería." });
+    runXRayProtocol(req.params.code.toUpperCase());
+    res.json({ status: "XRAY_STARTED", message: "Víctor, lanzando Rayos X con 10s de espera. No toques nada." });
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V23.00 BLOODHOUND ACTIVO"));
+app.listen(process.env.PORT || 8080);
