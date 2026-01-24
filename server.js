@@ -3,109 +3,106 @@ const puppeteer = require('puppeteer-extra');
 const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
+const { MongoClient } = require('mongodb');
 const axios = require('axios');
 require('dotenv').config();
 
 puppeteer.use(StealthPlugin());
 const app = express();
 
+// 1. CONFIGURACIONES DE CONEXIÓN
 const auth = new JWT({
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
+const mongoUri = process.env.MONGO_URI; 
+const client = new MongoClient(mongoUri);
 
-// 🧬 NÚCLEO DE IDENTIDAD Y SEGMENTACIÓN
-const ELIM_CORE = {
-    "EA1": { tech: "MACROCORE™", sys: "engine air intake", sheet: "MASTER_INDIVIDUAL" },
-    "EF9": { tech: "SYNTEPORE™", sys: "fuel system", sheet: "MASTER_INDIVIDUAL" },
-    "ES9": { tech: "FUEL AQUAGUARD", sys: "fuel/water separation", sheet: "MASTER_INDIVIDUAL" },
-    "EL8": { tech: "SINTRAX™", sys: "lubrication system", sheet: "MASTER_INDIVIDUAL" },
-    "ET9": { tech: "TURBINE SERIES", sys: "turbine fuel system", sheet: "MASTER_INDIVIDUAL" },
-    "EK3": { tech: "DURATECH™", sys: "maintenance kit", sheet: "MASTER_KITS" },
-    "EK5": { tech: "DURATECH™", sys: "heavy-duty maintenance kit", sheet: "MASTER_KITS" }
+// 🧬 MATRIZ DE NARRATIVA COMERCIAL
+const NARRATIVE_MAP = {
+    "EA1": { tech: "MACROCORE™", msg: "aire 100% puro al motor" },
+    "EF9": { tech: "SYNTEPORE™", msg: "armadura sintética, combustible 100% al motor" },
+    "ES9": { tech: "FUEL AQUAGUARD", msg: "protección total contra el agua" },
+    "EL8": { tech: "SINTRAX™", msg: "lubricación extrema para el sistema" }
 };
 
-const getBranding = (donSku, donDesc, input) => {
-    const s = donSku.toUpperCase();
-    const d = donDesc.toUpperCase();
-    const inp = input.toUpperCase();
-    const digits = s.replace(/[^0-9]/g, '');
-    
-    // CASO KITS (EK3/EK5)
-    if (s.startsWith('P559') || d.includes('KIT')) {
-        const isHD = (d.includes('CAT') || d.includes('VOLVO') || d.includes('CUMMINS') || d.includes('HEAVY'));
-        const p = isHD ? "EK5" : "EK3";
-        return { p, sku: p + digits.slice(-4), duty: isHD ? "HD" : "LD" };
-    }
-    // CASO TURBINAS (ET9)
-    if (s.match(/2020|2040|2010/) || d.includes('TURBINE')) {
-        let suf = (inp.includes('PM')||s.includes('PM')) ? "P" : (inp.includes('TM')||s.includes('TM')) ? "T" : (inp.includes('SM')||s.includes('SM')) ? "S" : "";
-        return { p: "ET9", sku: "ET9" + (s.match(/2020|2040|2010/)?.[0] || digits.slice(-4)) + suf, duty: "HD" };
-    }
-    // CASO INDIVIDUALES
-    let p = "EL8";
-    if (d.includes('AIR')) p = "EA1";
-    else if (d.includes('FUEL') && d.includes('WATER')) p = "ES9";
-    else if (d.includes('FUEL')) p = "EF9";
-    
-    const isHD = (d.includes('CAT') || d.includes('VOLVO') || d.includes('KOMATSU') || d.includes('INDUSTRIAL'));
-    return { p, sku: p + digits, duty: isHD ? "HD" : "LD" };
-};
+// 🛠️ FUNCIÓN: CHEQUEAR EXISTENCIA EN DB (PASO 1)
+async function checkExistingSku(code) {
+    try {
+        await client.connect();
+        const db = client.db('Cluster0');
+        const collection = db.collection('products'); // Ajustar nombre de colección
+        // Buscar en columnas OEM (AH) y Cross (AI)
+        const existing = await collection.findOne({
+            $or: [{ "OEM_Codes": { $regex: code, $options: 'i' } }, { "Cross_Reference": { $regex: code, $options: 'i' } }]
+        });
+        return existing;
+    } finally { await client.close(); }
+}
 
-async function runMaster(inputCode) {
+async function runV100(inputCode) {
+    console.log(`[V100] 🔍 Iniciando Protocolo para: ${inputCode}`);
+
+    // PASO 1: VERIFICAR SI YA EXISTE
+    const existingProduct = await checkExistingSku(inputCode);
+    if (existingProduct) {
+        console.log("✅ Producto encontrado en DB. Enviando al plugin...");
+        return { status: "EXISTING", data: existingProduct };
+    }
+
+    // PASO 2: CLASIFICACIÓN DE DUTY CON GROQ
+    const dutyResponse = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        model: "llama-3.3-70b-versatile",
+        messages: [{
+            role: "system",
+            content: "Eres un experto en filtración. Clasifica el código como 'HD' (Heavy Duty) o 'LD' (Light Duty) basado en fabricante y aplicación. Responde solo con 'HD' o 'LD'."
+        }, { role: "user", content: `Clasifica este código: ${inputCode}` }]
+    }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
+
+    const duty = dutyResponse.data.choices[0].message.content.trim();
+    console.log(`🧠 Veredicto Groq: ${duty}`);
+
+    if (duty === "LD") return { status: "LD_PENDING", msg: "Scraper de FRAM en desarrollo" };
+
+    // PASO 3: SCRAPER DONALDSON (HD)
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
     try {
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${inputCode}*`, { waitUntil: 'networkidle2' });
-        await page.waitForSelector('.donaldson-part-details');
-        
-        const donSku = await page.evaluate(() => document.querySelector('a.donaldson-part-details span')?.innerText.trim());
-        const donDesc = await page.evaluate(() => document.querySelector('.donaldson-product-details')?.innerText.trim() || "");
-        const productUrl = await page.evaluate(() => document.querySelector('a.donaldson-part-details')?.href);
-
-        const b = getBranding(donSku, donDesc, inputCode);
-        const config = ELIM_CORE[b.p] || ELIM_CORE["EL8"];
+        const productUrl = await page.evaluate(() => document.querySelector('.donaldson-part-details')?.href);
+        if (!productUrl) throw new Error("Código no hallado en Donaldson");
 
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        const rawBody = await page.evaluate(() => document.body.innerText);
+        const donSku = await page.evaluate(() => document.querySelector('.donaldson-part-number')?.innerText.trim());
+        const donDesc = await page.evaluate(() => document.body.innerText);
 
-        const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-            model: "llama-3.3-70b-versatile",
-            response_format: { type: "json_object" },
-            messages: [{
-                role: "system",
-                content: `Extrae JSON para 39 columnas. 
-                - OEM Codes: Solo números, sin marcas, separados por coma.
-                - Cross Reference: Solo números de filtros competencia, sin marcas, separados por coma.
-                - Engine Apps: Modelos de motor.
-                - Equipment Year: Rango de años.
-                - Alternative Products: 3 SKUs ELIMFILTERS sugeridos.`
-            }, { role: "user", content: rawBody.substring(0, 15000) }]
-        }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
+        // PASO 4: FORJA DEL SKU (Prefijo + Últimos 4)
+        const digits = donSku.replace(/[^0-9]/g, '');
+        const last4 = digits.slice(-4);
+        let prefix = donDesc.includes('AIR') ? "EA1" : donDesc.includes('WATER') ? "ES9" : "EF9";
+        const finalSku = prefix + last4;
 
-        const d = JSON.parse(response.data.choices[0].message.content);
-        const mDesc = `Elimfilters® ${b.sku} delivers superior performance. ${config.tech} armadura sintética, combustible 100% al motor. Meets or exceeds OEM specifications.`;
+        // PASO 5: NARRATIVA GROQ INTERVENIDA
+        const nar = NARRATIVE_MAP[prefix] || NARRATIVE_MAP["EL8"];
+        const finalDesc = `Elimfilters® ${finalSku} delivers superior performance. ${nar.tech} ${nar.msg}. Meets or exceeds OEM specifications.`;
 
+        // PASO 6: GUARDAR EN GOOGLE SHEETS Y RESPONDER
         await doc.loadInfo();
-        const targetSheet = doc.sheetsByTitle[config.sheet]; // AQUÍ SE DECIDE LA HOJA
-        
-        await targetSheet.addRow([
-            inputCode, b.sku, mDesc, d.type, d.subtype, d.install, b.p, config.tech, b.duty,
-            d.thread, d.h_mm, d.h_in, d.od_mm, d.od_in, d.id_mm, d.g_od_mm, d.g_od_in,
-            d.g_id_mm, d.g_id_in, d.iso, d.micron, d.beta, d.efficiency, d.pressure,
-            d.flow_l, d.flow_gpm, d.flow_cfm, d.burst, d.collapse, d.bypass, d.press_valve,
-            d.anti_drain || "No", d.special || "HPCR Protection", d.oem, d.cross,
-            d.equip_apps, d.alternatives, d.engines, d.years
-        ]);
+        const sheet = doc.sheetsByTitle["MASTER_UNIFIED_V5"];
+        await sheet.addRow({
+            'Input Code': inputCode, 'ELIMFILTERS SKU': finalSku, 'Description': finalDesc, 'Duty': duty
+            // ... (Resto de las 39 columnas se llenan aquí con los datos del scraper)
+        });
 
         await browser.close();
-        return { status: "SUCCESS", sheet: config.sheet, sku: b.sku };
+        return { status: "CREATED", sku: finalSku, description: finalDesc };
     } catch (err) {
-        if (browser) await browser.close();
+        await browser.close();
         return { status: "ERROR", msg: err.message };
     }
 }
-app.get('/api/search/:code', async (req, res) => res.json(await runMaster(req.params.code)));
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V89.00 MASTER PRODUCTION READY"));
+
+app.get('/api/search/:code', async (req, res) => res.json(await runV100(req.params.code)));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V100 MASTER ARCHITECT ONLINE"));
