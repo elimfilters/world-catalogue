@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "elimfilters-backend",
   "version": "1.0.0",
   "description": "Cerebro V100 Master Architect para ELIMFILTERS",
@@ -13,7 +13,7 @@
     "google-auth-library": "^9.4.1",
     "google-spreadsheet": "^4.1.1",
     "mongodb": "^6.3.0",
-    "puppeteer": "^21.5.0",
+    "puppeteer": "^22.0.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
