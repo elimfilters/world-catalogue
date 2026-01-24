@@ -17,7 +17,6 @@ const auth = new JWT({
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
-const client = new MongoClient(process.env.MONGO_URL);
 
 // 2. NARRATIVA DE BRANDING
 const NARRATIVE = {
@@ -31,71 +30,144 @@ app.get('/', (req, res) => res.send('<h1>✅ ELIMFILTERS ENGINE V104 IS ONLINE</
 
 app.get('/api/search/:code', async (req, res) => {
     const { code } = req.params;
-    res.json({ status: "SUCCESS", message: `Recibido código: ${code}. Procesando en segundo plano...` });
-    
-    // --- INICIO DE PROCESO DE FONDO ---
-    (async () => {
-        let browser;
-        try {
-            await client.connect();
-            const db = client.db('Cluster0');
-            const col = db.collection('products');
+    let initialClient;
 
-            // 1. Clasificación Duty (Groq)
-            const groqDuty = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-                model: "llama-3.3-70b-versatile",
-                messages: [{ role: "system", content: "Responde solo 'HD' o 'LD' analizando el código o fabricante." }, { role: "user", content: `Clasifica: ${code}` }]
-            }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
-            const duty = groqDuty.data.choices[0].message.content.trim();
+    try {
+        initialClient = new MongoClient(process.env.MONGO_URL);
+        await initialClient.connect();
+        const db = initialClient.db('Cluster0');
+        const col = db.collection('products');
 
-            if (duty === "HD") {
-                browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-                const page = await browser.newPage();
-                await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`, { waitUntil: 'networkidle2', timeout: 60000 });
-                
-                const productUrl = await page.evaluate(() => document.querySelector('.donaldson-part-details')?.href);
-                if (productUrl) {
-                    await page.goto(productUrl, { waitUntil: 'networkidle2' });
-                    const donSku = await page.evaluate(() => document.querySelector('.donaldson-part-number')?.innerText.trim());
-                    const donRaw = await page.evaluate(() => document.body.innerText);
-
-                    // 2. Lógica SKU (Prefix + Last 4)
-                    const last4 = donSku.replace(/[^0-9]/g, '').slice(-4);
-                    let p = donRaw.toUpperCase().includes("AIR") ? "EA1" : donRaw.toUpperCase().includes("WATER") ? "ES9" : "EF9";
-                    const elimSku = p + last4;
-                    const tech = NARRATIVE[p].tech;
-                    const desc = `Elimfilters® ${elimSku} delivers superior performance. ${tech} ${NARRATIVE[p].msg}.`;
-
-                    // 3. Extracción de 39 Columnas (Groq)
-                    const techData = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-                        model: "llama-3.3-70b-versatile",
-                        response_format: { type: "json_object" },
-                        messages: [{ role: "system", content: "Extrae JSON técnico para 39 columnas. OEM y Cross solo números separados por comas." }, { role: "user", content: donRaw.substring(0, 12000) }]
-                    }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
-                    const d = JSON.parse(techData.data.choices[0].message.content);
-
-                    // 4. Escribir en Sheets
-                    await doc.loadInfo();
-                    const sheet = doc.sheetsByTitle["MASTER_UNIFIED_V5"];
-                    await sheet.addRow([
-                        code, elimSku, desc, d.type, d.subtype, d.install, p, tech, duty,
-                        d.thread, d.h_mm, d.h_in, d.od_mm, d.od_in, d.id_mm, d.g_od_mm, d.g_od_in,
-                        d.g_id_mm, d.g_id_in, d.iso, d.micron, d.beta, d.efficiency, d.pressure,
-                        d.flow_l, d.flow_gpm, d.flow_cfm, d.burst, d.collapse, d.bypass, d.press_valve,
-                        "No", d.special, d.oem, d.cross, d.equip_apps, d.alternatives, d.engines, d.years
-                    ]);
-
-                    // 5. Sincronizar MongoDB
-                    await col.updateOne({ sku: elimSku }, { $set: { sku: elimSku, oem: code, data: d, duty, updated: new Date() } }, { upsert: true });
-                    console.log(`✅ [V104] Procesado con éxito: ${elimSku}`);
-                }
-            }
-        } catch (e) { console.error(`❌ [ERROR] ${code}:`, e.message); }
-        finally { 
-            if (browser) await browser.close();
-            await client.close(); 
+        const existingMongo = await col.findOne({ $or: [{ oem: code }, { cross: new RegExp(code, 'i') }] });
+        if (existingMongo) {
+            console.log(`[V105] Código ${code} ya existe en MongoDB.`);
+            return res.status(200).json({ status: "FOUND_MONGO", data: existingMongo });
         }
-    })();
+
+        await doc.loadInfo();
+        const sheet = doc.sheetsByTitle["MASTER_UNIFIED_V5"];
+        const rows = await sheet.getRows();
+        const existingSheetRow = rows.find(r => r.get('OEM') === code || (r.get('Cross Reference') && r.get('Cross Reference').includes(code)));
+        if (existingSheetRow) {
+            console.log(`[V105] Código ${code} ya existe en Google Sheet.`);
+            const headers = existingSheetRow._sheet.headerValues;
+            const data = {};
+            headers.forEach(header => { data[header] = existingSheetRow.get(header); });
+            return res.status(200).json({ status: "FOUND_SHEET", data });
+        }
+
+        res.status(202).json({ status: "ACCEPTED", message: `Código ${code} aceptado para procesamiento.` });
+
+        (async () => {
+            let bgClient, browser;
+            try {
+                bgClient = new MongoClient(process.env.MONGO_URL);
+                await bgClient.connect();
+                const db = bgClient.db('Cluster0');
+                const col = db.collection('products');
+                
+                // Sheet ya cargado
+                const groqDuty = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+                    model: "llama-3.3-70b-versatile",
+                    messages: [{ role: "system", content: "Responde solo 'HD' o 'LD' analizando el código o fabricante." }, { role: "user", content: `Clasifica: ${code}` }]
+                }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
+                const duty = groqDuty.data.choices[0].message.content.trim();
+
+                if (duty === "HD") {
+                    browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                    const page = await browser.newPage();
+                    await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${code}*`, { waitUntil: 'networkidle2', timeout: 60000 });
+
+                    const productUrl = await page.evaluate(() => document.querySelector('.donaldson-part-details')?.href);
+                    if (productUrl) {
+                        await page.goto(productUrl, { waitUntil: 'networkidle2' });
+                        const donSku = await page.evaluate(() => document.querySelector('.donaldson-part-number')?.innerText.trim());
+                        const donRaw = await page.evaluate(() => document.body.innerText);
+
+                        const last4 = donSku.replace(/[^0-9]/g, '').slice(-4);
+                        let p = "EF9";
+                        if (donRaw.toUpperCase().includes("AIR")) p = "EA1";
+                        if (donRaw.toUpperCase().includes("OIL")) p = "EL8";
+                        if (donRaw.toUpperCase().includes("WATER")) p = "ES9";
+                        const elimSku = p + last4;
+                        const tech = NARRATIVE[p].tech;
+                        const desc = `Elimfilters® ${elimSku} delivers superior performance. ${tech} ${NARRATIVE[p].msg}.`;
+
+                        const techData = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+                            model: "llama-3.3-70b-versatile",
+                            response_format: { type: "json_object" },
+                            messages: [{ role: "system", content: "Extrae JSON técnico para 39 columnas. OEM y Cross solo números separados por comas." }, { role: "user", content: donRaw.substring(0, 12000) }]
+                        }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
+                        const d = JSON.parse(techData.data.choices[0].message.content);
+
+                        await sheet.addRow([
+                            code, elimSku, desc, d.type, d.subtype, d.install, p, tech, duty,
+                            d.thread, d.h_mm, d.h_in, d.od_mm, d.od_in, d.id_mm, d.g_od_mm, d.g_od_in,
+                            d.g_id_mm, d.g_id_in, d.iso, d.micron, d.beta, d.efficiency, d.pressure,
+                            d.flow_l, d.flow_gpm, d.flow_cfm, d.burst, d.collapse, d.bypass, d.press_valve,
+                            "No", d.special, d.oem, d.cross, d.equip_apps, d.alternatives, d.engines, d.years
+                        ]);
+
+                        await col.updateOne({ sku: elimSku }, { $set: { sku: elimSku, oem: code, data: d, duty, updated: new Date() } }, { upsert: true });
+                        console.log(`✅ [V105-BG] Procesado HD (Donaldson) con éxito: ${elimSku}`);
+                    }
+                } else if (duty === "LD") {
+                    browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+                    const page = await browser.newPage();
+                    await page.goto(`https://www.fram.com/parts-search/${code}`, { waitUntil: 'networkidle2', timeout: 60000 });
+
+                    const productFound = await page.evaluate(() => !document.body.innerText.includes("Sorry, we couldn’t find a FRAM part for"));
+
+                    if (productFound) {
+                        const framSku = await page.evaluate(() => document.querySelector('h1')?.innerText.trim() || '');
+                        const framRaw = await page.evaluate(() => document.body.innerText);
+
+                        const last4 = (framSku || code).replace(/[^0-9]/g, '').slice(-4);
+                        let p = "EF9";
+                        if (framRaw.toUpperCase().includes("AIR")) p = "EA1";
+                        if (framRaw.toUpperCase().includes("OIL")) p = "EL8";
+                        if (framRaw.toUpperCase().includes("WATER")) p = "ES9";
+
+                        const elimSku = p + last4;
+                        const tech = NARRATIVE[p].tech;
+                        const desc = `Elimfilters® ${elimSku} delivers superior performance. ${tech} ${NARRATIVE[p].msg}.`;
+
+                        const techData = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+                            model: "llama-3.3-70b-versatile",
+                            response_format: { type: "json_object" },
+                            messages: [{ role: "system", content: "Extrae JSON técnico para 39 columnas. OEM y Cross solo números separados por comas." }, { role: "user", content: framRaw.substring(0, 12000) }]
+                        }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` } });
+                        const d = JSON.parse(techData.data.choices[0].message.content);
+
+                        await sheet.addRow([
+                            code, elimSku, desc, d.type, d.subtype, d.install, p, tech, duty,
+                            d.thread, d.h_mm, d.h_in, d.od_mm, d.od_in, d.id_mm, d.g_od_mm, d.g_od_in,
+                            d.g_id_mm, d.g_id_in, d.iso, d.micron, d.beta, d.efficiency, d.pressure,
+                            d.flow_l, d.flow_gpm, d.flow_cfm, d.burst, d.collapse, d.bypass, d.press_valve,
+                            "No", d.special, d.oem, d.cross, d.equip_apps, d.alternatives, d.engines, d.years
+                        ]);
+
+                        await col.updateOne({ sku: elimSku }, { $set: { sku: elimSku, oem: code, data: d, duty, updated: new Date() } }, { upsert: true });
+                        console.log(`✅ [V105-BG] Procesado LD (FRAM) con éxito: ${elimSku}`);
+                    } else {
+                        console.log(`[V105-BG] No se encontró producto para ${code} en FRAM.`);
+                    }
+                }
+            } catch (e) {
+                console.error(`❌ [ERROR-BG] ${code}:`, e.message);
+            } finally {
+                if (browser) await browser.close();
+                if (bgClient) await bgClient.close();
+            }
+        })();
+    } catch (e) {
+        console.error(`❌ [ERROR-MAIN] ${code}:`, e.message);
+        if (!res.headersSent) {
+            res.status(500).json({ status: "ERROR", message: "Error en el procesamiento inicial." });
+        }
+    } finally {
+        if (initialClient) await initialClient.close();
+    }
 });
 
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V104 FINAL DEPLOYED"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V105 FINAL DEPLOYED"));
