@@ -16,47 +16,50 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-// 🧠 CEREBRO DE CLASIFICACIÓN ELIMFILTERS 2026
+// 🧠 CEREBRO DE CLASIFICACIÓN V5.03 (KITS HD/LD + MARCAS ™)
 const getElimBranding = (donSku, donDesc = "") => {
     const s = donSku.toUpperCase();
     const d = donDesc.toUpperCase();
     
-    // 1. KITS (Mantiene EK por ahora como estándar de kits)
-    if (s.startsWith('P559') || d.includes('KIT')) return { p: "EK", t: "DURATECH™", sku: s.replace(/^P/, 'EK') };
+    // 1. LÓGICA DE KITS SEGMENTADOS
+    if (s.startsWith('P559') || d.includes('KIT')) {
+        if (d.includes('HEAVY DUTY') || d.includes(' HD ') || d.includes(' HD')) {
+            return { p: "EK5", t: "DURATEC™", sku: s.replace(/^P/, 'EK5') };
+        } else if (d.includes('LIGHT DUTY') || d.includes(' LD ') || d.includes(' LD')) {
+            return { p: "EK3", t: "DURATEC™", sku: s.replace(/^P/, 'EK3') };
+        }
+        // Por defecto en kits si no especifica, usamos HD (EK5)
+        return { p: "EK5", t: "DURATEC™", sku: s.replace(/^P/, 'EK5') };
+    }
     
     // 2. AIRE (EA1 / EA2)
     if (d.includes('AIR FILTER')) return { p: "EA1", t: "MACROCORE™", sku: s.replace(/^P/, 'EA1') };
     if (d.includes('HOUSING') || d.includes('INTAKE')) return { p: "EA2", t: "INTEKCORE™", sku: s.replace(/^P/, 'EA2') };
 
-    // 3. CABINA (EC1)
+    // 3. CABINA (EC1) Y SECADORES (ED4)
     if (d.includes('CABIN')) return { p: "EC1", t: "MICROKAPPA™", sku: s.replace(/^P/, 'EC1') };
-
-    // 4. SECADORES (ED4)
     if (d.includes('DRYER')) return { p: "ED4", t: "DRYCORE™", sku: s.replace(/^P/, 'ED4') };
 
-    // 5. COMBUSTIBLE (EF9 / ES9)
+    // 4. COMBUSTIBLE (EF9 / ES9)
     if (d.includes('FUEL') && (d.includes('SEPARATOR') || d.includes('WATER'))) 
         return { p: "ES9", t: "FUEL AQUAGUARD", sku: s.replace(/^(P55|DBF|P)/, 'ES9') };
     if (d.includes('FUEL')) return { p: "EF9", t: "SYNTEPORE™", sku: s.replace(/^(P55|DBF|P)/, 'EF9') };
 
-    // 6. HIDRÁULICOS (EH6)
+    // 5. HIDRÁULICOS (EH6) Y ACEITE (EL8)
     if (d.includes('HYDRAULIC')) return { p: "EH6", t: "NANOFORCE", sku: s.replace(/^(P55|DBF|P)/, 'EH6') };
-
-    // 7. ACEITE (EL8)
     if (d.includes('OIL FILTER') || d.includes('LUBE')) return { p: "EL8", t: "SINTRAX™", sku: s.replace(/^(P55|DBF|P)/, 'EL8') };
 
-    // 8. MARINOS Y TURBINA
+    // 6. MARINOS, TURBINA Y OTROS
     if (d.includes('MARINE')) return { p: "EM9", t: "MARINEGUARD", sku: s.replace(/^(P55|DBF|P)/, 'EM9') };
     if (d.includes('TURBINE')) return { p: "ET9", t: "TURBINE SERIES", sku: s.replace(/^(P55|DBF|P)/, 'ET9') };
 
-    // Default 
     return { p: "EL8", t: "SINTRAX™", sku: s.replace(/^(P55|DBF|P)/, 'EL8') };
 };
 
 const clean = (v) => (!v || v === "N/A" || typeof v === 'object') ? "" : String(v).trim();
 
-async function runV70(inputCode) {
-    console.log(`[V70] 💎 Identidad ELIMFILTERS: ${inputCode}`);
+async function runV71(inputCode) {
+    console.log(`[V71] 📦 Procesando con segmentación de Kits (DURATEC™): ${inputCode}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
     try {
@@ -69,7 +72,7 @@ async function runV70(inputCode) {
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
         const brand = getElimBranding(donSku || inputCode, donDesc);
 
-        // IA para Type y Subtype
+        // IA para Type, Subtype, OEM, Cross
         const rawBody = await page.evaluate(() => document.body.innerText);
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
@@ -87,22 +90,22 @@ async function runV70(inputCode) {
         await sheet.addRow({
             'Input Code': inputCode,
             'ELIMFILTERS SKU': brand.sku,
+            'Prefix': brand.p,                       // G: EK5 o EK3
+            'ELIMFILTERS Technology': brand.t,       // H: DURATEC™
             'Description': donDesc,
-            'Filter Type': clean(d.type),          // D
-            'Subtype': clean(d.sub),              // E
-            'Prefix': brand.p,                       // G
-            'ELIMFILTERS Technology': brand.t,       // H
-            'OEM Codes': clean(d.oem),               // AJ
-            'Cross Reference Codes': clean(d.cross),  // AK
+            'Filter Type': clean(d.type),
+            'Subtype': clean(d.sub),
+            'OEM Codes': clean(d.oem),
+            'Cross Reference Codes': clean(d.cross),
             'Technical Sheet URL': productUrl
         });
 
         await browser.close();
-        return { status: "EXITO_V70", sku: brand.sku, tech: brand.t };
+        return { status: "EXITO_V71", sku: brand.sku, prefix: brand.p };
     } catch (err) {
         if (browser) await browser.close();
         return { status: "ERROR", msg: err.message };
     }
 }
-app.get('/api/search/:code', async (req, res) => res.json(await runV70(req.params.code)));
-app.listen(process.env.PORT || 8080, () => console.log("🚀 V70.00 ELIM-TOTAL ONLINE"));
+app.get('/api/search/:code', async (req, res) => res.json(await runV71(req.params.code)));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V71.00 KITS MASTER ONLINE"));
