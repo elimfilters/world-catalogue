@@ -16,20 +16,15 @@ const auth = new JWT({
 });
 const doc = new GoogleSpreadsheet(process.env.GOOGLE_SHEET_ID, auth);
 
-// 🧬 DICCIONARIO MAESTRO DE IDENTIDAD ELIMFILTERS
+// 🧬 NÚCLEO DE IDENTIDAD Y SEGMENTACIÓN
 const ELIM_CORE = {
-    "EA1": { tech: "MACROCORE™", sys: "engine air intake" },
-    "EA2": { tech: "INTEKCORE™", sys: "air intake system" },
-    "EC1": { tech: "MICROKAPPA™", sys: "cabin environment" },
-    "ED4": { tech: "DRYCORE™", sys: "air brake system" },
-    "EF9": { tech: "SYNTEPORE™", sys: "fuel system" },
-    "ES9": { tech: "FUEL AQUAGUARD", sys: "fuel/water separation" },
-    "EH6": { tech: "NANOFORCE", sys: "hydraulic system" },
-    "EL8": { tech: "SINTRAX™", sys: "lubrication system" },
-    "EM9": { tech: "MARINEGUARD", sys: "marine engine" },
-    "ET9": { tech: "TURBINE SERIES", sys: "turbine fuel system" },
-    "EK3": { tech: "DURATECH™", sys: "maintenance kit" },
-    "EK5": { tech: "DURATECH™", sys: "heavy-duty maintenance kit" }
+    "EA1": { tech: "MACROCORE™", sys: "engine air intake", sheet: "MASTER_INDIVIDUAL" },
+    "EF9": { tech: "SYNTEPORE™", sys: "fuel system", sheet: "MASTER_INDIVIDUAL" },
+    "ES9": { tech: "FUEL AQUAGUARD", sys: "fuel/water separation", sheet: "MASTER_INDIVIDUAL" },
+    "EL8": { tech: "SINTRAX™", sys: "lubrication system", sheet: "MASTER_INDIVIDUAL" },
+    "ET9": { tech: "TURBINE SERIES", sys: "turbine fuel system", sheet: "MASTER_INDIVIDUAL" },
+    "EK3": { tech: "DURATECH™", sys: "maintenance kit", sheet: "MASTER_KITS" },
+    "EK5": { tech: "DURATECH™", sys: "heavy-duty maintenance kit", sheet: "MASTER_KITS" }
 };
 
 const getBranding = (donSku, donDesc, input) => {
@@ -37,93 +32,80 @@ const getBranding = (donSku, donDesc, input) => {
     const d = donDesc.toUpperCase();
     const inp = input.toUpperCase();
     const digits = s.replace(/[^0-9]/g, '');
-    let p = "EL8", duty = "LD";
-
-    // Lógica ET9 (Turbinas)
+    
+    // CASO KITS (EK3/EK5)
+    if (s.startsWith('P559') || d.includes('KIT')) {
+        const isHD = (d.includes('CAT') || d.includes('VOLVO') || d.includes('CUMMINS') || d.includes('HEAVY'));
+        const p = isHD ? "EK5" : "EK3";
+        return { p, sku: p + digits.slice(-4), duty: isHD ? "HD" : "LD" };
+    }
+    // CASO TURBINAS (ET9)
     if (s.match(/2020|2040|2010/) || d.includes('TURBINE')) {
         let suf = (inp.includes('PM')||s.includes('PM')) ? "P" : (inp.includes('TM')||s.includes('TM')) ? "T" : (inp.includes('SM')||s.includes('SM')) ? "S" : "";
         return { p: "ET9", sku: "ET9" + (s.match(/2020|2040|2010/)?.[0] || digits.slice(-4)) + suf, duty: "HD" };
     }
-    // Lógica Kits
-    if (s.startsWith('P559') || d.includes('KIT')) {
-        duty = (d.includes('CAT') || d.includes('KOMATSU') || d.includes('HEAVY')) ? "HD" : "LD";
-        p = duty === "HD" ? "EK5" : "EK3";
-        return { p, sku: p + digits.slice(-4), duty };
-    }
-    // Clasificación General
+    // CASO INDIVIDUALES
+    let p = "EL8";
     if (d.includes('AIR')) p = "EA1";
-    else if (d.includes('CABIN')) p = "EC1";
     else if (d.includes('FUEL') && d.includes('WATER')) p = "ES9";
     else if (d.includes('FUEL')) p = "EF9";
-    else if (d.includes('HYDRAULIC')) p = "EH6";
     
-    duty = (d.includes('CAT') || d.includes('VOLVO') || d.includes('CUMMINS') || d.includes('INDUSTRIAL')) ? "HD" : "LD";
-    return { p, sku: p + digits, duty };
+    const isHD = (d.includes('CAT') || d.includes('VOLVO') || d.includes('KOMATSU') || d.includes('INDUSTRIAL'));
+    return { p, sku: p + digits, duty: isHD ? "HD" : "LD" };
 };
 
-const clean = (v) => (!v || v === "N/A" || typeof v === 'object') ? "" : String(v).trim();
-
 async function runMaster(inputCode) {
-    console.log(`[MASTER] 🏁 Procesando: ${inputCode}`);
     const browser = await puppeteer.launch({ headless: "new", args: ['--no-sandbox'] });
     const page = await browser.newPage();
     try {
         await page.goto(`https://shop.donaldson.com/store/es-us/search?Ntt=${inputCode}*`, { waitUntil: 'networkidle2' });
-        await page.waitForSelector('.donaldson-part-details', { timeout: 10000 });
+        await page.waitForSelector('.donaldson-part-details');
+        
         const donSku = await page.evaluate(() => document.querySelector('a.donaldson-part-details span')?.innerText.trim());
         const donDesc = await page.evaluate(() => document.querySelector('.donaldson-product-details')?.innerText.trim() || "");
         const productUrl = await page.evaluate(() => document.querySelector('a.donaldson-part-details')?.href);
 
         const b = getBranding(donSku, donDesc, inputCode);
-        const config = ELIM_CORE[b.p];
+        const config = ELIM_CORE[b.p] || ELIM_CORE["EL8"];
 
         await page.goto(productUrl, { waitUntil: 'networkidle2' });
-        await page.evaluate(() => {
-            document.querySelectorAll('a[data-toggle="collapse"]').forEach(a => a.click());
-        });
-        await new Promise(r => setTimeout(r, 2500));
         const rawBody = await page.evaluate(() => document.body.innerText);
 
-        // 🧠 IA: EL CEREBRO DE CLASIFICACIÓN
         const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
             model: "llama-3.3-70b-versatile",
             response_format: { type: "json_object" },
             messages: [{
                 role: "system",
-                content: `Extrae información técnica exacta para 39 columnas. 
-                - OEM Codes: Solo números de marcas de equipos (CAT, Volvo, etc). Separados por coma.
-                - Cross Reference: Solo números de marcas de filtros (Baldwin, Fleetguard, Wix). Separados por coma.
+                content: `Extrae JSON para 39 columnas. 
+                - OEM Codes: Solo números, sin marcas, separados por coma.
+                - Cross Reference: Solo números de filtros competencia, sin marcas, separados por coma.
                 - Engine Apps: Modelos de motor.
                 - Equipment Year: Rango de años.
-                - Alternative Products: 3 SKUs ELIMFILTERS (Prefijo + número) sugeridos.`
-            }, { role: "user", content: `Analiza este texto y genera el JSON: ${rawBody.substring(0, 15000)}` }]
+                - Alternative Products: 3 SKUs ELIMFILTERS sugeridos.`
+            }, { role: "user", content: rawBody.substring(0, 15000) }]
         }, { headers: { 'Authorization': `Bearer ${process.env.GROQ_API_KEY.trim()}` } });
 
         const d = JSON.parse(response.data.choices[0].message.content);
-        
-        // NARRATIVA DE MARKETING (COLUMNA C)
-        const descMarketing = `Elimfilters® ${b.sku} ${clean(d.subtype).toLowerCase()} ${clean(d.type).toLowerCase()} delivers superior performance using proven media technology. ${config.tech} armadura sintética, combustible 100% al motor. Ensures optimal ${config.sys} protection to meet or exceed OEM specifications.`;
+        const mDesc = `Elimfilters® ${b.sku} delivers superior performance. ${config.tech} armadura sintética, combustible 100% al motor. Meets or exceeds OEM specifications.`;
 
         await doc.loadInfo();
-        const sheet = doc.sheetsByTitle['MASTER_UNIFIED_V5'];
-        await sheet.addRow([
-            inputCode, b.sku, descMarketing, clean(d.type), clean(d.subtype), 
-            clean(d.install_type), b.p, config.tech, b.duty, clean(d.thread),
-            clean(d.h_mm), clean(d.h_in), clean(d.od_mm), clean(d.od_in), clean(d.id_mm),
-            clean(d.g_od_mm), clean(d.g_od_in), clean(d.g_id_mm), clean(d.g_id_in),
-            clean(d.iso), clean(d.micron), clean(d.beta), clean(d.efficiency),
-            clean(d.pressure), clean(d.flow_l), clean(d.flow_gpm), clean(d.flow_cfm),
-            clean(d.burst), clean(d.collapse), clean(d.bypass), clean(d.press_valve),
-            clean(d.anti_drain), clean(d.special), clean(d.oem), clean(d.cross),
-            clean(d.equip_apps), clean(d.alternatives), clean(d.engines), clean(d.years)
+        const targetSheet = doc.sheetsByTitle[config.sheet]; // AQUÍ SE DECIDE LA HOJA
+        
+        await targetSheet.addRow([
+            inputCode, b.sku, mDesc, d.type, d.subtype, d.install, b.p, config.tech, b.duty,
+            d.thread, d.h_mm, d.h_in, d.od_mm, d.od_in, d.id_mm, d.g_od_mm, d.g_od_in,
+            d.g_id_mm, d.g_id_in, d.iso, d.micron, d.beta, d.efficiency, d.pressure,
+            d.flow_l, d.flow_gpm, d.flow_cfm, d.burst, d.collapse, d.bypass, d.press_valve,
+            d.anti_drain || "No", d.special || "HPCR Protection", d.oem, d.cross,
+            d.equip_apps, d.alternatives, d.engines, d.years
         ]);
 
         await browser.close();
-        return { status: "SUCCESS", sku: b.sku };
+        return { status: "SUCCESS", sheet: config.sheet, sku: b.sku };
     } catch (err) {
         if (browser) await browser.close();
         return { status: "ERROR", msg: err.message };
     }
 }
 app.get('/api/search/:code', async (req, res) => res.json(await runMaster(req.params.code)));
-app.listen(process.env.PORT || 8080, () => console.log("🚀 MASTER V88.00 ONLINE"));
+app.listen(process.env.PORT || 8080, () => console.log("🚀 V89.00 MASTER PRODUCTION READY"));
