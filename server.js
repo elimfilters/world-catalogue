@@ -15,13 +15,13 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// --- VINCULACIÓN DE RUTAS ---
+// Vincular Rutas
 app.use('/api', filterRoutes);
 
-// Ruta de prueba de salud
 app.get('/health', (req, res) => res.send('🛰️ Orquestador Elimfilters en línea'));
 
+// Railway inyecta automáticamente la variable PORT
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log('🛰️ Servidor Elimfilters corriendo en puerto ' + PORT);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log('🚀 Servidor corriendo en puerto ' + PORT);
 });
