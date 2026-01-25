@@ -6,7 +6,7 @@
     "scripts":  {
                     "ingest":  "node ingest.js",
                     "dev":  "node --watch src/server.js",
-                    "start":  "node src/server.js"
+                    "start":  "node server.js"
                 },
     "keywords":  [
 

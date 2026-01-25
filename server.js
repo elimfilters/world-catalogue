@@ -2,8 +2,8 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const connectDB = require('./config/db');
-const filterRoutes = require('./routes/filterRoutes');
+const connectDB = require('./src/config/db');
+const filterRoutes = require('./src/routes/filterRoutes');
 
 const app = express();
 
