@@ -1,27 +1,21 @@
-﻿require('dotenv').config();
-const express = require('express');
+﻿const express = require('express');
 const cors = require('cors');
-const connectDB = require('./src/config/db');
+const path = require('path');
 const filterRoutes = require('./src/routes/filterRoutes');
 
 const app = express();
+const PORT = process.env.PORT || 8080;
+
 app.use(cors());
 app.use(express.json());
 
-// Ruta de salud inmediata (No depende de la DB)
-app.get('/health', (req, res) => res.status(200).send('🛰️ Orquestador Elimfilters en línea'));
+// Forzamos la ruta exacta: /api/filters
+app.use('/api/filters', filterRoutes);
 
-app.use('/api', filterRoutes);
+// Servir archivos estáticos si fuera necesario
+app.use('/knowledge', express.static(path.join(__dirname, 'src/knowledge')));
 
-// Conectar a la base de datos de forma asíncrona
-connectDB().then(() => {
-    console.log('✅ Conexión a MongoDB establecida');
-}).catch(err => {
-    console.error('❌ Error de conexión DB pero el servidor sigue vivo:', err.message);
-});
-
-const PORT = process.env.PORT || 8080;
-// Escuchar en 0.0.0.0 es OBLIGATORIO para Railway
-app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 Servidor corriendo en puerto ' + PORT);
+app.listen(PORT, () => {
+    console.log('🧠 Knowledge Base lista.');
+    console.log('🚀 Servidor Elimfilters corriendo en puerto ' + PORT);
 });
