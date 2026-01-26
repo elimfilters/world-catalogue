@@ -1,8 +1,12 @@
 ﻿const express = require('express');
 const router = express.Router();
-const filterController = require('../controllers/filterController');
+const controller = require('../controllers/filterController');
 
-// Ruta principal de búsqueda (Part Number, VIN, Equipment)
-router.post('/search', filterController.processSearch);
+// Verificación de seguridad antes de asignar la ruta
+if (controller && controller.handleFilterSearch) {
+    router.post('/search', controller.handleFilterSearch);
+} else {
+    console.error('❌ ERROR: La función handleFilterSearch no está definida en el controlador.');
+}
 
 module.exports = router;
