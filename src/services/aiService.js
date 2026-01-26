@@ -4,35 +4,36 @@ const Groq = require('groq-sdk');
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY || '' });
 
-// CARGA EN RAM: Solo se hace una vez al arrancar el servidor
 const knowledgePath = path.join(__dirname, '..', 'knowledge', 'noteLLM.json');
 let knowledge = [];
 
 try {
     if (fs.existsSync(knowledgePath)) {
         knowledge = JSON.parse(fs.readFileSync(knowledgePath, 'utf8'));
-        console.log('🧠 Knowledge Base cargada en RAM: ' + knowledge.length + ' documentos.');
-    } else {
-        console.log('⚠️ Warning: noteLLM.json no encontrado.');
+        console.log('🧠 Memoria cargada: ' + knowledge.length + ' docs.');
     }
-} catch (e) {
-    console.error('❌ Error cargando JSON:', e.message);
-}
+} catch (e) { console.error('Error JSON:', e.message); }
 
 const getDutyClassification = async (query) => {
     try {
-        if (knowledge.length === 0) return "DESCONOCIDO (Sin datos)";
+        if (!query) return "DESCONOCIDO";
+        const term = query.toUpperCase().trim();
 
-        const searchTerm = query.toUpperCase().trim();
+        // BUSCADOR ULTRA-SEGURO: Verifica que el dato exista antes de convertir a mayúsculas
         const context = knowledge
-            .filter(item => item.d.toUpperCase().includes(searchTerm))
-            .map(item => item.d)
+            .filter(item => {
+                const contenido = item.d || item.data || item.texto || "";
+                return contenido.toUpperCase().includes(term);
+            })
+            .map(item => item.d || item.data || item.texto)
             .join('\n').substring(0, 3000);
+
+        if (!process.env.GROQ_API_KEY) return "DESCONOCIDO (Falta API KEY)";
 
         const chat = await groq.chat.completions.create({
             messages: [
-                { role: "system", content: "Responde solo: HD, LD o DESCONOCIDO." },
-                { role: "user", content: "Contexto: " + context + "\n\nCódigo: " + query }
+                { role: "system", content: "Eres un experto en filtros. Responde solo HD, LD o DESCONOCIDO." },
+                { role: "user", content: "Contexto: " + (context || "No hay datos") + "\n\nCódigo: " + query }
             ],
             model: "llama-3.3-70b-versatile",
             temperature: 0.1
@@ -40,7 +41,8 @@ const getDutyClassification = async (query) => {
 
         return chat.choices[0]?.message?.content?.trim().toUpperCase() || "DESCONOCIDO";
     } catch (e) {
-        return "ERROR: " + e.message;
+        console.error('Error en clasificación:', e.message);
+        return "ERROR_MOTOR";
     }
 };
 
