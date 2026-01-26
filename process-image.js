@@ -6,8 +6,8 @@ const outputPath = path.join(__dirname, 'images', 'LF3620-recolored.png');
 
 // --- Parámetros de Configuración ---
 
-// El color objetivo para el filtro (azul corporativo de ejemplo)
-const TINT_COLOR = { r: 0, g: 50, b: 160 };
+// El color objetivo para el filtro (Gris Carbón de Elimfilters)
+const TINT_COLOR = { r: 58, g: 60, b: 62 };
 
 // Rango de color para detectar el cuerpo del filtro.
 // Se enfoca en blancos y grises claros, excluyendo el fondo blanco puro.

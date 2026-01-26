@@ -9,3 +9,4 @@ node_modules/
 
 # Environment variables
 .env
+images/*-recolored.png
