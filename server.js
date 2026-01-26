@@ -12,57 +12,44 @@ const client = new MongoClient(uri);
 async function startServer() {
     try {
         await client.connect();
-        console.log("✅ Conectado a MongoDB Atlas");
         const db = client.db('elimfilters');
 
         app.post('/api/search', async (req, res) => {
             const { code, searchType } = req.body;
-            console.log(`🔍 Buscando: ${code} en ${searchType}`);
-
             try {
-                // 🔴 CABLE ROJO: PART NUMBER (Filtros)
                 if (searchType === 'part-number') {
                     const filter = await db.collection('MASTER_UNIFIED_V5').findOne({ 
                         $or: [{ Input_Code: code.toUpperCase() }, { Final_SKU: code.toUpperCase() }]
                     });
 
                     if (filter) {
+                        // CORRECCIÓN DE PREFIJO DINÁMICO
+                        let prefijo = "EF"; 
+                        const cat = (filter.Category || "").toUpperCase();
+                        if (cat.includes("ACEITE") || cat.includes("OIL")) prefijo = "EL8";
+                        if (cat.includes("AIRE") || cat.includes("AIR")) prefijo = "EA1";
+                        if (cat.includes("COMBUSTIBLE") || cat.includes("FUEL")) prefijo = "EF2";
+
+                        // REGLA DE LOS 4 NÚMEROS
+                        const numOnly = filter.Input_Code.replace(/[^0-9]/g, '');
+                        const suffix = numOnly.slice(-4).padStart(4, '0');
+                        const skuCorregido = filter.Final_SKU || (prefijo + suffix);
+
                         return res.json({
                             type: 'filter',
                             brand: filter.Brand,
-                            sku: filter.Final_SKU,
+                            sku: skuCorregido,
                             category: filter.Category,
-                            alternatives: filter.Alternative_Products || filter.AK || "N/A"
+                            // LEER COLUMNA AK O ALTERNATIVE_PRODUCTS
+                            alternatives: filter.Alternative_Products || filter.AK || "Consulte con soporte"
                         });
                     }
                 }
-
-                // 🟡 CABLE AMARILLO: EQUIPMENT / VIN (Kits)
-                if (searchType === 'equipment' || searchType === 'vin') {
-                    const kits = await db.collection('MASTER_KITS_V1').find({
-                        $or: [
-                            { Equipment_Model: { $regex: code, $options: 'i' } },
-                            { VIN: code.toUpperCase() }
-                        ]
-                    }).toArray();
-
-                    if (kits.length > 0) {
-                        return res.json({ type: 'equipment-list', data: kits });
-                    }
-                }
-
-                res.status(404).json({ message: "No se encontraron resultados" });
-            } catch (e) {
-                res.status(500).json({ error: e.message });
-            }
+                res.status(404).json({ message: "No encontrado" });
+            } catch (e) { res.status(500).json({ error: e.message }); }
         });
 
-        const PORT = process.env.PORT || 3000;
-        app.listen(PORT, () => console.log(`🚀 Servidor listo en puerto ${PORT}`));
-
-    } catch (err) {
-        console.error("❌ Error de conexión:", err);
-    }
+        app.listen(process.env.PORT || 3000, () => console.log("🚀 Servidor Corregido"));
+    } catch (err) { console.error(err); }
 }
-
 startServer();
