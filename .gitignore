@@ -1,4 +1,8 @@
-﻿node_modules
+# PDF catalogs
+catalogos_pdf/
+
+# Node dependencies
+node_modules/
+
+# Environment variables
 .env
-catalogos_pdf/
-catalogos_pdf/
