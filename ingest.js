@@ -3,7 +3,7 @@ const path = require('path');
 const pdf = require('pdf-parse');
 
 const pdfDirectory = path.join(__dirname, 'catalogos_pdf');
-const outputDirectory = path.join(__dirname, 'elimfilters', 'world-catalogue');
+const outputDirectory = path.join(__dirname, 'data');
 
 if (!fs.existsSync(outputDirectory)) {
   fs.mkdirSync(outputDirectory, { recursive: true });
@@ -21,6 +21,8 @@ fs.readdir(pdfDirectory, (err, files) => {
     return;
   }
 
+  let firstFileProcessed = false;
+
   pdfFiles.forEach(file => {
     const pdfPath = path.join(pdfDirectory, file);
     const dataBuffer = fs.readFileSync(pdfPath);
@@ -30,9 +32,15 @@ fs.readdir(pdfDirectory, (err, files) => {
       const uniqueSkus = [...new Set(skus)];
 
       if (uniqueSkus.length > 0) {
-        const outputFilePath = path.join(outputDirectory, `${path.basename(file, '.pdf')}.txt`);
-        fs.writeFileSync(outputFilePath, uniqueSkus.join('\n'));
+        const outputFilePath = path.join(outputDirectory, `${path.basename(file, '.pdf')}.json`);
+        const jsonData = { skus: uniqueSkus };
+        fs.writeFileSync(outputFilePath, JSON.stringify(jsonData, null, 2));
         console.log(`✅ SKUs extraídos de ${file} y guardados en ${outputFilePath}`);
+
+        if (!firstFileProcessed) {
+          console.log('🎉 ¡El primer catálogo ha sido procesado exitosamente!');
+          firstFileProcessed = true;
+        }
       } else {
         console.log(`ℹ️ No se encontraron SKUs en ${file}`);
       }

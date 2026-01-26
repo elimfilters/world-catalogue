@@ -1,6 +1,9 @@
 # PDF catalogs
 catalogos_pdf/
 
+# Generated data
+data/
+
 # Node dependencies
 node_modules/
 
