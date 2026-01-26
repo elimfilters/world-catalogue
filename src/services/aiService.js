@@ -1,55 +1,56 @@
 ﻿const fs = require('fs');
 const path = require('path');
-const Groq = require('groq-sdk');
+const Groq = require("groq-sdk");
 
-// Inicializamos Groq (Asegúrate de tener la variable de entorno GROQ_API_KEY)
+// Cargar Base de Conocimiento (noteLLM.json)
+let knowledgeBase = [];
+try {
+    const kbPath = path.join(__dirname, '../knowledge/noteLLM.json');
+    if (fs.existsSync(kbPath)) {
+        knowledgeBase = JSON.parse(fs.readFileSync(kbPath, 'utf8'));
+        console.log(`🧠 Knowledge Base cargada: ${knowledgeBase.length} documentos.`);
+    } else {
+        console.warn('⚠️ noteLLM.json no encontrado. RAG deshabilitado.');
+    }
+} catch (error) {
+    console.error('❌ Error cargando Knowledge Base:', error.message);
+}
+
+// Configurar Groq
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-const getDutyClassification = async (query) => {
+async function getDutyClassification(query) {
+    if (!process.env.GROQ_API_KEY) return "AI_DISABLED";
+
+    // 1. Búsqueda simple en Knowledge Base (RAG)
+    const relevantDocs = knowledgeBase
+        .filter(doc => doc.datos_tecnicos.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 3) // Top 3 coincidencias
+        .map(doc => doc.datos_tecnicos)
+        .join("\n\n---\n\n");
+
+    const context = relevantDocs ? `CONTEXTO TÉCNICO:\n${relevantDocs}` : "No hay contexto específico.";
+
+    const prompt = `
+    Eres un experto en filtros. Clasifica la aplicación del siguiente código: ${query}
+    
+    ${context}
+    
+    Responde solo con una de estas opciones: "HEAVY DUTY", "LIGHT DUTY", "INDUSTRIAL", "UNKNOWN".
+    Si tienes duda, prioriza HEAVY DUTY.
+    `;
+
     try {
-        // 1. Ubicamos el noteLLM.json (Tu base de 262 catálogos)
-        const knowledgePath = path.join(__dirname, '../knowledge/noteLLM.json');
-        
-        if (!fs.existsSync(knowledgePath)) {
-            console.error('⚠️ El archivo noteLLM.json no existe. Corre build_notellm.js primero.');
-            return "DESCONOCIDO";
-        }
-
-        const knowledge = JSON.parse(fs.readFileSync(knowledgePath, 'utf8'));
-
-        // 2. BUSCADOR TÉCNICO: Filtramos solo los datos que mencionen el código buscado
-        const searchTerm = query.toUpperCase().trim();
-        const relevantContext = knowledge
-            .filter(item => item.d.toUpperCase().includes(searchTerm))
-            .map(item => [Catalogo: \] Datos: \)
-            .join('\n\n')
-            .substring(0, 5000); // Evitamos saturar la memoria de la IA
-
-        // 3. PROMPT DE INGENIERÍA: Prohibimos las adivinanzas
         const completion = await groq.chat.completions.create({
-            messages: [
-                {
-                    role: "system",
-                    content: "Eres un Ingeniero Senior de Filtración de Elimfilters. Tu única fuente de verdad son los datos proporcionados. Si el código no está en los datos o no hay evidencia clara, responde 'DESCONOCIDO'. No inventes bajo ninguna circunstancia."
-                },
-                {
-                    role: "user",
-                    content: DATOS DE CATÁLOGOS:\n\\n\nPREGUNTA:\nBasado únicamente en los datos anteriores, ¿el código "\" es 'HD' (Heavy Duty - Maquinaria/Camión) o 'LD' (Light Duty - Automóvil)?\n\nResponde solo con las siglas: HD, LD o DESCONOCIDO.
-                }
-            ],
+            messages: [{ role: "user", content: prompt }],
             model: "llama-3.3-70b-versatile",
-            temperature: 0.1, // Temperatura baja para máxima precisión técnica
+            temperature: 0.1
         });
-
-        const respuesta = completion.choices[0]?.message?.content?.trim().toUpperCase() || "DESCONOCIDO";
-        console.log(\🤖 Groq analizó \ usando noteLLM y determinó: \\);
-        
-        return respuesta;
-
+        return completion.choices[0]?.message?.content?.trim() || "UNKNOWN";
     } catch (error) {
-        console.error("❌ Error en el motor de IA:", error.message);
-        return "DESCONOCIDO";
+        console.error("Groq Error:", error.message);
+        return "ERROR";
     }
-};
+}
 
 module.exports = { getDutyClassification };
